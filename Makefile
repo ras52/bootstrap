@@ -1,7 +1,12 @@
 STAGES = 1
 
 all:
-	set -e; for n in `seq 1 $(STAGES)`; do $(MAKE) -C stage-$$n all; done
+	set -e; for n in `seq 0 $(STAGES)`; do $(MAKE) -C stage-$$n all; done
+
+check:
+	set -e; for n in `seq 0 $(STAGES)`; do $(MAKE) -C stage-$$n check; done
 
 clean:
-	for n in `seq 1 $(STAGES)`; do $(MAKE) -C stage-$$n clean; done
+	for n in `seq 0 $(STAGES)`; do $(MAKE) -C stage-$$n clean; done
+
+
