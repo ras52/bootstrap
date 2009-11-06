@@ -1,28 +1,36 @@
-all:	elfify unhex
+SHELL = /bin/sh
+PATH  = .
+
+CHMOD = /bin/chmod
+RM    = /bin/rm
+CMP   = /usr/bin/cmp
+
+
+all:	elfify unhexl
 
 elfify:	elfify.x
 	../stage-0/unhex < elfify.x > elfify
-	chmod a+x elfify
+	$(CHMOD) a+x elfify
 
-unhex:	elfify unhex.ts.x
-	../stage-0/unhex < unhex.ts.x > unhex.ts
-	./elfify unhex.ts > unhex
-	chmod a+x unhex
-	rm unhex.ts
+unhexl:	elfify unhexl.ts.x
+	../stage-0/unhex < unhexl.ts.x > unhexl.ts
+	elfify unhexl.ts > unhexl
+	$(CHMOD) a+x unhexl
+	$(RM) unhexl.ts
 
-check:	check-unhex check-elfify
+check:	check-unhexl check-elfify
 
-check-unhex:	unhex elfify
-	./unhex < unhex.ts.x > unhex.ts
-	./elfify unhex.ts > unhex2
-	chmod a+x unhex2
-	./unhex2 < unhex.ts.x > unhex2.ts
-	cmp unhex.ts unhex2.ts
-	rm unhex.ts unhex2.ts unhex2
+check-unhexl:	unhexl elfify
+	unhexl < unhexl.ts.xl > unhexl.ts
+	elfify unhexl.ts > unhexl2
+	$(CHMOD) a+x unhexl2
+	unhexl2 < unhexl.ts.xl > unhexl2.ts
+	$(CMP) unhexl.ts unhexl2.ts
+	$(RM) unhexl.ts unhexl2.ts unhexl2
 
 check-elfify:	elfify
-	! ./elfify
-	! ./elfify no-such-file
+	! elfify
+	! elfify no-such-file
 	
 clean:
-	rm -f unhex elfify unhex.ts unhex2.ts unhex2
+	$(RM) -f unhexl elfify unhexl.ts unhexl2.ts unhexl2

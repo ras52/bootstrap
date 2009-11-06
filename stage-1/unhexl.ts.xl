@@ -1,0 +1,295 @@
+####    #  Function: bool isws(char)
+	#  Tests whether its argument is in [ \t\n]
+
+	#  As with many of the functions here, it is turned upside down
+	#  so the entry point is in the middle.  This is because unhexl
+	#  is limited to jumps up the file.
+.L1:
+	5D			#	POP	%ebp
+	C3			#	RET
+isws:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	3C 20			#	CMPB	$0x20, %al	# ' '
+	0F 84 .L1		#	JE	.L1
+	3C 09			#	CMPB	$0x09, %al	# '\t'
+	0F 84 .L1		#	JE	.L1
+	3C 0A			#	CMPB	$0x0A, %al	# '\n'
+	0F 84 .L1		#	JE	.L1
+	31 C0			#	XORL	%eax, %eax
+	E9 .L1			#	JMP	.L1
+
+####	#  Function: bool islchr(char)
+	#  Tests whether its argument is in [0-9A-Za-z_]
+.L2:
+	31 C0			#	XORL	%eax, %eax
+.L3:
+	5D			#	POP	%ebp
+	C3			#	RET
+islchr:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	3C 30			#	CMPB	$0x30, %al	# '0'
+	0F 8C .L2		#	JL	.L2
+	3C 39			#	CMPB	$0x39, %al	# '9'
+	0F 8E .L3		#	JLE	.L3
+	3C 41			#	CMPB	$0x41, %al	# 'A'
+	0F 8C .L2		#	JL	.L2
+	3C 5A			#	CMPB	$0x5A, %al	# 'Z'
+	0F 8E .L3		#	JLE	.L3
+	3C 5F			#	CMPB	$0x5F, %al	# '_'
+	0F 84 .L3		#	JE	.L3
+	3C 61			#	CMPB	$0x61, %al	# 'a'
+	0F 8C .L2		#	JL	.L2
+	3C 7A			#	CMPB	$0x7A, %al	# 'z'
+	0F 8E .L3		#	JLE	.L3
+	E9 .L2			#	JMP	.L2
+
+####	#  Function: int xchar(char)
+	#  Tests whether its argument is a character in [0-9A-F], and if so, 
+	#  coverts it to a decimal number; otherwise returns -1.
+.L6:
+	2C 37			#	SUBB	$0x37, %al	# 'A'-10
+.L7:
+	5D			#	POP	%ebp
+	C3			#	RET
+.L4:
+	B8 FF FF FF FF		#	MOVL	$-1, %eax
+	E9 .L7			#	JMP	.L7
+.L5:
+	2C 30			#	SUBB	$0x30, %al	# '0'
+	E9 .L7			#	JMP	.L7
+xchr:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	3C 30			#	CMPB	$0x30, %al	# '0'
+	0F 8C .L4		#	JL	.L4
+	3C 39			#	CMPB	$0x39, %al	# '9'
+	0F 8E .L5		#	JLE	.L5
+	3C 41			#	CMPB	$0x41, %al	# 'A'
+	0F 8C .L4		#	JL	.L4
+	3C 46			#	CMPB	$0x46, %al	# 'F'
+	0F 8E .L6		#	JLE	.L6
+	E9 .L4			#	JMP	.L4
+
+####	#  Not a proper function.
+	#  Exits program
+error:
+	BB 01 00 00 00		#	MOVL	$1, %ebx
+success:
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	CD 80			#	INT	$0x80
+
+####	#  Function:	void readone( [%ecx] char* ) 
+	#  Reads one byte into (%ecx) which should already be set.
+	#  Clobbers %edx, %ebx and %eax.
+	#  Exits of failure.
+readone:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	BA 01 00 00 00		#	MOVL	$1, %edx
+	31 DB			#	XORL	%ebx, %ebx
+	B8 03 00 00 00		#	MOVL	$3, %eax
+	CD 80			#	INT	$0x80
+	83 F8 01		#	CMPL	$1, %eax
+	0F 85 error		#	JNE	error
+	5D			#	POP	%ebp
+	C3			#	RET
+
+####	#  The main function.
+	#  Stack is arranged as follows:
+	#
+	#        0(%ebp)	int* addr
+	#      -84(%ebp)	char buffer[80]
+	#      -88(%ebp)	label* label_end
+	#    -1112(%ebp)	label labels[64]
+	#
+	#  where label is a { char name[12]; int addr }.
+
+ret:
+	# This ret is labelled to allow various bits of main to
+	# jump up to it in order to effect a forwards jump.
+	31 C0			#	XORL	%eax, %eax
+	C3			#	RET
+
+	#  --- Test for a comment.
+	#  If found, skip over comment line until we've read a LF
+	#  At end of section, %eax=1 iff we read a comment.
+	#  If %eax=0, all other registers are unaltered.
+comment:
+        80 7D AC 23             #       CMPB    $0x23, -84(%ebp)
+	0F 85 ret		#	JNE	ret
+.L10:
+	8D 4D AC		#	LEA	-84(%ebp), %ecx
+	E8 readone		#	CALL	readone
+	80 7D AC 0A		#	CMPL	$0x0A, -84(%ebp)	# '\n'
+	0F 85 .L10		#	JNE	.L10
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	C3			#	RET
+
+	# --- Test for an octet.
+octet:
+	FF 75 AC		#	PUSH	-84(%ebp)
+	E8 xchr			#	CALL	xchr
+	5B			#	POP	%ebx
+	3C FF			#	CMPB	$-1, %al
+	0F 84 ret		#	JE	ret
+
+	#  Yes, we do.  Read the next byte
+	50			#	PUSH	%eax
+	8D 4D AD		#	LEA	-83(%ebp), %ecx
+	E8 readone		#	CALL	readone
+	5B			#	POP	%ebx
+
+	#  Process it
+	FF 75 AD		#	PUSH	-83(%ebp)
+	E8 xchr			#	CALL	xchr
+	5A			#	POP	%edx
+	83 F8 FF		#	CMPL	$-1, %eax
+	0F 84 error		#	JE	error
+	C6 C1 04		#	MOVB	$4, %cl
+	D2 E3			#	SALB	%cl, %bl
+	00 D8			#	ADDB	%bl, %al
+
+	#  Byte is now in %al; lets write it
+	50			#	PUSH	%eax
+	BA 01 00 00 00		#	MOVL	$1, %edx
+	89 E0			#	MOVL	%esp, %eax
+	8D 08			#	LEA	(%eax), %ecx
+	BB 01 00 00 00		#	MOVL	$1, %ebx
+	B8 04 00 00 00		#	MOVL	$4, %eax
+	CD 80			#	INT	$0x80
+	5A			#	POP	%edx
+
+	#  Increment the address and return
+	FF 45 00		#	INCL	0(%ebp)
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	C3			#	RET
+
+
+	#  Parts of the label section
+labeldef:
+	#  Check that we're not about to over run the label store,
+	#  and then store the label
+	8D 5D A8		#	LEA	-88(%ebp), %ebx
+	8B 3B			#	MOVL	(%ebx), %edi
+	39 DF			#	CMPL	%ebx, %edi -- is this right?
+	0F 8D error		#	JGE	error
+	F3			#	REP
+	   A4			#	  MOVSB
+	8B 45 00		#	MOVL	0(%ebp), %eax
+	8B 3B			#	MOVL	(%ebx), %edi
+	89 47 0C		#	MOVL	%eax, 12(%edi)
+	83 03 10		#	ADDL	$16, (%ebx)
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	C3			#	RET
+
+labelref:
+	#  Look up the label
+	8D BD 98 FB FF FF	#	LEA	-1128(%ebp), %edi
+.L14:
+	83 C7 10		#	ADDL	$16, %edi
+	3B 7D A8		#	CMPL	-88(%ebp), %edi
+	0F 8D error		#	JGE	error
+	51			#	PUSH	%ecx
+	56			#	PUSH	%esi
+	57			#	PUSH	%edi
+	F3			#	REPE
+	   A6			#	  CMPSB
+	5F			#	POP	%edi
+	5E			#	POP	%esi
+	59			#	POP	%ecx
+	0F 85 .L14			#	JNE	.L14
+
+	#  Found it.  Increment address by four and print offset
+	83 45 00 04		#	ADDL	$4, 0(%ebp)
+	8B 47 0C		#	MOVL	12(%edi), %eax
+	2B 45 00		#	SUBL	0(%ebp), %eax
+	50			#	PUSH	%eax
+	BA 04 00 00 00		#	MOVL	$4, %edx
+	89 E0			#	MOVL	%esp, %eax
+	8D 08			#	LEA	(%eax), %ecx
+	BB 01 00 00 00		#	MOVL	$1, %ebx
+	B8 04 00 00 00		#	MOVL	$4, %eax
+	CD 80			#	INT	$0x80
+	58			#	POP	%eax
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	C3			#	RET
+
+	# --- Test for a label (either definition or reference).
+label:
+	#  Read a label
+	8D 4D AC		#	LEA	-84(%ebp), %ecx
+.L12:
+	41			#	INCL	%ecx
+	E8 readone		#	CALL	readone
+	FF 31			#	PUSH	(%ecx)
+	E8 islchr		#	CALL	islchr
+	5B			#	POP	%ebx
+	83 F8 00		#	CMPL	$0, %eax
+	0F 85 .L12		#	JNE	.L12
+
+	#  (%ecx) is now something other than lchr.  Is it a colon?
+	#  Also, null terminate, load %esi with start of string, and
+	#  %ecx with its length inc. NUL.
+	80 39 3A		#	CMPB	$0x3A, (%ecx)
+	9C			#	PUSHF
+	C6 01 00		#	MOVB	$0, (%ecx)
+	41			#	INCL	%ecx
+	8D 75 AC		#	LEA	-84(%ebp), %esi
+	29 F1			#	SUBL	%esi, %ecx
+	83 F9 12		#	CMPL	$12, %ecx
+	0F 8F error		#	JG	error
+	9D			#	POPF
+	0F 85 labelref		#	JNE	labelref
+	E9 labeldef		#	JMP	labeldef
+
+	#  --- The main loop
+main:
+	89 E5			#	MOVL	%esp, %ebp
+	81 EC 58 04 00 00	#	SUBL	$1112, %esp
+	8D 85 A8 FB FF FF	#	LEA	-1112(%ebp), %eax
+	89 45 A8		#	MOVL	%eax, -88(%ebp)
+	C7 45 00 00 00 00 00	#	MOVL	$0, 0(%ebp)
+
+.L8:
+	#  Read one byte (not with readone because EOF is permitted)
+	BA 01 00 00 00		#	MOVL	$1, %edx
+	8D 4D AC		#	LEA	-84(%ebp), %ecx
+	31 DB			#	XORL	%ebx, %ebx
+	B8 03 00 00 00		#	MOVL	$3, %eax
+	CD 80			#	INT	$0x80
+	83 F8 00		#	CMPL	$0, %eax
+	0F 8C error		#	JL	error
+	89 C3			#	MOVL	%eax, %ebx
+	0F 84 success		#	JE	success
+
+	#  Is the byte white space?  If so, loop back
+	8A 45 AC		#	MOVB	-84(%ebp), %al
+	50			#	PUSH	%eax
+	E8 isws			#	CALL	isws
+	83 F8 00		#	CMPL	$0, %eax
+	5A			#	POP	%edx
+	0F 85 .L8		#	JNE	.L8
+
+	#  We have a byte.  What is it?
+	E8 comment		#	CALL	comment
+	83 F8 00		#	CMP	$0, %eax
+	0F 85 .L8		#	JNE	.L8
+
+	E8 octet		#	CALL	octet
+	83 F8 00		#	CMP	$0, %eax
+	0F 85 .L8		#	JNE	.L8
+
+	E8 label		#	CALL	label
+	83 F8 00		#	CMP	$0, %eax
+	0F 85 .L8		#	JNE	.L8
+
+	E9 error		#	JMP	error
+
+####	#  And finally, the entry point.
+	#  Last per requirement for elfify.
+	E9 main			#	JMP	main
