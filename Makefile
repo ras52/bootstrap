@@ -1,4 +1,4 @@
-STAGES = 1
+STAGES = 2
 
 all:
 	set -e; for n in `seq 0 $(STAGES)`; do $(MAKE) -C stage-$$n all; done

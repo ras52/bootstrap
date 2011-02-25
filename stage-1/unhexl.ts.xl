@@ -86,7 +86,7 @@ success:
 ####	#  Function:	void readone( [%ecx] char* ) 
 	#  Reads one byte into (%ecx) which should already be set.
 	#  Clobbers %edx, %ebx and %eax.
-	#  Exits of failure.
+	#  Exits on failure.
 readone:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
@@ -202,7 +202,7 @@ labelref:
 	5F			#	POP	%edi
 	5E			#	POP	%esi
 	59			#	POP	%ecx
-	0F 85 .L14			#	JNE	.L14
+	0F 85 .L14		#	JNE	.L14
 
 	#  Found it.  Increment address by four and print offset
 	83 45 00 04		#	ADDL	$4, 0(%ebp)

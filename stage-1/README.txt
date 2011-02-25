@@ -12,7 +12,7 @@ into hexadecimal values.
 
 Therefore stage 1 adds two new tools, unhexl and elfify, to handle 
 these tasks.  The first, unhexl, is a significantly improved version of
-the stage 0 unhexl.  It allows arbitrary white-space and comments.  
+the stage 0 unhex.  It allows arbitrary white-space and comments.  
 More importantly, it allows labels to be defined and referenced.  The
 grammar is:
 
@@ -26,8 +26,8 @@ grammar is:
   comment := '#' CHAR* '\n'
   octet   := XDIGIT XDIGIT
   label   := LSTART LCHAR+
-  lref    := label ':'
-  ldef    := label LREFEND
+  ldef    := label ':'
+  lref    := label LREFEND
 
   file    := (comment | octet | lref | ldef | WS* )*
 
