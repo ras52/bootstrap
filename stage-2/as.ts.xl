@@ -4,7 +4,7 @@
 # Fixed sized entries of form
 #   struct mnemonic {
 #     char name[12];  # Null terminated
-#     char type;      # Types 00 to 05, documented below
+#     char type;      # Types 00 to 05, or FF for directives; documented below
 #     char params[3]; # Meaning dependent on type; documented below
 #   };
 #
@@ -28,6 +28,8 @@ mnemonics:
 4D 4F 56 53  42 00 00 00  00 00 00 00    00 01 A4 00    # MOVSB
 43 4D 50 53  42 00 00 00  00 00 00 00    00 01 A6 00    # CMPSB
 53 43 41 53  42 00 00 00  00 00 00 00    00 01 AE 00    # SCASB
+43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW    [aka CBTW]
+43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE   [aka CWTL]
 
  
 
@@ -54,9 +56,15 @@ mnemonics:
 4A 45 00 00  00 00 00 00  00 00 00 00    02 02 0F 84    # JE
 4A 47 00 00  00 00 00 00  00 00 00 00    02 02 0F 8F    # JG
 4A 47 45 00  00 00 00 00  00 00 00 00    02 02 0F 8D    # JGE
+4A 41 00 00  00 00 00 00  00 00 00 00    02 02 0F 87    # JA
+4A 41 45 00  00 00 00 00  00 00 00 00    02 02 0F 83    # JAE
 4A 4C 00 00  00 00 00 00  00 00 00 00    02 02 0F 8C    # JL
 4A 4C 45 00  00 00 00 00  00 00 00 00    02 02 0F 8E    # JLE
+4A 42 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JB
+4A 42 45 00  00 00 00 00  00 00 00 00    02 02 0F 86    # JBE
 4A 4E 45 00  00 00 00 00  00 00 00 00    02 02 0F 85    # JNE
+4A 43 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JC == JB
+4A 4F 00 00  00 00 00 00  00 00 00 00    02 02 0F 80    # JO
 
 
 
@@ -74,11 +82,14 @@ mnemonics:
 44 45 43 00  00 00 00 00  00 00 00 00    03 FE 01 01    # DEC
 50 55 53 48  00 00 00 00  00 00 00 00    03 FF 00 06    # PUSH
 50 4F 50 00  00 00 00 00  00 00 00 00    03 8F 00 00    # POP
-53 41 4C 00  00 00 00 00  00 00 00 00    03 D2 01 04    # SAL
-53 48 4C 00  00 00 00 00  00 00 00 00    03 D2 01 04    # SHL
-53 41 52 00  00 00 00 00  00 00 00 00    03 D2 01 07    # SAR
-53 48 52 00  00 00 00 00  00 00 00 00    03 D2 01 05    # SHR
-
+53 41 4C 00  00 00 00 00  00 00 00 00    03 D2 01 04    # SAL  [%cl]
+53 48 4C 00  00 00 00 00  00 00 00 00    03 D2 01 04    # SHL  [%cl]
+53 41 52 00  00 00 00 00  00 00 00 00    03 D2 01 07    # SAR  [%cl]
+53 48 52 00  00 00 00 00  00 00 00 00    03 D2 01 05    # SHR  [%cl]
+4D 55 4C 00  00 00 00 00  00 00 00 00    03 F6 01 04	# MUL  [%eax]
+49 4D 55 4C  00 00 00 00  00 00 00 00    03 F6 01 05	# IMUL [%eax]
+44 49 56 00  00 00 00 00  00 00 00 00    03 F6 01 06	# DIV  [%eax]
+49 44 49 56  00 00 00 00  00 00 00 00    03 F6 01 07	# IDIV [%eax]
 
 
 # Type 04 instructions.   This is unique to LEA
@@ -130,7 +141,7 @@ mnemonics:
 # ########################################################################
 
 
-####	#  Static data:   Pushback slot for unread / readone
+####	#  Static data:   Pushback slot for unread / readonex / readone
 	#    struct { bool has_pback : 8;  char pback_char; } 
 pback_slot:
 	00 00 00 00
@@ -178,6 +189,7 @@ isws:
 	0F 84 .L1		#	JE	.L1
 	E9 .L1a			#	JMP	.L1a
 
+
 ####	#  Function: bool isidchr(char)
 	#  Tests whether its argument is in [0-9A-Za-z_]
 .L2:
@@ -193,6 +205,7 @@ isidchr:
 	0F 8C .L2		#	JL	.L2
 	3C 39			#	CMPB	$0x39, %al	# '9'
 	0F 8E .L3		#	JLE	.L3
+.L3a:
 	3C 41			#	CMPB	$0x41, %al	# 'A'
 	0F 8C .L2		#	JL	.L2
 	3C 5A			#	CMPB	$0x5A, %al	# 'Z'
@@ -206,16 +219,29 @@ isidchr:
 	E9 .L2			#	JMP	.L2
 
 
-####	#  Function: int xchar(char)
-	#  Tests whether its argument is a character in [0-9A-F], and if so, 
-	#  coverts it to a decimal number; otherwise returns -1.
+####	#  Function: bool isid1chr(char)
+	#  Tests whether its argument is in [.A-Za-z_]
+isid1chr:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	3C 2E			#	CMPB	$0x2E, %al	# '.'
+	0F 84 .L3		#	JE	.L3
+	E9 .L3a			#	JMP	.L3a
+
+
+####	#  Function: int xchr(int c)
+	#  Tests whether its argument, c, is a character in [0-9A-F], and if 
+	#  so, coverts it to an integer; otherwise returns -1.
 .L6:
 	2C 37			#	SUBB	$0x37, %al	# 'A'-10
 .L7:
+#	66 98			#	CBW
+#	98			#	CWDE
 	5D			#	POP	%ebp
 	C3			#	RET
 .L4:
-	B8 FF FF FF FF		#	MOVL	$-1, %eax
+	C6 C0 FF		#	MOVB	$-1, %al
 	E9 .L7			#	JMP	.L7
 .L5:
 	2C 30			#	SUBB	$0x30, %al	# '0'
@@ -234,6 +260,21 @@ xchr:
 	0F 8E .L6		#	JLE	.L6
 	E9 .L4			#	JMP	.L4
 
+
+####	#  Function: int dchr(int c)
+	#  Tests whether its argument, c, is a character in [0-9], and if 
+	#  so, coverts it to an integer; otherwise returns -1.
+dchr:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	3C 30			#	CMPB	$0x30, %al	# '0'
+	0F 8C .L4		#	JL	.L4
+	3C 39			#	CMPB	$0x39, %al	# '9'
+	0F 8E .L5		#	JLE	.L5
+	E9 .L4			#	JMP	.L4
+
+
 ####    #  Not a proper function.
         #  Exits program
 error:
@@ -243,7 +284,7 @@ success:
         CD 80                   #       INT     $0x80
 
 
-####	#  Function:	void writebyte( char c )
+####	#  Function:	void writebyte( int c )
 	#  Write out character c
 writebyte:
 	55			#	PUSH	%ebp
@@ -265,12 +306,12 @@ unread:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
 
-	# Locate the pback_slot.
+	#  Locate the pback_slot.
 	8B 5D 0C		#	MOVL	12(%ebp), $ebx
 	80 7B 04 00		#	CMPB	$0, 4(%ebx)  # Test has_pback?
 	0F 85 error		#	JNE	error
 
-	# Write to the pback_slot
+	#  Write to the pback_slot
 	C6 43 04 01		#	MOVB	$1, 4(%ebx)
 	8A 45 08		#	MOVB	8(%ebp), $al
 	88 43 05		#	MOVB	%al, 5(%ebx)
@@ -285,10 +326,10 @@ unread:
 	#
 	#  This function contains the sole read syscall (syscall #3) so we 
 	#  can plumb in use of the pushback slot (pback_slot)
-doread:
+.L9:
 	BA 01 00 00 00		#	MOVL	$1, %edx
-	31 DB			#	XORL	%ebx, %ebx # XXX: fd from ifile
-	B8 03 00 00 00		#	MOVL	$3, %eax   # 3 = __NR_read
+	8B 1B 			#	MOVL	(%ebx), %ebx	# fd from ifile
+	B8 03 00 00 00		#	MOVL	$3, %eax	# 3 = __NR_read
 	CD 80			#	INT	$0x80
 	5D			#	POP	%ebp
 	C3			#	RET
@@ -298,12 +339,12 @@ readone:
 	89 E5			#	MOVL	%esp, %ebp
 	8B 4D 08		#	MOVL	8(%ebp), %ecx
 
-	# Locate the pback_slot.
+	#  Locate the pback_slot.
 	8B 5D 0C		#	MOVL	12(%ebp), $ebx
 	80 7B 04 00		#	CMPB	$0, 4(%ebx)  # Test has_pback?
-	0F 84 doread		#	JE	doread
+	0F 84 .L9		#	JE	.L9
 
-	# The pback_slot has a value in it
+	#  The pback_slot has a value in it
 	C6 43 04 00		#	MOVB	$0, 4(%ebx)
 	8A 43 05		#	MOVB    5(%ebx), %al
 	88 01			#	MOVB	%al, (%ecx)
@@ -332,6 +373,143 @@ readonex:
 	C3			#	RET
 
 
+####	#  Function:	int readimm( ifile* in );
+	#  Skip whitespace and then read an immediate value ($0xXXX or $NNN)
+	#  Returns the value read or exits if unable to read
+.L17:
+	#  Have we read any digits?  If not, it's an error
+	80 7D F4 00		#	CMPL	$0, -12(%ebp)
+	0F 84 error		#	JE	error
+
+	#  Unread the last character read
+	5B			#	POP	%ebx		# Overwrite 
+	FF 75 FC		#	PUSH	-4(%ebp)	#   bufp
+	E8 unread		#	CALL	unread
+
+	#  Stack cleanup and exit
+	8B 45 F8		#	MOVL	-8(%ebp), %eax	# return val
+	83 C4 14		#	ADDL	$20, %esp
+	5D			#	POP	%ebp
+	C3			#	RET
+
+.L16:
+	#  We're reading decimal and the first value is already in the buffer
+	FF 75 FC		#	PUSH	-4(%ebp)
+	E8 dchr			#	CALL	dchr
+	5B			#	POP	%ebx
+	3C FF			#	CMPB	$-1, %al
+	0F 84 .L17		#	JE	.L17	# done
+
+	#  Add the digit to the current value -- tedious as IMUL only
+	#  acts on the accumulator and cannot read immediates.  Test for
+	#  overflow as we go along by using the fact that IMUL and ADDL
+	#  are both signed operations which set the OF flag on overflow.
+	89 C3			#	MOVL	%eax, %ebx
+	8B 45 F8		#	MOVL	-8(%ebp), %eax
+	B9 0A 00 00 00		#	MOVL	$10, %ecx
+	F7 E1 			#	MUL	%ecx, $eax
+	0F 80 error		#	JO	error
+	01 D8			#	ADDL	%ebx, %eax
+	0F 80 error		#	JO	error
+	89 45 F8		#	MOVL	%eax, -8(%ebp)
+	FF 45 F4		#	INCL	-12(%ebp)
+
+ 	#  Read another digit
+	E8 readonex		#	CALL	readonex
+	E9 .L16			#	JMP	.L16	# loop
+
+readimm:
+	#  The function entry point
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	31 C9			#	XORL	%ecx, %ecx
+	51			#	PUSH	%ecx		# char buf[4];
+	51			#	PUSH	%ecx		# int val = 0;
+	51			#	PUSH	%ecx		# int count = 0;
+
+	#  Read one byte 
+	FF 75 08		#	PUSH	8(%ebp)		# ifile* file;
+	8D 4D FC		#	LEA	-4(%ebp), %ecx	# char* bufp;
+	51			#	PUSH	%ecx
+.L15:
+	E8 readonex		#	CALL	readonex
+
+	#  Is the byte horizontal white space?  If so, loop back
+	8A 45 FC		#	MOVB	-4(%ebp), %al
+	50			#	PUSH	%eax
+	E8 ishws		#	CALL	ishws
+	83 F8 00		#	CMPL	$0, %eax
+	5A			#	POP	%edx
+	0F 85 .L15		#	JNE	.L15
+
+	#  Check it is a '$' marking the start of an immediate
+	80 7D FC 24		#	CMPB	$0x24, -4(%ebp)		# '$'
+	0F 85 error		#	JNE	error
+
+	#  Read another byte (stack already set up).  Is it a '0' then a 'x'?
+	E8 readonex		#	CALL	readonex
+	80 7D FC 30		#	CMPB	$0x30, -4(%ebp)		# '0'
+	0F 85 .L16		#	JNE	.L16
+
+	E8 readonex		#	CALL	readonex
+	80 7D FC 78		#	CMPB	$0x78, -4(%ebp)		# 'x'
+	0F 85 .L16		#	JNE	.L16
+
+.L18:
+	#  We know we're going to have a hex number, so start reading
+	E8 readonex		#	CALL	readonex
+	FF 75 FC		#	PUSH	-4(%ebp)
+	E8 xchr			#	CALL	xchr
+	5B			#	POP	%ebx
+	3C FF			#	CMPB	$-1, %al
+	0F 84 .L17		#	JE	.L17	# done
+
+	#  Add the digit to the current value
+	C6 C1 04		#	MOVB	$4, %cl
+	D3 65 F8		#	SALL	%cl, -8(%ebp)
+	01 45 F8		#	ADDL	%eax, -8(%ebp)
+	FF 45 F4		#	INCL	-12(%ebp)
+
+	#  Test for overflow: have we read more than 8 digits?
+	80 7D F4 08		#	CMPL	$8, -12(%ebp)
+	0F 8F error		#	JG	error
+	E9 .L18			#	JMP	.L17	# loop
+
+
+####	#  Function:	void write_oc12( int opcode_info )
+	#  Uses the second byte in opcode_info to determine how many
+	#  bytes to write (1 or 2) and then writes the third and perhaps
+	#  fourth byte out.
+.L19:
+	5D			#	POP	%ebp
+	C3			#	RET
+
+write_oc12:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	8B 55 08		#	MOVL	8(%ebp), %edx
+
+	#  Unconditionally write the first byte
+	89 D3			#	MOVL	%edx, %ebx
+	C6 C1 10		#	MOVB	$16, %cl
+	D3 EB			#	SHRL	%cl, %ebx
+	52			#	PUSH	%edx
+	53			#	PUSH	%ebx
+	E8 writebyte		#	CALL	writebyte
+	5B			#	POP	%ebx
+	5A			#	POP	%edx
+
+	#  Is there a second byte?
+	80 FE 01		#	CMPB	$01, %dh
+	0F 8E .L19		#	JLE	.L19
+	C6 C1 08		#	MOVB	$8, %cl
+	D3 EB			#	SHRL	%cl, %ebx
+	53			#	PUSH	%ebx
+	E8 writebyte		#	CALL	writebyte
+	5B			#	POP	%ebx
+	E9 .L19			#	JMP	.L19
+
+	
 ####    #  The main function.
         #  Stack is arranged as follows:
 	#
@@ -348,8 +526,8 @@ readonex:
 	#  ifile is a { int fd; bool has_pback :8; char pback_char; int:16; }.
 
 ret:
-	# This ret is labelled to allow various bits of main to
-	# jump up to it in order to effect a forwards jump.
+	#  This ret is labelled to allow various bits of main to
+	#  jump up to it in order to effect a forwards jump.
 	31 C0			#	XORL	%eax, %eax
 ret1:
 	C3			#	RET
@@ -367,7 +545,7 @@ comment:
 	51			#	PUSH	%ecx
 .L10:
 	E8 readonex		#	CALL	readonex
-	80 7D A0 0A		#	CMPL	$0x0A, -96(%ebp)	# '\n'
+	80 7D A0 0A		#	CMPB	$0x0A, -96(%ebp)	# '\n'
 	0F 85 .L10		#	JNE	.L10
 	5A			#	POP	%edx
 	5A			#	POP	%edx
@@ -392,15 +570,44 @@ labeldef:
 	B8 01 00 00 00		#	MOVL	$1, %eax
 	C3			#	RET	# to main loop
 
+insn_end:
+	#  XXX: Should we require only ws or comments until end of line?
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	E9 ret1			#	JMP	ret1
+
+type_00:
+	#  Write out a type 00 instruction.  These are easiest as they
+	#  have no parameters.
+	52			#	PUSH	%edx	# opcode info
+	E8 write_oc12		#	CALL	write_oc12
+	5A			#	POP	%edx
+	E9 insn_end		#	JMP	insn_end
+
+type_01:
+	#  Write the opcode byte(s).
+	52			#	PUSH	%edx	# opcode info
+	E8 write_oc12		#	CALL	write_oc12
+	5A			#	POP	%edx
+	#  Skip ws and read immediate.
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+        51			#	PUSH	%ecx
+	E8 readimm		#	CALL	readimm
+	59			#	POP	%ecx
+
+	#  XXX: check it's 8-bits
+	#  Byte is in %al (as part of return from readimm): write it.
+	50			#	PUSH	%eax
+	E8 writebyte		#	CALL	writebyte
+	5B			#	POP	%ebx
+	E9 insn_end		#	JMP	insn_end
+
 hex_bytes:
-	#  Read one byte (not with readone because EOF is permitted -- we're
-	#  in a loop, and the program might, terminate with a .hex_bytes 
-	#  directive).
+	#  Read one byte
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
         51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
 	51			#	PUSH	%ecx
-	E8 readone		#	CALL	readone
+	E8 readonex		#	CALL	readonex
 	5A			#	POP	%edx
 	5A			#	POP	%edx
 	83 F8 00		#	CMPL	$0, %eax
@@ -457,9 +664,9 @@ hex_bytes:
 	0F 85 hex_bytes		#	JNE	hex_bytes
 
 
-	# Look up the mnemonic or directive
+	#  --- Look up the mnemonic or directive
 instruct:
-	# %esi points to the null-terminated identifier name
+	#  %esi points to the null-terminated identifier name
 	8B 7D FC		#	MOV	-4(%ebp), %edi
 	81 EF 10 00 00 00	#	SUBL	$16, %edi
 .L14a:
@@ -476,37 +683,50 @@ instruct:
 	59			#	POP	%ecx
 	0F 85 .L14a		#	JNE	.L14a
 
-	# Found the mnemonic or directive.  Get it's type (and parameters)
-	# and see whether it's a directive (which must be a .hex_bytes)
+	#  Found the mnemonic or directive.  Get it's type (and parameters)
+	#  and see whether it's a directive (which must be a .hex_bytes)
 	8B 57 0C 		#	MOVL	$12(%edi), %edx
 	80 FA FF 		#	CMPB	$FF, %dl
 	0F 84 hex_bytes 	#	JE	hex_bytes
+	80 FA 00		#	CMPB	$00, %dl
+	0F 84 type_00		#	JE	type_00
+	80 FA 01		#	CMPB	$01, %dl
+	0F 84 type_01		#	JE	type_01
 
-	# XXX TODO FIXME -- exit(3)
+	#  XXX  write code for the other types of instruction; exit(3) for now
         BB 03 00 00 00          #       MOVL    $3, %ebx
 	E9 success		#	JMP	success
 	C3			#	RET	# to main loop
 
 
-	# --- Test for an identifier at top level in the source file.
-        # This might be a label, a mnemonic or a directive.
+	#  --- Test for an identifier at top level in the source file.
+        #  This might be a label, a mnemonic or a directive.
 tl_ident:
-	# XXX: We should check the first character (already read) was 
-	# isidchr (or otherwise valid) too.  The fact we don't at the 
-	# moment is what allows labels like .L42 used here in jumps.
+	#  Check whether the first character (already read) is a valid
+	#  first character for an identifier.
+	FF 75 A0		#	PUSH	-96(%ebp)
+	E8 isid1chr		#	CALL	isid1chr
+	59			#	POP	%ecx
+	83 F8 00		#	CMPL	$0, %eax
+	0F 84 error		#	JE	error
 
-	# Read an identifier
+	#  Continue to read an identifier
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
         51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
 .L12:
-	# XXX: This code is morally dubious.  readonex clobbers %ecx 
-	# but just happens to clobber it with what it alread contained.
-	# XXX: We also don't check for buffer overflow writing to the string.
 	41			#	INCL	%ecx
+	#  We need to check that we're not going to overflow the buffer.  
+	#  But in fact, the instruction table limit is 12 characters (incl.
+	#  null termination -- i.e. 11 without), so we use that limit.
+	8D 75 A0		#	LEA	-96(%ebp), %esi
+	29 CE			#	SUBL	%ecx, %esi
+	83 FE F5		#	CMPL	-$11, %esi
+	0F 8C error		#	JL	error
+	
 	51			#	PUSH	%ecx
 	E8 readonex		#	CALL	readonex
-	5A			#	POP	%edx
+	59			#	POP	%ecx
 	FF 31			#	PUSH	(%ecx)
 	E8 isidchr		#	CALL	isidchr
 	5B			#	POP	%ebx
@@ -529,7 +749,7 @@ tl_ident:
 	9D			#	POPF
 	0F 84 labeldef		#	JE	labeldef
 
-	# It must be either a directive or an instruction
+	#  It must be either a directive or an instruction
 	8D 85 98 FB FF FF	#	LEA	-1128(%ebp), %eax	# ifile
         50			#	PUSH	%eax
 	52			#	PUSH	%edx
@@ -554,7 +774,7 @@ main:
 	C7 85 98 FB FF FF 00 00 00 00 #	MOVL	$0, -1128(%ebp)
 	C7 85 9C FB FF FF 00 00 00 00 #	MOVL	$0, -1124(%ebp)
 
-	# Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
+	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
 	E8 getip		#	CALL	getip
 	81 C0 mnemonics		#	ADDL	mnemonics, %eax
 	81 C0 06 00 00 00	#	ADDL	$6, %eax   # len of prev instr
@@ -587,6 +807,7 @@ main:
 	83 F8 00		#	CMP	$0, %eax
 	0F 85 .L8		#	JNE	.L8
 
+	#  or perhaps a top-level identifier (label / mnemonic / directive)
 	E8 tl_ident		#	CALL	tl_ident
 	83 F8 00		#	CMP	$0, %eax
 	0F 85 .L8		#	JNE	.L8

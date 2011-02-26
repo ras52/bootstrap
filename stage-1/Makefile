@@ -20,7 +20,7 @@ unhexl:	elfify unhexl.ts.x
 
 check:	check-unhexl check-elfify
 
-check-unhexl:	unhexl elfify
+check-unhexl:	unhexl elfify unhexl.ts.xl
 	unhexl < unhexl.ts.xl > unhexl.ts
 	elfify unhexl.ts > unhexl2
 	$(CHMOD) a+x unhexl2

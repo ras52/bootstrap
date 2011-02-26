@@ -13,5 +13,7 @@ as:	as.ts.xl
 	$(CHMOD) a+x as
 	$(RM) as.ts
 
+check:
+
 clean:
 	$(RM) -f as as.ts 

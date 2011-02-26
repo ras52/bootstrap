@@ -20,7 +20,7 @@ grammar is:
   XDIGIT  := [0-9A-F]
   LCHAR   := [0-9A-Za-z_] 
   LSTART  := [^ \t\n0-9A-F#]
-  LREFEND := [^:]
+  LREFEND := [^:0-9A-Za-z_]
   CHAR    := any character
 
   comment := '#' CHAR* '\n'
@@ -29,7 +29,12 @@ grammar is:
   ldef    := label ':'
   lref    := label LREFEND
 
-  file    := (comment | octet | lref | ldef | WS* )*
+  file    := ( comment | octet | lref | ldef | WS* )*
+
+In order to keep the grammar simple, only upper case letters are 
+accepted in hexidecimal octets and labels must not start with a
+valid hexidecimal digit.  It is suggested that labels start with
+a '.' or a lower case letter.
 
 Label references are converted into little-endian 32-bit offsets 
 relative to the end of the address being written.  For example, the 
@@ -49,11 +54,9 @@ labels already defined.  The lack of dynamic memory allocation in stage
 1 means the number of labels is limited to 64.  For the same reason, 
 the line length is limited to 80 characters: this constraint is not 
 checked by the stage 1 program -- failure to stick to 80 character 
-lines will result in a buffer overflow.  Other errors, including 
+lines *will* result in a buffer overflow.  Other errors, including 
 overflowing the symbol table and various syntax errors are flagged by a 
 non-zero return status.
-
-
 
 The second program, elfify, takes a .text section and converts it into 
 a stand-alone ELF program.  Unlike the stage 0 unhex, this program has 
@@ -76,4 +79,7 @@ As elfify does not parse the .text section, it cannot work out where
 the entry point is: it assumes that the entry point is 5 bytes before 
 the end of the .text section.  It is therefore suggested that all 
 programs end with a jump to the real entry point.  On x86, a 32-bit
-relative jump requires precisely 5 bytes.
+relative jump requires precisely 5 bytes and can easily be generated
+by unhexl by ending the file with:
+
+  E9 main

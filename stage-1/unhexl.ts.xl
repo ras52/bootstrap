@@ -102,7 +102,7 @@ readone:
 ####	#  The main function.
 	#  Stack is arranged as follows:
 	#
-	#        0(%ebp)	int* addr
+	#       -4(%ebp)	int* addr
 	#      -84(%ebp)	char buffer[80]
 	#      -88(%ebp)	label* label_end
 	#    -1112(%ebp)	label labels[64]
@@ -165,7 +165,7 @@ octet:
 	5A			#	POP	%edx
 
 	#  Increment the address and return
-	FF 45 00		#	INCL	0(%ebp)
+	FF 45 FC		#	INCL	-4(%ebp)
 	B8 01 00 00 00		#	MOVL	$1, %eax
 	C3			#	RET
 
@@ -180,7 +180,7 @@ labeldef:
 	0F 8D error		#	JGE	error
 	F3			#	REP
 	   A4			#	  MOVSB
-	8B 45 00		#	MOVL	0(%ebp), %eax
+	8B 45 FC		#	MOVL	-4(%ebp), %eax
 	8B 3B			#	MOVL	(%ebx), %edi
 	89 47 0C		#	MOVL	%eax, 12(%edi)
 	83 03 10		#	ADDL	$16, (%ebx)
@@ -205,9 +205,9 @@ labelref:
 	0F 85 .L14		#	JNE	.L14
 
 	#  Found it.  Increment address by four and print offset
-	83 45 00 04		#	ADDL	$4, 0(%ebp)
+	83 45 FC 04		#	ADDL	$4, -4(%ebp)
 	8B 47 0C		#	MOVL	12(%edi), %eax
-	2B 45 00		#	SUBL	0(%ebp), %eax
+	2B 45 FC		#	SUBL	-4(%ebp), %eax
 	50			#	PUSH	%eax
 	BA 04 00 00 00		#	MOVL	$4, %edx
 	89 E0			#	MOVL	%esp, %eax
@@ -253,7 +253,7 @@ main:
 	81 EC 58 04 00 00	#	SUBL	$1112, %esp
 	8D 85 A8 FB FF FF	#	LEA	-1112(%ebp), %eax
 	89 45 A8		#	MOVL	%eax, -88(%ebp)
-	C7 45 00 00 00 00 00	#	MOVL	$0, 0(%ebp)
+	C7 45 FC 00 00 00 00	#	MOVL	$0, -4(%ebp)
 
 .L8:
 	#  Read one byte (not with readone because EOF is permitted)
