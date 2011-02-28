@@ -80,6 +80,7 @@ mnemonics:
 
 49 4E 43 00  00 00 00 00  00 00 00 00    03 FE 01 00    # INC
 44 45 43 00  00 00 00 00  00 00 00 00    03 FE 01 01    # DEC
+4E 45 47 00  00 00 00 00  00 00 00 00    03 F6 01 03	# NEG
 50 55 53 48  00 00 00 00  00 00 00 00    03 FF 00 06    # PUSH
 50 4F 50 00  00 00 00 00  00 00 00 00    03 8F 00 00    # POP
 53 41 4C 00  00 00 00 00  00 00 00 00    03 D2 01 04    # SAL  [%cl]
@@ -136,7 +137,7 @@ mnemonics:
 
 
 
-# End of table marker -- name is NULL
+# End of table marker -- first byte of name is NULL.
 00 00 00 00  00 00 00 00  00 00 00 00    00 00 00 00 
 # ########################################################################
 
@@ -150,7 +151,9 @@ pback_slot:
 
 ####	#  Function: void* getip(void)
 	#  A function to load %eip for the calling frame (specifically
-	#  the return address) into %eax
+	#  the return address) into %eax.  The usual trick of
+	#    CALL next_line; next_line: POP $eax
+	#  relies on a forward jump, so we need a separate function.
 getip:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
@@ -236,8 +239,6 @@ isid1chr:
 .L6:
 	2C 37			#	SUBB	$0x37, %al	# 'A'-10
 .L7:
-#	66 98			#	CBW
-#	98			#	CWDE
 	5D			#	POP	%ebp
 	C3			#	RET
 .L4:
@@ -284,21 +285,34 @@ success:
         CD 80                   #       INT     $0x80
 
 
-####	#  Function:	void writebyte( int c )
+####	#  Function:	void writebyte( int c, ofile* of )
 	#  Write out character c
 writebyte:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
-
 	BA 01 00 00 00		#	MOVL	$1, %edx
-	8D 4D 08		#	LEAL	8(%ebp), %ecx
-	BB 01 00 00 00		#	MOVL	$1, %ebx
+.L5a:
+	53			#	PUSH	%ebx
+	8D 4D 08		#	LEAL	8(%ebp), %ecx	# ofile*
+	8B 5D 0C		#	MOVL	12(%ebp), $ebx
+	01 53 04		#	ADDL	%edx, 4(%ebx)	# inc counter
+	8B 1B 			#	MOVL	(%ebx), %ebx	# fd from ofile
 	B8 04 00 00 00		#	MOVL	$4, %eax   # 4 == __NR_write
 	CD 80			#	INT	$0x80
 
+	5B			#	POP	%ebx
 	5D			#	POP	%ebp
 	C3			#	RET
-	
+
+
+####	#  Function:	void writedword( int dw, ofile* of )
+	#  Write out dword dw
+writedword:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	BA 04 00 00 00		#	MOVL	$4, %edx
+	E9 .L5a			#	JMP	.L5a
+
 
 ####	#  Function:	void unread( char c, ifile* f )
 	#  Puts c onto the pushback slot
@@ -307,21 +321,20 @@ unread:
 	89 E5			#	MOVL	%esp, %ebp
 
 	#  Locate the pback_slot.
-	8B 5D 0C		#	MOVL	12(%ebp), $ebx
-	80 7B 04 00		#	CMPB	$0, 4(%ebx)  # Test has_pback?
+	8B 45 0C		#	MOVL	12(%ebp), $eax
+	80 78 04 00		#	CMPB	$0, 4(%eax)  # Test has_pback?
 	0F 85 error		#	JNE	error
 
 	#  Write to the pback_slot
-	C6 43 04 01		#	MOVB	$1, 4(%ebx)
-	8A 45 08		#	MOVB	8(%ebp), $al
-	88 43 05		#	MOVB	%al, 5(%ebx)
+	C6 40 04 01		#	MOVB	$1, 4(%eax)
+	8A 4D 08		#	MOVB	8(%ebp), $cl
+	88 48 05		#	MOVB	%cl, 5(%eax)
 	5D			#	POP	%ebp
 	C3			#	RET
 	
 
 ####	#  Function:	void readone( char* p, ifile* f ) 
 	#  Reads one byte into p which should already be set.
-	#  Clobbers %edx, %ebx and %eax.
 	#  Returns the number of bytes read in %eax.
 	#
 	#  This function contains the sole read syscall (syscall #3) so we 
@@ -331,12 +344,15 @@ unread:
 	8B 1B 			#	MOVL	(%ebx), %ebx	# fd from ifile
 	B8 03 00 00 00		#	MOVL	$3, %eax	# 3 = __NR_read
 	CD 80			#	INT	$0x80
+.L9a:
+	5B			#	POP	%ebx
 	5D			#	POP	%ebp
 	C3			#	RET
 	
 readone:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
+	53			#	PUSH	%ebx
 	8B 4D 08		#	MOVL	8(%ebp), %ecx
 
 	#  Locate the pback_slot.
@@ -349,8 +365,7 @@ readone:
 	8A 43 05		#	MOVB    5(%ebx), %al
 	88 01			#	MOVB	%al, (%ecx)
 	B8 01 00 00 00		#	MOVL	$1, %eax
-	5D			#	POP	%ebp
-	C3			#	RET
+	E9 .L9a			#	JMP	.L9a
 
 
 ####	#  Function:	void readone( char* p, ifile* f ) 
@@ -373,14 +388,126 @@ readonex:
 	C3			#	RET
 
 
-####	#  Function:	int readimm( ifile* in );
-	#  Skip whitespace and then read an immediate value ($0xXXX or $NNN)
-	#  Returns the value read or exits if unable to read
-.L17:
-	#  Have we read any digits?  If not, it's an error
-	80 7D F4 00		#	CMPL	$0, -12(%ebp)
+####	#  Function:	int get_label( int strlen, int bits, main_frame* p ):
+.L11a:
+	5F			#	POP	%edi
+	5E			#	POP	%esi
+	5B			#	POP	%ebx
+	5D			#	POP	%ebp
+	C3			#	RET
+
+get_label:
+	55 			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	53			#	PUSH	%ebx
+	56			#	PUSH	%esi
+	57			#	PUSH	%edi
+
+	8B 4D 08		#	MOVL	8(%ebp), %ecx	# strlen
+	8B 5D 10		#	MOVL	16(%ebp), %ebx
+	8D 73 A0		#	LEA	-96(%ebx), %esi
+	8D BB 90 FB FF FF	#	LEA	-1136(%ebx), %edi
+.L11:
+	83 C7 10		#	ADDL	$16, %edi
+	3B 7B F8		#	CMPL	-8(%ebx), %edi
+	0F 8D error		#	JGE	error
+	51			#	PUSH	%ecx
+	56			#	PUSH	%esi
+	57			#	PUSH	%edi
+	F3			#	REPE
+	   A6			#	  CMPSB
+	5F			#	POP	%edi
+	5E			#	POP	%esi
+	59			#	POP	%ecx
+	0F 85 .L11		#	JNE	.L14
+
+	# Found it.  Compute the value.
+	8B 45 0C		#	MOVL	12(%ebp), %eax
+	C6 C1 03		#	MOVB	$3, %cl
+	D3 F8			#	SARL	%cl, %eax
+	03 83 94 FB FF FF	#	ADDL	-1132(%ebx), %eax #ofile->count
+	2B 47 0C		#	SUBL	12(%edi), %eax
+	F7 D8			#	NEGL	%eax
+
+	# %eax is the offset.  If bits == 32, don't care about overflow
+	83 7D 0C 20		#	CMPL	$32, 12(%ebp)
+	0F 84 .L11a		#	JE	.L11a
+	
+	# Is it >= 2^(bits-1) ?
+	8B 4D 0C		#	MOVL	12(%ebp), %ecx
+	FF C9			#	DECL	%ecx
+	BA 01 00 00 00		#	MOVL	$1, %edx
+	D3 E2			#	SALL	%cl, %edx
+	39 C2			#	CMPL	%eax, %edx
+	0F 8E error		#	JLE	error
+
+	# Or < 2^(bits-1)?
+	F7 DA			#	NEG	%edx
+	39 C2			#	CMPL	%eax, %edx
+	0F 8F error		#	JG	error
+	E9 .L11a		#	JMP	.L11a
+
+
+####	#  Function:	char* read_id( main_frame* p );
+	#  The first byte of an identifier is already p->buf[0].  We 
+	#  first confirm it isid1chr() and abort if not.  Then read 
+	#  until we reach the end of the id and return a pointer to 
+	#  the first non-id char.
+	#  XXX Clobbers %esi
+read_id:
+	55 			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+
+	#  Was the first byte a valid character for an identifier?
+	8B 4D 08		#	MOVL	8(%ebp), %ecx
+	FF 71 A0 		#	PUSH	-96(%ecx)
+	E8 isid1chr		#	CALL	isid1chr
+	59			#	POP	%ecx
+	83 F8 00		#	CMPL	$0, %eax
 	0F 84 error		#	JE	error
 
+	#  Continue to read an identifier
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	8D 88 98 FB FF FF	#	LEA	-1128(%eax), %ecx
+	51			#	PUSH	%ecx
+	8D 48 A0		#	LEA	-96(%eax), %ecx
+.L12:
+	41			#	INCL	%ecx
+	#  We need to check that we're not going to overflow the buffer.  
+	#  But in fact, the instruction table limit is 12 characters (incl.
+	#  null termination -- i.e. 11 without), so we use that limit.
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	8D 70 A0		#	LEA	-96(%eax), %esi
+	29 CE			#	SUBL	%ecx, %esi
+	83 FE F5		#	CMPL	-$11, %esi
+	0F 8C error		#	JL	error
+
+	51			#	PUSH	%ecx
+	E8 readonex		#	CALL	readonex
+	59			#	POP	%ecx
+	FF 31			#	PUSH	(%ecx)
+	E8 isidchr		#	CALL	isidchr   # XXX preserves %ecx
+	5A			#	POP	%edx
+	83 F8 00		#	CMPL	$0, %eax
+	0F 85 .L12		#	JNE	.L12
+	5A			#	POP	%edx
+
+	#  (%ecx) is now something other than lchr.  Return it
+	89 C8			#	MOVL	%ecx, %eax
+	5D			#	POP	%ebp
+	C3			#	RET
+
+
+####	#  Function:	int read_imm( int bits, main_frame* p );
+	#  Skip whitespace and then read an immediate value ($0xXX or $NNN)
+	#  Returns the value read or exits if unable to read.
+	#  XXX Clobbers %ebx
+.L17:
+	#  Have we read any digits?  If not, it's an error
+	83 7D F4 00		#	CMPL	$0, -12(%ebp)
+	0F 84 error		#	JE	error
+
+.L17a:
 	#  Unread the last character read
 	5B			#	POP	%ebx		# Overwrite 
 	FF 75 FC		#	PUSH	-4(%ebp)	#   bufp
@@ -418,7 +545,36 @@ readonex:
 	E8 readonex		#	CALL	readonex
 	E9 .L16			#	JMP	.L16	# loop
 
-readimm:
+.L16a:
+	# Put the byte into the main buffer and read a label
+	8A 45 FC		#	MOVB	-4(%ebp), %al
+	8B 4D 0C		#	MOVL	12(%ebp), %ecx
+	88 41 A0		#	MOVB	%al, -96(%ecx)
+
+	FF 75 0C		#	PUSH	12(%ebp)	# main_frame
+	E8 read_id		#	CALL	read_id
+	59			#	POP	%ecx
+
+	#  Get ready to unread the last byte back at the end of the function
+	8B 08			#	MOVL	(%eax), %ecx
+	89 4D FC		#	MOVL	%ecx, -4(%ebp)
+
+	#  Calculate the string length
+	8B 4D 0C		#	MOVL	12(%ebp), %ecx
+	8D 51 A0		#	LEA	-96(%ecx), %edx
+	29 D0			#	SUBL	%edx, %eax
+
+	FF 75 0C		#	PUSH	12(%ebp)	# main_frame
+	FF 75 08		#	PUSH	8(%ebp)		# bits
+	50			#	PUSH	%eax		# strlen
+	E8 get_label		#	CALL	get_label
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+	89 45 F8		#	MOVL	%eax, -8(%ebp)
+	E9 .L17a		#	JMP	.L17a
+
+read_imm:
 	#  The function entry point
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
@@ -428,7 +584,9 @@ readimm:
 	51			#	PUSH	%ecx		# int count = 0;
 
 	#  Read one byte 
-	FF 75 08		#	PUSH	8(%ebp)		# ifile* file;
+	8B 4D 0C		#	MOVL	12(%ebp), %ecx
+	8D 89 98 FB FF FF	#	LEA	-1128(%ecx), %ecx
+	51			#	PUSH	%ecx
 	8D 4D FC		#	LEA	-4(%ebp), %ecx	# char* bufp;
 	51			#	PUSH	%ecx
 .L15:
@@ -442,9 +600,10 @@ readimm:
 	5A			#	POP	%edx
 	0F 85 .L15		#	JNE	.L15
 
-	#  Check it is a '$' marking the start of an immediate
+	#  Check it is a '$' marking the start of an immediate;
+	#  if not, it must be an identifier
 	80 7D FC 24		#	CMPB	$0x24, -4(%ebp)		# '$'
-	0F 85 error		#	JNE	error
+	0F 85 .L16a		#	JNE	.L16a
 
 	#  Read another byte (stack already set up).  Is it a '0' then a 'x'?
 	E8 readonex		#	CALL	readonex
@@ -454,6 +613,10 @@ readimm:
 	E8 readonex		#	CALL	readonex
 	80 7D FC 78		#	CMPB	$0x78, -4(%ebp)		# 'x'
 	0F 85 .L16		#	JNE	.L16
+
+	#  Set number of hex digits (divide number of bits by 4)
+	C6 C1 02		#	MOVB	$2, %cl
+	D3 7D 08		#	SARL	%cl, 8(%ebp)
 
 .L18:
 	#  We know we're going to have a hex number, so start reading
@@ -470,36 +633,45 @@ readimm:
 	01 45 F8		#	ADDL	%eax, -8(%ebp)
 	FF 45 F4		#	INCL	-12(%ebp)
 
-	#  Test for overflow: have we read more than 8 digits?
-	80 7D F4 08		#	CMPL	$8, -12(%ebp)
+	#  Test for overflow: 
+	#  have we read more than the expected number of digits?
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	39 45 F4		#	CMPL	%eax, -12(%ebp)
 	0F 8F error		#	JG	error
 	E9 .L18			#	JMP	.L17	# loop
 
 
-####	#  Function:	void write_oc12( int opcode_info )
+####	#  Function:	void write_oc12( int opcode_info, main_frame* )
 	#  Uses the second byte in opcode_info to determine how many
 	#  bytes to write (1 or 2) and then writes the third and perhaps
-	#  fourth byte out.
+	#  fourth byte out.	XXX Clobbers %ebx
 .L19:
+	5B			#	POP	%ebx	# ofile
+	5B			#	POP	%ebx
 	5D			#	POP	%ebp
 	C3			#	RET
 
 write_oc12:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
-	8B 55 08		#	MOVL	8(%ebp), %edx
+	53			#	PUSH	%ebx
+
+	#  Find the ofile object
+	8B 45 0C		#	MOVL	12(%ebp), %eax
+	8D 88 90 FB FF FF	#	LEA	-1136(%eax), %ecx
+	51			#	PUSH	%ecx
 
 	#  Unconditionally write the first byte
+	8B 55 08		#	MOVL	8(%ebp), %edx
 	89 D3			#	MOVL	%edx, %ebx
 	C6 C1 10		#	MOVB	$16, %cl
 	D3 EB			#	SHRL	%cl, %ebx
-	52			#	PUSH	%edx
 	53			#	PUSH	%ebx
 	E8 writebyte		#	CALL	writebyte
 	5B			#	POP	%ebx
-	5A			#	POP	%edx
 
 	#  Is there a second byte?
+	8B 55 08		#	MOVL	8(%ebp), %edx
 	80 FE 01		#	CMPB	$01, %dh
 	0F 8E .L19		#	JLE	.L19
 	C6 C1 08		#	MOVB	$8, %cl
@@ -513,17 +685,18 @@ write_oc12:
 ####    #  The main function.
         #  Stack is arranged as follows:
 	#
-	#        0(%ebp)	int* addr  // The output file offset
 	#	-4(%ebp)	instrct* mnemonics
 	#       -8(%ebp)	label* label_end
 	#      -12(%ebp)	label* label_end_store
 	#      -96(%ebp)	char buffer[80]
 	#    -1120(%ebp)	label labels[64]
 	#    -1128(%ebp)        ifile stdout
+	#    -1136(%ebp)	ofile stdin
 	#
 	#  where label is a { char name[12]; int addr; },
-        #  instrct is a { char name[12]; char type; char data[3]; }, and
+        #  instrct is a { char name[12]; char type; char data[3]; },
 	#  ifile is a { int fd; bool has_pback :8; char pback_char; int:16; }.
+	#  and ofile is a { int fd; int count; }.
 
 ret:
 	#  This ret is labelled to allow various bits of main to
@@ -563,7 +736,7 @@ labeldef:
 	0F 8D error		#	JGE	error
 	F3			#	REP
 	   A4			#	  MOVSB
-	8B 45 00		#	MOVL	0(%ebp), %eax
+	8B 85 94 FB FF FF	#	MOVL	-1132(%ebp), %eax #ofile->count
 	8B 3B			#	MOVL	(%ebx), %edi
 	89 47 0C		#	MOVL	%eax, 12(%edi)
 	83 03 10		#	ADDL	$16, (%ebx)
@@ -572,32 +745,63 @@ labeldef:
 
 insn_end:
 	#  XXX: Should we require only ws or comments until end of line?
+	#  XXX: Or support a ';' instruction separator?
 	B8 01 00 00 00		#	MOVL	$1, %eax
 	E9 ret1			#	JMP	ret1
 
 type_00:
 	#  Write out a type 00 instruction.  These are easiest as they
 	#  have no parameters.
+	55			#	PUSH	%ebp		# main_frame
 	52			#	PUSH	%edx	# opcode info
 	E8 write_oc12		#	CALL	write_oc12
+	5A			#	POP	%edx
 	5A			#	POP	%edx
 	E9 insn_end		#	JMP	insn_end
 
 type_01:
 	#  Write the opcode byte(s).
+	55			#	PUSH	%ebp		# main_frame
 	52			#	PUSH	%edx	# opcode info
 	E8 write_oc12		#	CALL	write_oc12
 	5A			#	POP	%edx
+
 	#  Skip ws and read immediate.
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-        51			#	PUSH	%ecx
-	E8 readimm		#	CALL	readimm
+	B8 08 00 00 00		#	MOVL	$8, %eax	# bits
+	50			#	PUSH	%eax
+	E8 read_imm		#	CALL	read_imm
+	59			#	POP	%ecx
 	59			#	POP	%ecx
 
-	#  XXX: check it's 8-bits
-	#  Byte is in %al (as part of return from readimm): write it.
+	#  Byte is in %al (as part of return from read_imm): write it.
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+        51			#	PUSH	%ecx
 	50			#	PUSH	%eax
 	E8 writebyte		#	CALL	writebyte
+	5B			#	POP	%ebx
+	5B			#	POP	%ebx
+	E9 insn_end		#	JMP	insn_end
+
+type_02:
+	#  Write the opcode byte(s).
+	55			#	PUSH	%ebp		# main_frame
+	52			#	PUSH	%edx	# opcode info
+	E8 write_oc12		#	CALL	write_oc12
+	5A			#	POP	%edx
+
+	#  Skip ws and read immediate (or, more likely, label).
+	B8 20 00 00 00		#	MOVL	$32, %eax	# bits
+	50			#	PUSH	%eax
+	E8 read_imm		#	CALL	read_imm
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+
+	#  Dword is in %eax: write it.
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+        51			#	PUSH	%ecx
+	50			#	PUSH	%eax
+	E8 writedword		#	CALL	writedword
+	5B			#	POP	%ebx
 	5B			#	POP	%ebx
 	E9 insn_end		#	JMP	insn_end
 
@@ -657,10 +861,12 @@ hex_bytes:
 	00 D8			#	ADDB	%bl, %al
 
 	#  Byte is in %al; let's write it, and increment the address counter
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+        51			#	PUSH	%ecx
 	50			#	PUSH	%eax
 	E8 writebyte		#	CALL	writebyte
 	5B			#	POP	%ebx
-	FF 45 00		#	INCL	0(%ebp)
+	5B			#	POP	%ebx
 	0F 85 hex_bytes		#	JNE	hex_bytes
 
 
@@ -692,6 +898,8 @@ instruct:
 	0F 84 type_00		#	JE	type_00
 	80 FA 01		#	CMPB	$01, %dl
 	0F 84 type_01		#	JE	type_01
+	80 FA 02		#	CMPB	$02, %dl
+	0F 84 type_02		#	JE	type_02
 
 	#  XXX  write code for the other types of instruction; exit(3) for now
         BB 03 00 00 00          #       MOVL    $3, %ebx
@@ -702,37 +910,10 @@ instruct:
 	#  --- Test for an identifier at top level in the source file.
         #  This might be a label, a mnemonic or a directive.
 tl_ident:
-	#  Check whether the first character (already read) is a valid
-	#  first character for an identifier.
-	FF 75 A0		#	PUSH	-96(%ebp)
-	E8 isid1chr		#	CALL	isid1chr
+	55			#	PUSH	%ebp
+	E8 read_id		#	CALL	read_id
 	59			#	POP	%ecx
-	83 F8 00		#	CMPL	$0, %eax
-	0F 84 error		#	JE	error
-
-	#  Continue to read an identifier
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-        51			#	PUSH	%ecx
-	8D 4D A0		#	LEA	-96(%ebp), %ecx
-.L12:
-	41			#	INCL	%ecx
-	#  We need to check that we're not going to overflow the buffer.  
-	#  But in fact, the instruction table limit is 12 characters (incl.
-	#  null termination -- i.e. 11 without), so we use that limit.
-	8D 75 A0		#	LEA	-96(%ebp), %esi
-	29 CE			#	SUBL	%ecx, %esi
-	83 FE F5		#	CMPL	-$11, %esi
-	0F 8C error		#	JL	error
-	
-	51			#	PUSH	%ecx
-	E8 readonex		#	CALL	readonex
-	59			#	POP	%ecx
-	FF 31			#	PUSH	(%ecx)
-	E8 isidchr		#	CALL	isidchr
-	5B			#	POP	%ebx
-	83 F8 00		#	CMPL	$0, %eax
-	0F 85 .L12		#	JNE	.L12
-	5A			#	POP	%edx
+	89 C1			#	MOVL	%eax, %ecx
 
 	#  (%ecx) is now something other than lchr.  Is it a colon?
 	#  Also, null terminate, load %esi with start of string, and
@@ -751,27 +932,30 @@ tl_ident:
 
 	#  It must be either a directive or an instruction
 	8D 85 98 FB FF FF	#	LEA	-1128(%ebp), %eax	# ifile
+	51			#	PUSH	%ecx	# we care about this
         50			#	PUSH	%eax
 	52			#	PUSH	%edx
 	E8 unread		#	CALL	unread
-	5A			#	POP	%edx
-	5A			#	POP	%edx
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+	59			#	POP	%ecx
 	E9 instruct		#	JMP	instruct
 
 	#  --- The main loop
 main:
 	89 E5			#	MOVL	%esp, %ebp
-	81 EC 68 04 00 00	#	SUBL	$1128, %esp
+	81 EC 70 04 00 00	#	SUBL	$1136, %esp
 	#  label* label_end = &labels[0];
 	8D 85 A0 FB FF FF	#	LEA	-1120(%ebp), %eax
 	89 45 F8		#	MOVL	%eax, -8(%ebp)
 	#  label* label_end_store = &labels[64];  # 1024 == 64 * sizeof(label)
-	81 C0 00 04 00 00	#	ADD	$1024, %eax
+	81 C0 00 04 00 00	#	ADDL	$1024, %eax
 	89 45 F4		#	MOVL	%eax, -12(%ebp)
-	#  int* addr = 0 
-	C7 45 00 00 00 00 00	#	MOVL	$0, 0(%ebp) 
-	#  memset( &stdout, 0, sizeof(ifile) );
-	C7 85 98 FB FF FF 00 00 00 00 #	MOVL	$0, -1128(%ebp)
+	#  memset( &stdout, 0, sizeof(ofile) );
+	C7 85 90 FB FF FF 01 00 00 00 #	MOVL	$0, -1136(%ebp) # 1 == stdout
+	C7 85 94 FB FF FF 00 00 00 00 #	MOVL	$0, -1132(%ebp)
+	#  memset( &stdin, 0, sizeof(ifile) );
+	C7 85 98 FB FF FF 00 00 00 00 #	MOVL	$0, -1128(%ebp) # 0 == stdin
 	C7 85 9C FB FF FF 00 00 00 00 #	MOVL	$0, -1124(%ebp)
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;

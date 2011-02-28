@@ -105,7 +105,7 @@ readone:
 	#       -4(%ebp)	int* addr
 	#      -84(%ebp)	char buffer[80]
 	#      -88(%ebp)	label* label_end
-	#    -1112(%ebp)	label labels[64]
+	#    -4184(%ebp)	label labels[256]
 	#
 	#  where label is a { char name[12]; int addr }.
 
@@ -189,7 +189,7 @@ labeldef:
 
 labelref:
 	#  Look up the label
-	8D BD 98 FB FF FF	#	LEA	-1128(%ebp), %edi
+	8D BD 98 EF FF FF	#	LEA	-4200(%ebp), %edi
 .L14:
 	83 C7 10		#	ADDL	$16, %edi
 	3B 7D A8		#	CMPL	-88(%ebp), %edi
@@ -250,8 +250,8 @@ label:
 	#  --- The main loop
 main:
 	89 E5			#	MOVL	%esp, %ebp
-	81 EC 58 04 00 00	#	SUBL	$1112, %esp
-	8D 85 A8 FB FF FF	#	LEA	-1112(%ebp), %eax
+	81 EC 58 10 00 00	#	SUBL	$4184, %esp
+	8D 85 A8 EF FF FF	#	LEA	-4184(%ebp), %eax
 	89 45 A8		#	MOVL	%eax, -88(%ebp)
 	C7 45 FC 00 00 00 00	#	MOVL	$0, -4(%ebp)
 

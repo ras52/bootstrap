@@ -51,12 +51,12 @@ over it writing data to standard output.
 
 The fact that it is a single pass means references can only be made to 
 labels already defined.  The lack of dynamic memory allocation in stage 
-1 means the number of labels is limited to 64.  For the same reason, 
-the line length is limited to 80 characters: this constraint is not 
-checked by the stage 1 program -- failure to stick to 80 character 
-lines *will* result in a buffer overflow.  Other errors, including 
-overflowing the symbol table and various syntax errors are flagged by a 
-non-zero return status.
+1 means the number of labels is limited to 256.  For the same reason, 
+the line length is limited to 80 characters.  These constraints are not 
+checked by the stage 1 program -- failure to stick to 80 characters per 
+lines or 256 labels *will* result in a buffer overflow.  Some other 
+errors, including various syntax errors are flagged by a non-zero return 
+status.  But basically minimal error checking is done.
 
 The second program, elfify, takes a .text section and converts it into 
 a stand-alone ELF program.  Unlike the stage 0 unhex, this program has 
