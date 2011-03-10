@@ -428,10 +428,93 @@ getone:
 	C3			#	RET
 
 
+####	#  Function:	int read_r32( ifile* in )
+	#  We've already read a '%'.  Now read a 32-bit register name.  Return
+	#    0 => %eax, 1 => %ecx, 2 => %edx, 3 => %ebx
+	#    4 => %esp, 5 => %ebp, 6 => %esi, 7 => %edi
+.L9h:
+	89 C8			#	MOVL	%ecx, %eax
+	5A			#	POP	%edx		# value
+	5A			#	POP	%edx		# ifile
+	5D			#	POP	%ebp
+	C3			#	RET
+
+.L9g:
+	#  Is it %esp or %esi?
+	89 4D FC		#	MOVL	%ecx, -4(%ebp)	# value
+	E8 getone		#	CALL	getone
+	8B 4D FC		#	MOVL	-4(%ebp), %ecx	# value
+	3C 70			#	CMPB	$0x70, $al	# 'p'
+	0F 84 .L9h		#	JE	.L9h
+	3C 69			#	CMPB	$0x69, $al	# 'i'
+	0F 85 error		#	JNE	error
+	B9 06 00 00 00		#	MOVL	$6, %ecx	# == %esi
+	E9 .L9h			#	JMP	.L9h
+
+.L9f:
+	#  Is it %edi?
+	3C 69			#	CMPB	$0x69, $al	# 'i'
+	0F 85 error		#	JNE	error
+	B9 07 00 00 00		#	MOVL	$7, %ecx	# == %edi
+	E9 .L9h			#	JMP	.L9h
+	
+.L9e:
+	#  We've had %e[a-d][^x]
+	83 F9 02		#	CMPL	$2, %ecx
+	0F 8C error		#	JL	error		# %ea* / %ec*
+	0F 84 .L9f		#	JE	error		# %ed*
+
+	#  Is it %ebp?
+	3C 70			#	CMPB	$0x70, $al	# 'p'
+	0F 85 error		#	JNE	error
+	B9 05 00 00 00		#	MOVL	$5, %ecx	# == %ebp
+	E9 .L9h			#	JMP	.L9h
+	
+.L9d:	
+	#  Have parsed two characters of %eax or %ecx, check for 'x'
+	89 4D FC		#	MOVL	%ecx, -4(%ebp)	# value
+	E8 getone		#	CALL	getone
+	8B 4D FC		#	MOVL	-4(%ebp), %ecx	# value
+	3C 78			#	CMPB	$0x78, $al	# 'x'
+	0F 85 .L9e		#	JNE	.L9e
+	E9 .L9h			#	JMP	.L9h
+
+read_r32:
+	55 			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	31 C9			#	XORL	%ecx, %ecx
+	51			#	PUSH	%ecx		# value
+
+	#  Read the first character which must be an 'e'
+	FF 75 08		#	PUSH	8(%ebp)		# ifile
+	E8 getone		#	CALL	getone
+	80 F8 65		#	CMPB	$0x65, %al	# 'e'
+	0F 85 error		#	JNE	error
+
+	#  Read the second character
+	E8 getone		#	CALL	getone
+	8B 4D FC		#	MOVL	-4(%ebp), %ecx	# value
+	80 F8 61		#	CMPB	$0x61, %al	# 'a'
+	0F 84 .L9d		#	JE	.L9d
+	41			#	INCL	%ecx
+	80 F8 63		#	CMPB	$0x63, %al	# 'c'
+	0F 84 .L9d		#	JE	.L9d
+	41			#	INCL	%ecx
+	80 F8 64		#	CMPB	$0x64, %al	# 'd'
+	0F 84 .L9d		#	JE	.L9d
+	41			#	INCL	%ecx
+	80 F8 62		#	CMPB	$0x62, %al	# 'b'
+	0F 84 .L9d		#	JE	.L9d
+	41			#	INCL	%ecx
+	80 F8 73		#	CMPB	$0x73, %al	# 's'
+	0F 84 .L9g		#	JE	.L9g
+	E9 error		#	JMP	error
+
+
 ####	#  Function:	int read_r8( ifile* in )
 	#  We've already read a '%'.  Now read an 8-bit register name.  Return
-	#    0 => %al, 1 => %cl, 2 => %dl, 3 => %bl
-	#    4 => %ah, 5 => %ch, 6 => %dh, 7 => %bh
+	#    0 => %al,  1 => %cl,  2 => %dl,  3 => %bl
+	#    4 => %ah,  5 => %ch,  6 => %dh,  7 => %bh
 .L9c:
 	89 C8			#	MOVL	%ecx, %eax
 	5A			#	POP	%edx		# value
@@ -508,32 +591,218 @@ skiphws:
 	C3			#	RET
 	
 
+####	#  Function:	int read_int( int bits, ifile* in );
+	#  Read an integer: either decimal (which must not have a leading 0),
+	#  or hex (which must have an 0x prefix).  Error on overflow.
+	#  TODO:  Support a prefix minus sign.
+
+.L17:
+	#  Have we read any digits?  If not, it's an error
+	83 7D F8 00		#	CMPL	$0, -8(%ebp)
+	0F 84 error		#	JE	error
+
+.L17a:
+	#  Unread the last character read (now in %edx)
+	52			#	PUSH	%edx
+	E8 unread		#	CALL	unread
+	5A			#	POP	%edx		# char
+
+	#  Stack cleanup and exit
+	5A			#	POP	%edx		# ifile
+	5A			#	POP	%edx		# count
+	58			#	POP	%eax		# ret val
+	5D			#	POP	%ebp
+	C3			#	RET
+
+.L16:
+	#  We're reading decimal and the first digit is already in %eax
+	50			#	PUSH	%eax
+	E8 dchr			#	CALL	dchr
+	5A			#	POP	%edx		# char
+	3C FF			#	CMPB	$-1, %al
+	0F 84 .L17		#	JE	.L17		# done
+	
+	#  Add the digit to the current value -- tedious as IMUL only
+	#  acts on the accumulator and cannot read immediates.  Test for
+	#  overflow as we go along by using the fact that IMUL and ADDL
+	#  are both signed operations which set the OF flag on overflow.
+	89 C3			#	MOVL	%eax, %ebx
+	8B 45 FC		#	MOVL	-4(%ebp), %eax
+	B9 0A 00 00 00		#	MOVL	$10, %ecx
+	F7 E1 			#	MUL	%ecx, $eax
+	0F 80 error		#	JO	error
+	01 D8			#	ADDL	%ebx, %eax
+	0F 80 error		#	JO	error
+	89 45 FC		#	MOVL	%eax, -4(%ebp)
+	FF 45 F8		#	INCL	-8(%ebp)
+
+	#  Read another digit
+	E8 getone		#	CALL	getone
+	E9 .L16			#	JMP	.L16		# loop
+	#  TODO  Test bits
+
+read_int:
+	#  The function entry point
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	31 C9			#	XORL	%ecx, %ecx
+	51			#	PUSH	%ecx		# int val = 0;
+	51			#	PUSH	%ecx		# int count = 0;
+
+	#  Have as got an '0' followed by an 'x'?
+	FF 75 0C		#	PUSH	12(%ebp)	# ifile
+	E8 getone		#	CALL	getone
+	3C 30			#	CMPB	$0x30, %al	# '0'
+	0F 85 .L16		#	JNE	.L16
+
+	#  This would be where we'd consider octal, if we cared about it.
+	#  We don't, but we do care about the special case of zero, so we
+	#  assume anything begining '0' but not continuing 'x' is a plain
+	#  zero.  We'll get an error parsing the next token if we were wrong.
+	E8 getone		#	CALL	getone
+	3C 78			#	CMPB	$0x78, %al	# 'x'
+	89 C2			#	MOVL	$eax, $edx
+	0F 85 .L17a		#	JNE	.L17a
+
+	#  Set number of hex digits (divide number of bits by 4)
+	C6 C1 02		#	MOVB	$2, %cl
+	D3 7D 08		#	SARL	%cl, 8(%ebp)
+
+.L18:
+	#  We know we're going to have a hex number, so start reading
+	E8 getone		#	CALL	getone
+	50			#	PUSH	%eax
+	E8 xchr			#	CALL	xchr
+	5A			#	POP	%edx		# char
+	3C FF			#	CMPB	$-1, %al
+	0F 84 .L17		#	JE	.L17	# done
+
+	#  Add the digit to the current value
+	C6 C1 04		#	MOVB	$4, %cl
+	D3 65 FC		#	SALL	%cl, -4(%ebp)
+	01 45 FC		#	ADDL	%eax, -4(%ebp)
+	FF 45 F8		#	INCL	-8(%ebp)
+
+	#  Test for overflow: 
+	#  have we read more than the expected number of digits?
+	8B 45 08		#	MOVL	8(%ebp), %eax
+	39 45 F8		#	CMPL	%eax, -8(%ebp)
+	0F 8F error		#	JG	error
+	E9 .L18			#	JMP	.L18	# loop
+
+
 ####	#  Function:	int read_rm8( int* disp, ifile* in )
 	#  Skip whitespace then read an r/m8.  Returns the ModR/M byte
 	#  and if a displacement is present, stores it in disp.
+.L15b:
+	#  It's not a '(' or '%' so it must be the start of a number
+	50			# 	PUSH	%eax
+	E8 unread		#	CALL	unread
+	5A			#	POP	%edx
+	B8 20 00 00 00		#	MOVL	$32, %eax	# bits
+	50			#	PUSH	%eax
+	E8 read_int		#	CALL	read_int
+	5A			#	POP	%edx
+	8B 4D 08		#	MOVL	8(%ebp), %ecx	# int* disp32
+	89 01			#	MOVL	%eax, (%ecx)	# store disp
+	
+	#  We now must have a '('
+	E8 getone		#	CALL	getone
+	3C 28			#	CMPB	$0x28, %al	# '('
+	0F 85 error		#	JNE	error
 
-read_rm8:
-	55 			#	PUSH	%ebp
-	89 E5			#	MOVL	%esp, %ebp
+	#  Save 0x80 for |= later
+	C7 45 F8 80 00 00 00	#	MOVL	$0x80, -8(%ebp)
 
-	# Does it start with an '%'?
-	FF 75 0C		#	PUSH	12(%ebp)	# ifile
-	E8 skiphws		#	CALL	skiphws
+.L15a:
+	#  If we've jumped here directly, -8(%ebp) [or val] is zero.
+	#  Have read a '('; now we must read a '%'.  (ifile already on stack.)
 	E8 getone		#	CALL	getone
 	3C 25			#	CMPB	$0x25, %al	# '%'
 	0F 85 error		#	JNE	error
 
-	# Read the 8-bit register name (ifile is still on stack)
-	E8 read_r8		#	CALL	read_r8
-	5A			#	POP	%edx
+	E8 read_r32		#	CALL	read_r32
+	89 45 FC		#	MOVL	%eax, -4(%ebp)	# save
 
-	# Register code is in %al.  |= with 0xC0 as it's a direct register
-	80 C8 C0		#	ORB	$0xC0, %al
+	#  Register code is in -4(%ebp).  Skip ')'
+	E8 getone		#	CALL	getone
+	3C 29			#	CMPB	$0x29, %al	# ')'
+	0F 85 error		#	JNE	error
+
+.L15c:
+	#  Clean up stack and |= with or val in -8(%ebp)
+	5A			#	POP	%edx		# ifile
+	5A			#	POP	%edx		# or val
+	58			#	POP	%eax		# ret val
+	0A C2			#	ORB	%dl, %al
+
+	#  0x04 == (%esp), 0x05 == (%ebp) and 0x84 == DISP(%esp) are invalid
+	3C 04			#	CMPB	$0x04, %al
+	0F 84 error		#	JE	error
+	3C 05			#	CMPB	$0x05, %al
+	0F 84 error		#	JE	error
+	3C 84			#	CMPB	$0x84, %al
+	0F 84 error		#	JE	error
 
 	5D			#	POP	%ebp
 	C3			#	RET
 
+read_rm8:
+	55 			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	31 C9			#	XORL	%ecx, %ecx
+	51			#	PUSH	%ecx		# for ret val
+	51			#	PUsH	%ecx		# for or val
+
+	#  What sort of argument is it?  Direct memory accesses will begin '(',
+	#  registers will start with an '%', and memory accesses with
+	#  a displacement will start with a number?
+	FF 75 0C		#	PUSH	12(%ebp)	# ifile
+	E8 skiphws		#	CALL	skiphws
+	E8 getone		#	CALL	getone
+	3C 28			#	CMPB	$0x28, %al	# '('
+	0F 84 .L15a		#	JE	.L15a
+	3C 25			#	CMPB	$0x25, %al	# '%'
+	0F 85 .L15b		#	JNE	.L15b
+
+	#  Save 0xC0 for |= later
+	C7 45 F8 C0 00 00 00	#	MOVL	$0xC0, -8(%ebp)
+
+	# Read the 8-bit register name (ifile is still on stack)
+	E8 read_r8		#	CALL	read_r8
+	89 45 FC		#	MOVL	%eax, -4(%ebp)	# save
+	E9 .L15c		#	JMP	.L15c
+
 	
+####	#  Function:	int read_rm32( int* disp, ifile* in )
+	#  Skip whitespace then read an r/m32.  Returns the ModR/M byte
+	#  and if a displacement is present, stores it in disp.
+read_rm32:
+	55 			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	31 C9			#	XORL	%ecx, %ecx
+	51			#	PUSH	%ecx		# for ret val
+	51			#	PUsH	%ecx		# for or val
+
+	#  What sort of argument is it?  Direct memory accesses will begin '(',
+	#  registers will start with an '%', and memory accesses with
+	#  a displacement will start with a number?
+	FF 75 0C		#	PUSH	12(%ebp)	# ifile
+	E8 skiphws		#	CALL	skiphws
+	E8 getone		#	CALL	getone
+	3C 28			#	CMPB	$0x28, %al	# '('
+	0F 84 .L15a		#	JE	.L15a
+	3C 25			#	CMPB	$0x25, %al	# '%'
+	0F 85 .L15b		#	JNE	.L15b
+
+	#  Save 0xC0 for |= later
+	C7 45 F8 C0 00 00 00	#	MOVL	$0xC0, -8(%ebp)
+
+	# Read the 8-bit register name (ifile is still on stack)
+	E8 read_r32		#	CALL	read_r32
+	89 45 FC		#	MOVL	%eax, -4(%ebp)	# save
+	E9 .L15c		#	JMP	.L15c
+
 
 ####	#  Function:	int get_label( int strlen, int bits, main_frame* p ):
 	#  Lookup the text in p->buffer (which has known length strlen),
@@ -582,11 +851,11 @@ get_label:
 	2B 47 0C		#	SUBL	12(%edi), %eax
 	F7 D8			#	NEGL	%eax
 
-	# %eax is the offset.  If bits == 32, don't care about overflow
+	#  %eax is the offset.  If bits == 32, don't care about overflow
 	83 7D 0C 20		#	CMPL	$32, 12(%ebp)
 	0F 84 .L11a		#	JE	.L11a
 	
-	# Is it >= 2^(bits-1) ?
+	#  Is it >= 2^(bits-1) ?
 	8B 4D 0C		#	MOVL	12(%ebp), %ecx
 	FF C9			#	DECL	%ecx
 	BA 01 00 00 00		#	MOVL	$1, %edx
@@ -656,50 +925,7 @@ read_id:
 	#  Skip whitespace and then read an immediate value ($0xXX or $NNN)
 	#  Returns the value read or exits if unable to read.
 	#  XXX Clobbers %ebx
-.L17:
-	#  Have we read any digits?  If not, it's an error
-	83 7D F4 00		#	CMPL	$0, -12(%ebp)
-	0F 84 error		#	JE	error
 
-.L17a:
-	#  Unread the last character read
-	5B			#	POP	%ebx		# Overwrite 
-	FF 75 FC		#	PUSH	-4(%ebp)	#   bufp
-	E8 unread		#	CALL	unread
-
-	#  Stack cleanup and exit
-	8B 45 F8		#	MOVL	-8(%ebp), %eax	# return val
-	83 C4 14		#	ADDL	$20, %esp
-	5D			#	POP	%ebp
-	C3			#	RET
-
-.L16:
-	#  We're reading decimal and the first value is already in the buffer
-	FF 75 FC		#	PUSH	-4(%ebp)
-	E8 dchr			#	CALL	dchr
-	5B			#	POP	%ebx
-	3C FF			#	CMPB	$-1, %al
-	0F 84 .L17		#	JE	.L17	# done
-
-	#  Add the digit to the current value -- tedious as IMUL only
-	#  acts on the accumulator and cannot read immediates.  Test for
-	#  overflow as we go along by using the fact that IMUL and ADDL
-	#  are both signed operations which set the OF flag on overflow.
-	89 C3			#	MOVL	%eax, %ebx
-	8B 45 F8		#	MOVL	-8(%ebp), %eax
-	B9 0A 00 00 00		#	MOVL	$10, %ecx
-	F7 E1 			#	MUL	%ecx, $eax
-	0F 80 error		#	JO	error
-	01 D8			#	ADDL	%ebx, %eax
-	0F 80 error		#	JO	error
-	89 45 F8		#	MOVL	%eax, -8(%ebp)
-	FF 45 F4		#	INCL	-12(%ebp)
-
- 	#  Read another digit
-	E8 readonex		#	CALL	readonex
-	E9 .L16			#	JMP	.L16	# loop
-
-	#  XXX  Test bits
 .L16a:
 	#  Put the byte into the main buffer and read a label
 	8A 45 FC		#	MOVB	-4(%ebp), %al
@@ -727,7 +953,17 @@ read_id:
 	59			#	POP	%ecx
 	59			#	POP	%ecx
 	89 45 F8		#	MOVL	%eax, -8(%ebp)
-	E9 .L17a		#	JMP	.L17a
+
+	#  Unread the last character read
+	5B			#	POP	%ebx		# Overwrite 
+	FF 75 FC		#	PUSH	-4(%ebp)	#   bufp
+	E8 unread		#	CALL	unread
+
+	#  Stack cleanup and exit
+	8B 45 F8		#	MOVL	-8(%ebp), %eax	# return val
+	83 C4 14		#	ADDL	$20, %esp
+	5D			#	POP	%ebp
+	C3			#	RET
 
 read_imm:
 	#  The function entry point
@@ -741,53 +977,26 @@ read_imm:
 	#  Skip horizontal whitespace
 	8B 4D 0C		#	MOVL	12(%ebp), %ecx
 	8D 89 98 FB FF FF	#	LEA	-1128(%ecx), %ecx
-	51			#	PUSH	%ecx
+	51			#	PUSH	%ecx		# ifile
 	E8 skiphws		#	CALL	skiphws
 
 	#  Check it is a '$' marking the start of an immediate;
 	#  if not, it must be an identifier
-	8D 4D FC		#	LEA	-4(%ebp), %ecx	# char* bufp;
-	51			#	PUSH	%ecx
+	8D 4D FC		#	LEA	-4(%ebp), %ecx
+	51			#	PUSH	%ecx		# char* bufp
 	E8 readonex		#	CALL	readonex
-	80 7D FC 24		#	CMPB	$0x24, -4(%ebp)		# '$'
+	80 7D FC 24		#	CMPB	$0x24, -4(%ebp)	# '$'
 	0F 85 .L16a		#	JNE	.L16a
 
-	#  XXX Factor out this code into a read_int function.
+	#  It's an integer
+	5A			#	POP	%edx		# bufp
+	FF 75 08		#	PUSH	8(%ebp)		# bits
+	E8 read_int		#	CALL	read_int
 
-	#  Read another byte (stack already set up).  Is it a '0' then a 'x'?
-	E8 readonex		#	CALL	readonex
-	80 7D FC 30		#	CMPB	$0x30, -4(%ebp)		# '0'
-	0F 85 .L16		#	JNE	.L16
-
-	E8 readonex		#	CALL	readonex
-	80 7D FC 78		#	CMPB	$0x78, -4(%ebp)		# 'x'
-	E9 .L16			#	JMP	error	# don't support octal
-
-	#  Set number of hex digits (divide number of bits by 4)
-	C6 C1 02		#	MOVB	$2, %cl
-	D3 7D 08		#	SARL	%cl, 8(%ebp)
-
-.L18:
-	#  We know we're going to have a hex number, so start reading
-	E8 readonex		#	CALL	readonex
-	FF 75 FC		#	PUSH	-4(%ebp)
-	E8 xchr			#	CALL	xchr
-	5B			#	POP	%ebx
-	3C FF			#	CMPB	$-1, %al
-	0F 84 .L17		#	JE	.L17	# done
-
-	#  Add the digit to the current value
-	C6 C1 04		#	MOVB	$4, %cl
-	D3 65 F8		#	SALL	%cl, -8(%ebp)
-	01 45 F8		#	ADDL	%eax, -8(%ebp)
-	FF 45 F4		#	INCL	-12(%ebp)
-
-	#  Test for overflow: 
-	#  have we read more than the expected number of digits?
-	8B 45 08		#	MOVL	8(%ebp), %eax
-	39 45 F4		#	CMPL	%eax, -12(%ebp)
-	0F 8F error		#	JG	error
-	E9 .L18			#	JMP	.L17	# loop
+	#  Stack clean-up and exit
+	83 C4 14		#	ADDL	$20, %esp
+	5D			#	POP	%ebp
+	C3			#	RET
 
 
 ####	#  Function:	void write_oc12( int opcode_info, main_frame* )
@@ -829,6 +1038,42 @@ write_oc12:
 	E8 writebyte		#	CALL	writebyte
 	5B			#	POP	%ebx
 	E9 .L19			#	JMP	.L19
+
+
+####	#  Function:	void write_modrm( int rm, int reg, int disp, ofile* )
+.L20:
+	5A			#	POP	%edx		# ofile
+	5D			#	POP	%ebp
+	C3			#	RET
+
+write_modrm:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+
+	#  Or reg (or opcode) bits <<3 with rm and put in %al
+	8B 45 08		#	MOVL	8(%ebp), %eax	# rm
+	8B 55 0C		#	MOVL	12(%ebp), %edx	# reg
+	C6 C1 03		#	MOVB	$3, %cl
+	D3 E2			#	SHLL	%cl, %edx
+	08 D0			#	ORB	%dl, %al
+
+	#  Write the ModR/M byte
+	FF 75 14		#	PUSH	20(%ebp)	# ofile
+	50			#	PUSH	%eax		# byte
+	E8 writebyte		#	CALL	writebyte
+	58			#	POP	%eax
+
+	#  Do we have a disp32?  NB: We don't support disp8s
+	3C 80			#	CMPB 	$80, %al
+	0F 82 .L20		#	JB	.L20
+	3C C0			#	CMPB	$C0, %al
+	0F 83 .L20		#	JAE	.L20
+
+	#  Yes.   ofile already on stack
+        FF 75 10		#	PUSH	16(%ebp)		# disp
+	E8 writedword		#	CALL	writedword
+	5B			#	POP	%ebx
+	E9 .L20			#	JMP	.L20
 
 	
 ####    #  The main function.
@@ -966,30 +1211,46 @@ type_03:
 	52			#	PUSH	%edx	# store opcode info
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
         51			#	PUSH	%ecx
-	C6 C1 00		#	MOVB	$0, %ecx	# NULL XXX
+	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
         51			#	PUSH	%ecx
 	E8 read_rm8		#	CALL	read_rm8
 	5A			#	POP	%edx
 	5A			#	POP	%edx
 	5A			#	POP	%edx
-	
-	#  ModR/M is in %al.  |= with opcode bits (4th byte of %edx) <<3
+
+.L21:
+	#  Write the ModR/M byte and (if present) displacement.
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+	51			#	PUSH	%ecx
+        FF 75 A0		#	PUSH	-96(%ebp)	# disp
 	89 D3			#	MOVL	%edx, %ebx
 	C6 C1 18		#	MOVB	$24, %cl
 	D3 EB			#	SHRL	%cl, %ebx
-	C6 C1 03		#	MOVB	$3, %cl
-	D3 E3			#	SHLL	%cl, %ebx
-	08 D8			#	ORB	%bl, %al
-
-	#  Write the ModR/M byte
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
-        51			#	PUSH	%ecx
-	50			#	PUSH	%eax		# byte
-	E8 writebyte		#	CALL	writebyte
-	5B			#	POP	%ebx
-	5B			#	POP	%ebx
+	53			#	PUSH	%ebx		# reg bits
+	50			#	PUSH	%eax		# modrm
+	E8 write_modrm		#	CALL	write_modrm
+	83 C4 10		#	ADDL	$16, %esp
 	E9 insn_end		#	JMP	insn_end
 
+type_04:
+	#  Write the opcode byte(s).
+	55			#	PUSH	%ebp		# main_frame
+	52			#	PUSH	%edx	# opcode info
+	E8 write_oc12		#	CALL	write_oc12
+	5A			#	POP	%edx
+	59			#	POP	%ecx
+
+	# Read the register
+	52			#	PUSH	%edx	# store opcode info
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+        51			#	PUSH	%ecx
+	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
+        51			#	PUSH	%ecx
+	E8 read_rm32		#	CALL	read_rm32
+	5A			#	POP	%edx
+	5A			#	POP	%edx
+	5A			#	POP	%edx
+	E9 .L21			#	JMP	.L21
 
 hex_bytes:
 	#  Skip horizontal whitespace and read a byte
@@ -1109,6 +1370,8 @@ tl_ident:
 	0F 84 type_02		#	JE	type_02
 	80 FA 03		#	CMPB	$03, %dl
 	0F 84 type_03		#	JE	type_03
+	80 FA 04		#	CMPB	$04, %dl
+	0F 84 type_04		#	JE	type_04
 
 	#  XXX  write code for the other types of instruction; exit(3) for now
         BB 03 00 00 00          #       MOVL    $3, %ebx
