@@ -1202,32 +1202,11 @@ type_01:
 	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
 	51			#	PUSH	%ecx
 	50			#	PUSH	%eax
-	E8 writebyte		#	CALL	writebyte
-	5B			#	POP	%ebx
-	5B			#	POP	%ebx
-	E9 insn_end		#	JMP	insn_end
-
-type_02:
-	#  Write the opcode byte(s).
-	55			#	PUSH	%ebp		# main_frame
-	52			#	PUSH	%edx	# opcode info
-	E8 write_oc12		#	CALL	write_oc12
+	53			#	PUSH	%ebx
+	E8 writedata		#	CALL	writedata
 	5A			#	POP	%edx
-
-	#  Skip ws and read immediate (or, more likely, label).
-	B8 20 00 00 00		#	MOVL	$32, %eax	# bits
-	50			#	PUSH	%eax
-	E8 read_imm		#	CALL	read_imm
-	59			#	POP	%ecx
-	59			#	POP	%ecx
-
-	#  Dword is in %eax: write it.
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
-	51			#	PUSH	%ecx
-	50			#	PUSH	%eax
-	E8 writedword		#	CALL	writedword
-	5B			#	POP	%ebx
-	5B			#	POP	%ebx
+	5A			#	POP	%edx
+	5A			#	POP	%edx
 	E9 insn_end		#	JMP	insn_end
 
 type_03:
@@ -1238,14 +1217,13 @@ type_03:
 	5A			#	POP	%edx
 	59			#	POP	%ecx
 
-	#  Read the 8-bit register name
+	#  Read the r/m
 	52			#	PUSH	%edx	# store opcode info
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
 	51			#	PUSH	%ecx
-	B9 08 00 00 00		#	MOVL	$8, %ecx
-	51			#	PUSH	%ecx
+	53			#	PUSH	%ebx		# bits
 	E8 read_rm		#	CALL	read_rm
 	83 C4 0C		#	ADDL	$12, %esp
 	5A			#	POP	%edx
@@ -1263,27 +1241,6 @@ type_03:
 	83 C4 10		#	ADDL	$16, %esp
 	E9 insn_end		#	JMP	insn_end
 
-type_04:
-	#  Write the opcode byte(s).
-	55			#	PUSH	%ebp		# main_frame
-	52			#	PUSH	%edx	# opcode info
-	E8 write_oc12		#	CALL	write_oc12
-	5A			#	POP	%edx
-	59			#	POP	%ecx
-
-	#  Read the r/m
-	52			#	PUSH	%edx	# store opcode info
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-	51			#	PUSH	%ecx
-	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
-	51			#	PUSH	%ecx
-	B9 20 00 00 00		#	MOVL	$32, %ecx
-	51			#	PUSH	%ecx
-	E8 read_rm		#	CALL	read_rm
-	83 C4 0C		#	ADDL	$12, %esp
-	5A			#	POP	%edx
-	E9 .L21			#	JMP	.L21
-
 type_05:
 	#  Write the opcode byte(s).
 	55			#	PUSH	%ebp		# main_frame
@@ -1291,9 +1248,6 @@ type_05:
 	E8 write_oc12		#	CALL	write_oc12
 	5A			#	POP	%edx
 	59			#	POP	%ecx
-
-	#  Store the number of bits so that .L22 is independent of bit size
-	BB 20 00 00 00		#	MOVL	$32, %ebx	# 32-bit mode
 
 .L22:
 	#  Read the r/m
@@ -1509,9 +1463,6 @@ type_06_imm:
 	E9 insn_end		#	JMP	insn_end
 
 type_06:
-	#  Store the number of bits so that we're independent of bit size
-	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
-
 	#  First, skip whitespace, leaving %eax containing the peek-ahead char
 	52			#	PUSH	%edx	# opcode info
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
@@ -1642,22 +1593,29 @@ tl_ident:
 	8B 57 0C 		#	MOVL	$12(%edi), %edx
 	80 FA FF 		#	CMPB	$FF, %dl
 	0F 84 hex_bytes 	#	JE	hex_bytes
+
+	#  Instructions with 8-bit operands
+	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
 	80 FA 00		#	CMPB	$00, %dl
 	0F 84 type_00		#	JE	type_00
 	80 FA 01		#	CMPB	$01, %dl
 	0F 84 type_01		#	JE	type_01
-	80 FA 02		#	CMPB	$02, %dl
-	0F 84 type_02		#	JE	type_02
 	80 FA 03		#	CMPB	$03, %dl
 	0F 84 type_03		#	JE	type_03
-	80 FA 04		#	CMPB	$04, %dl
-	0F 84 type_04		#	JE	type_04
-	80 FA 05		#	CMPB	$05, %dl
-	0F 84 type_05		#	JE	type_05
 	80 FA 06		#	CMPB	$06, %dl
 	0F 84 type_06		#	JE	type_06
 
-	#  XXX  write code for the other types of instruction; exit(3) for now
+	#  Instructions with 32-bit operands
+	BB 20 00 00 00		#	MOVL	$32, %ebx	# 32-bit mode
+	80 FA 02		#	CMPB	$02, %dl
+	0F 84 type_01		#	JE	type_01		# 1 & 2 same
+	80 FA 04		#	CMPB	$04, %dl
+	0F 84 type_03		#	JE	type_03		# 3 & 4 same
+	80 FA 05		#	CMPB	$05, %dl
+	0F 84 type_05		#	JE	type_05
+	80 FA 07		#	CMPB	$07, %dl
+	0F 84 type_06		#	JE	type_06		# 6 & 7 same
+
 	BB 03 00 00 00          #       MOVL    $3, %ebx
 	E9 success		#	JMP	success
 	C3			#	RET	# to main loop
