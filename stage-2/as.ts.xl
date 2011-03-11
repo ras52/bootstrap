@@ -33,7 +33,6 @@ mnemonics:
 43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW    [aka CBTW]
 43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE   [aka CWTL]
 
- 
 
 # Type 01 instructions.   A single immediate 8-bit argument, e.g.
 #
@@ -45,7 +44,6 @@ mnemonics:
 #   3) the second op-code byte (n/a here).
 
 49 4E 54 00  00 00 00 00  00 00 00 00    01 01 CD 00    # INT
-
 
 
 # Type 02 instructions.   A single immediate 32-bit argument, e.g.
@@ -95,9 +93,9 @@ mnemonics:
 49 44 49 56  42 00 00 00  00 00 00 00    03 01 F6 07	# IDIVB [%eax]
 
 
-# Type 04 instructions.   One or a pair of op-codes, e.g.
+# Type 04 instructions.   A single r/m32 operand, e.g.
 #
-#   INCL     r/m32           FF /0
+#   INCL    r/m32           FF /0
 #
 # The three parameters are:
 #   1) the number 1 (to allow it to be treated as the opcode length)
@@ -107,8 +105,8 @@ mnemonics:
 49 4E 43 4C  00 00 00 00  00 00 00 00    04 01 FF 00    # INCL
 44 45 43 4C  00 00 00 00  00 00 00 00    04 01 FF 01    # DECL
 4E 45 47 4C  00 00 00 00  00 00 00 00    04 01 F7 03	# NEGL
-50 55 53 48  4C 00 00 00  00 00 00 00    04 01 FF 06    # PUSHL
-50 4F 50 4C  00 00 00 00  00 00 00 00    04 01 8F 00    # POPL
+50 55 53 48  00 00 00 00  00 00 00 00    04 01 FF 06    # PUSH
+50 4F 50 00  00 00 00 00  00 00 00 00    04 01 8F 00    # POP
 53 41 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SALL  [%cl]
 53 48 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SHLL  [%cl]
 53 41 52 4C  00 00 00 00  00 00 00 00    04 01 D3 07    # SARL  [%cl]
@@ -119,37 +117,55 @@ mnemonics:
 49 44 49 56  4C 00 00 00  00 00 00 00    04 01 F7 07	# IDIVL [%eax]
 
 
-# Type 05 instructions.   This is unique to LEA
+# Type 05 instructions.   An r/m32 operand followed by a r32 operand:
 #
 #   LEA     r/m32, r32      8D
 #
-# The sole parameter is the op code itself (8D).
+# The three parameters are: 
+#   1) the number of bytes in the op-code (01 here),
+#   2) the first op-code byte (8D), and 
+#   3) the second op-code byte (n/a here).
 
-4C 45 41 00  00 00 00 00  00 00 00 00    05 8D 00 00    # LEA
+4C 45 41 00  00 00 00 00  00 00 00 00    05 01 8D 00	# LEA
 
 
-
-# Type 05 instructions.   These represent a large family of op-codes, e.g.
+# Type 06 instructions.   These represent a large family of op-codes, e.g.
 #
-#   MOV     r8,r/m8         88
-#   MOV     r32,r/m32       89
-#   MOV     r/m8,r8         8A
-#   MOV     r/m32,r32       8B
-#   MOV     imm8,r/m8       C6 /0
-#   MOV     imm32,r/m32     C7 /0
+#   MOVB    r8, r/m8        88         } These two opcodes are constrained
+#   MOVB    r/m8, r8        8A         } to $N and $N+2.
+#   MOVB    imm8, r/m8      C6 /0
+#
+# The three parameters are:
+#   1) the r8, r/m8 op code (88 here), the 
+# immediate op code (C6 here), and the three op-code extension bits
+# that are in the reg part of the mod-r/m byte (0 here).
+
+4D 4F 56 42  00 00 00 00  00 00 00 00    06 88 C6 00    # MOVB
+41 44 44 42  00 00 00 00  00 00 00 00    06 00 80 00    # ADDB
+53 55 42 42  00 00 00 00  00 00 00 00    06 28 80 05    # SUBB
+43 4D 50 42  00 00 00 00  00 00 00 00    06 38 80 07    # CMPB
+41 4E 44 42  00 00 00 00  00 00 00 00    06 20 80 04    # ANDB
+4F 52 42 00  00 00 00 00  00 00 00 00    06 08 80 01    # ORB
+58 4F 52 42  00 00 00 00  00 00 00 00    06 30 80 06    # XORB
+
+
+# Type 07 instructions.   These represent a large family of op-codes, e.g.
+#
+#   MOVL    r32,r/m32       89         } These two opcodes are constrained
+#   MOVL    r/m32,r32       8B         } to $N and $N+2.
+#   MOVL    imm32,r/m32     C7 /0
 #
 # The three parameters are the register op code (88 here), the 
 # immediate op code (C6 here), and the three op-code extension bits
 # that are in the reg part of the mod-r/m byte (0 here).
 
-4D 4F 56 00  00 00 00 00  00 00 00 00    05 88 C6 00    # MOV
-41 44 44 00  00 00 00 00  00 00 00 00    05 00 80 00    # ADD
-53 55 42 00  00 00 00 00  00 00 00 00    05 28 80 05    # SUB
-43 4D 50 00  00 00 00 00  00 00 00 00    05 38 80 07    # CMP
-41 4E 44 00  00 00 00 00  00 00 00 00    05 20 80 04    # AND
-4F 52 00 00  00 00 00 00  00 00 00 00    05 08 80 01    # OR
-58 4F 52 00  00 00 00 00  00 00 00 00    05 30 80 06    # XOR
-
+4D 4F 56 4C  00 00 00 00  00 00 00 00    07 89 C7 00    # MOVL
+41 44 44 4C  00 00 00 00  00 00 00 00    07 01 81 00    # ADDL
+53 55 42 4C  00 00 00 00  00 00 00 00    07 29 81 05    # SUBL
+43 4D 50 4C  00 00 00 00  00 00 00 00    07 39 81 07    # CMPL
+41 4E 44 4C  00 00 00 00  00 00 00 00    07 21 81 04    # ANDL
+4F 52 4C 00  00 00 00 00  00 00 00 00    07 09 81 01    # ORL
+58 4F 52 4C  00 00 00 00  00 00 00 00    07 31 81 06    # XORL
 
 
 # Type FF 'instructions'.  These are actually directives.    
@@ -296,12 +312,12 @@ dchr:
 
 
 ####    #  Not a proper function.
-        #  Exits program
+	#  Exits program
 error:
-        BB 01 00 00 00          #       MOVL    $1, %ebx
+	BB 01 00 00 00          #       MOVL    $1, %ebx
 success:
-        B8 01 00 00 00          #       MOVL    $1, %eax   # 1 == __NR_exit
-        CD 80                   #       INT     $0x80
+	B8 01 00 00 00          #       MOVL    $1, %eax   # 1 == __NR_exit
+	CD 80                   #       INT     $0x80
 
 
 ####	#  Function:	void writebyte( int c, ofile* of )
@@ -332,6 +348,27 @@ writedword:
 	BA 04 00 00 00		#	MOVL	$4, %edx
 	E9 .L5a			#	JMP	.L5a
 
+
+####	#  Function:	void writedata( int bits, int data, ofile* of )
+.L5b:
+	E8 writebyte		#	CALL	writebyte
+.L5c:
+	5A			#	POP	%edx
+	5A			#	POP	%edx
+	5D			#	POP	%ebp
+	C3			#	RET
+
+writedata:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	FF 75 10		#	PUSH	16(%ebp)	# ofile
+	FF 75 0C		#	PUSH	12(%ebp)	# data
+	
+	83 7D 08 08		#	CMPL	$8, 8(%ebp)
+	0F 84 .L5b		#	JE	.L5b
+	E8 writedword		#	CALL	writedword
+	E9 .L5c			#	JMP	.L5c
+	
 
 ####	#  Function:	void unread( char c, ifile* f )
 	#  Puts c onto the pushback slot
@@ -560,6 +597,26 @@ read_r8:
 	E9 error		#	JMP	error
 
 
+####	#  Function:	int read_reg( int bits, ifile* in )
+	#  Read a 8- or 32-bit register name, depending on BITS.  The
+	#  leading '%' must already be read.
+.L13:
+	E8 read_r8		#	CALL	read_r8
+.L13a:
+	59			#	POP	%ecx
+	5D			#	POP	%ebp
+	C3			#	RET
+
+read_reg:
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	FF 75 0C		#	PUSH	12(%ebp)	# ifile
+
+	83 7D 08 08		#	CMPL	$8, 8(%ebp)
+	0F 84 .L13		#	JE	.L13
+	E8 read_r32		#	CALL	read_r32
+	E9 .L13a		#	JMP	.L13a
+
 ####	#  Function:	int skiphws( ifile* );
 	#  Skip horizontal whitespace until a non-whitespace character 
 	#  which is unread and returned.
@@ -626,20 +683,21 @@ skiphws:
 	#  acts on the accumulator and cannot read immediates.  Test for
 	#  overflow as we go along by using the fact that IMUL and ADDL
 	#  are both signed operations which set the OF flag on overflow.
-	89 C3			#	MOVL	%eax, %ebx
-	8B 45 FC		#	MOVL	-4(%ebp), %eax
+	50			#	PUSH	%eax		# this digit
+	8B 45 FC		#	MOVL	-4(%ebp), %eax	# value so far
 	B9 0A 00 00 00		#	MOVL	$10, %ecx
-	F7 E1 			#	MUL	%ecx, $eax
+	F7 E1 			#	MUL	%ecx, %edx:%eax	# val *= 10
 	0F 80 error		#	JO	error
-	01 D8			#	ADDL	%ebx, %eax
+	5A			#	POP	%edx		# digit
+	01 D0			#	ADDL	%edx, %eax	# val += digit
 	0F 80 error		#	JO	error
-	89 45 FC		#	MOVL	%eax, -4(%ebp)
-	FF 45 F8		#	INCL	-8(%ebp)
+	89 45 FC		#	MOVL	%eax, -4(%ebp)	# store val
+	FF 45 F8		#	INCL	-8(%ebp)	# inc counter
 
 	#  Read another digit
 	E8 getone		#	CALL	getone
 	E9 .L16			#	JMP	.L16		# loop
-	#  TODO  Test bits
+	#  TODO:  Test bits
 
 read_int:
 	#  The function entry point
@@ -691,9 +749,10 @@ read_int:
 	E9 .L18			#	JMP	.L18	# loop
 
 
-####	#  Function:	int read_rm8( int* disp, ifile* in )
-	#  Skip whitespace then read an r/m8.  Returns the ModR/M byte
-	#  and if a displacement is present, stores it in disp.
+####	#  Function:	int read_rm( int bits, int* disp, ifile* in )
+	#  Skip whitespace then read an r/m8 or r/m32 depending on BITS.  
+	#  Returns the ModR/M byte and if a displacement is present, stores 
+	#  it in disp.
 .L15b:
 	#  It's not a '(' or '%' so it must be the start of a number
 	50			# 	PUSH	%eax
@@ -703,7 +762,7 @@ read_int:
 	50			#	PUSH	%eax
 	E8 read_int		#	CALL	read_int
 	5A			#	POP	%edx
-	8B 4D 08		#	MOVL	8(%ebp), %ecx	# int* disp32
+	8B 4D 0C		#	MOVL	12(%ebp), %ecx	# int* disp32
 	89 01			#	MOVL	%eax, (%ecx)	# store disp
 	
 	#  We now must have a '('
@@ -747,7 +806,7 @@ read_int:
 	5D			#	POP	%ebp
 	C3			#	RET
 
-read_rm8:
+read_rm:
 	55 			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
 	31 C9			#	XORL	%ecx, %ecx
@@ -757,7 +816,7 @@ read_rm8:
 	#  What sort of argument is it?  Direct memory accesses will begin '(',
 	#  registers will start with an '%', and memory accesses with
 	#  a displacement will start with a number?
-	FF 75 0C		#	PUSH	12(%ebp)	# ifile
+	FF 75 10		#	PUSH	16(%ebp)	# ifile
 	E8 skiphws		#	CALL	skiphws
 	E8 getone		#	CALL	getone
 	3C 28			#	CMPB	$0x28, %al	# '('
@@ -768,42 +827,14 @@ read_rm8:
 	#  Save 0xC0 for |= later
 	C7 45 F8 C0 00 00 00	#	MOVL	$0xC0, -8(%ebp)
 
-	# Read the 8-bit register name (ifile is still on stack)
-	E8 read_r8		#	CALL	read_r8
+	#  Read the 32-bit register name (ifile is still on stack)
+	FF 75 08		#	PUSH	8(%ebp)		# bits
+	E8 read_reg		#	CALL	read_reg
+	59			#	POP	%ecx
 	89 45 FC		#	MOVL	%eax, -4(%ebp)	# save
 	E9 .L15c		#	JMP	.L15c
 
 	
-####	#  Function:	int read_rm32( int* disp, ifile* in )
-	#  Skip whitespace then read an r/m32.  Returns the ModR/M byte
-	#  and if a displacement is present, stores it in disp.
-read_rm32:
-	55 			#	PUSH	%ebp
-	89 E5			#	MOVL	%esp, %ebp
-	31 C9			#	XORL	%ecx, %ecx
-	51			#	PUSH	%ecx		# for ret val
-	51			#	PUsH	%ecx		# for or val
-
-	#  What sort of argument is it?  Direct memory accesses will begin '(',
-	#  registers will start with an '%', and memory accesses with
-	#  a displacement will start with a number?
-	FF 75 0C		#	PUSH	12(%ebp)	# ifile
-	E8 skiphws		#	CALL	skiphws
-	E8 getone		#	CALL	getone
-	3C 28			#	CMPB	$0x28, %al	# '('
-	0F 84 .L15a		#	JE	.L15a
-	3C 25			#	CMPB	$0x25, %al	# '%'
-	0F 85 .L15b		#	JNE	.L15b
-
-	#  Save 0xC0 for |= later
-	C7 45 F8 C0 00 00 00	#	MOVL	$0xC0, -8(%ebp)
-
-	# Read the 8-bit register name (ifile is still on stack)
-	E8 read_r32		#	CALL	read_r32
-	89 45 FC		#	MOVL	%eax, -4(%ebp)	# save
-	E9 .L15c		#	JMP	.L15c
-
-
 ####	#  Function:	int get_label( int strlen, int bits, main_frame* p ):
 	#  Lookup the text in p->buffer (which has known length strlen),
 	#  Convert it to an offset relative to the current instruction
@@ -843,7 +874,7 @@ get_label:
 	59			#	POP	%ecx
 	0F 85 .L11		#	JNE	.L14
 
-	# Found it.  Compute the value.
+	#  Found it.  Compute the value.
 	8B 45 0C		#	MOVL	12(%ebp), %eax
 	C6 C1 03		#	MOVB	$3, %cl
 	D3 F8			#	SARL	%cl, %eax
@@ -863,7 +894,7 @@ get_label:
 	39 C2			#	CMPL	%eax, %edx
 	0F 8E error		#	JLE	error
 
-	# Or < 2^(bits-1)?
+	#  Or < 2^(bits-1)?
 	F7 DA			#	NEG	%edx
 	39 C2			#	CMPL	%eax, %edx
 	0F 8F error		#	JG	error
@@ -875,7 +906,6 @@ get_label:
 	#  first confirm it isid1chr() and abort if not.  Then read 
 	#  until we reach the end of the id and return a pointer to 
 	#  the first non-id char.
-	#  XXX Clobbers %esi
 read_id:
 	55 			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
@@ -899,19 +929,21 @@ read_id:
 	#  But in fact, the instruction table limit is 12 characters (incl.
 	#  null termination -- i.e. 11 without), so we use that limit.
 	8B 45 08		#	MOVL	8(%ebp), %eax
-	8D 70 A0		#	LEA	-96(%eax), %esi
-	29 CE			#	SUBL	%ecx, %esi
-	83 FE F5		#	CMPL	-$11, %esi
+	8D 50 A0		#	LEA	-96(%eax), %edx
+	29 CA			#	SUBL	%ecx, %edx
+	83 FA F5		#	CMPL	-$11, %edx
 	0F 8C error		#	JL	error
 
 	51			#	PUSH	%ecx
 	E8 readonex		#	CALL	readonex
 	59			#	POP	%ecx
+	51			#	PUSH	%ecx
 	FF 31			#	PUSH	(%ecx)
-	E8 isidchr		#	CALL	isidchr   # XXX preserves %ecx
+	E8 isidchr		#	CALL	isidchr
 	5A			#	POP	%edx
+	59			#	POP	%ecx		# restore %ecx
 	83 F8 00		#	CMPL	$0, %eax
-	0F 85 .L12		#	JNE	.L12
+	0F 85 .L12		#	JNE	.L12		# Loop
 	5A			#	POP	%edx
 
 	#  (%ecx) is now something other than lchr.  Return it
@@ -924,7 +956,6 @@ read_id:
 ####	#  Function:	int read_imm( int bits, main_frame* p );
 	#  Skip whitespace and then read an immediate value ($0xXX or $NNN)
 	#  Returns the value read or exits if unable to read.
-	#  XXX Clobbers %ebx
 
 .L16a:
 	#  Put the byte into the main buffer and read a label
@@ -955,7 +986,7 @@ read_id:
 	89 45 F8		#	MOVL	%eax, -8(%ebp)
 
 	#  Unread the last character read
-	5B			#	POP	%ebx		# Overwrite 
+	59			#	POP	%ecx		# Overwrite 
 	FF 75 FC		#	PUSH	-4(%ebp)	#   bufp
 	E8 unread		#	CALL	unread
 
@@ -1005,14 +1036,14 @@ read_imm:
 	#  fourth byte out.
 .L19:
 	5B			#	POP	%ebx	# ofile
-	5B			#	POP	%ebx
+	5B			#	POP	%ebx	# Restore %ebx
 	5D			#	POP	%ebp
 	C3			#	RET
 
 write_oc12:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
-	53			#	PUSH	%ebx
+	53			#	PUSH	%ebx	# Save %ebx
 
 	#  Find the ofile object
 	8B 45 0C		#	MOVL	12(%ebp), %eax
@@ -1064,20 +1095,20 @@ write_modrm:
 	58			#	POP	%eax
 
 	#  Do we have a disp32?  NB: We don't support disp8s
-	3C 80			#	CMPB 	$80, %al
+	3C 80			#	CMPB 	$0x80, %al
 	0F 82 .L20		#	JB	.L20
-	3C C0			#	CMPB	$C0, %al
+	3C C0			#	CMPB	$0xC0, %al
 	0F 83 .L20		#	JAE	.L20
 
 	#  Yes.   ofile already on stack
-        FF 75 10		#	PUSH	16(%ebp)		# disp
+	FF 75 10		#	PUSH	16(%ebp)		# disp
 	E8 writedword		#	CALL	writedword
 	5B			#	POP	%ebx
 	E9 .L20			#	JMP	.L20
 
 	
 ####    #  The main function.
-        #  Stack is arranged as follows:
+	#  Stack is arranged as follows:
 	#
 	#	-4(%ebp)	instrct* mnemonics
 	#       -8(%ebp)	label* label_end
@@ -1088,7 +1119,7 @@ write_modrm:
 	#    -1136(%ebp)	ofile stdin
 	#
 	#  where label is a { char name[12]; int addr; },
-        #  instrct is a { char name[12]; char type; char data[3]; },
+	#  instrct is a { char name[12]; char type; char data[3]; },
 	#  ifile is a { int fd; bool has_pback :8; char pback_char; int:16; }.
 	#  and ofile is a { int fd; int count; }.
 
@@ -1104,10 +1135,10 @@ ret1:
 	#  At end of section, %eax=1 iff we read a comment.
 	#  If %eax=0, all other registers are unaltered.
 comment:
-        80 7D A0 23             #       CMPB    $0x23, -96(%ebp)        # '#'
+	80 7D A0 23             #       CMPB    $0x23, -96(%ebp)        # '#'
 	0F 85 ret		#	JNE	ret
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
 	51			#	PUSH	%ecx
 .L10:
@@ -1138,8 +1169,8 @@ labeldef:
 	C3			#	RET	# to main loop
 
 insn_end:
-	#  XXX: Should we require only ws or comments until end of line?
-	#  XXX: Or support a ';' instruction separator?
+	#  TODO:  Should we require only ws or comments until end of line?
+	#  TODO:  Or support a ';' instruction separator?
 	B8 01 00 00 00		#	MOVL	$1, %eax
 	E9 ret1			#	JMP	ret1
 
@@ -1169,7 +1200,7 @@ type_01:
 
 	#  Byte is in %al (as part of return from read_imm): write it.
 	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	50			#	PUSH	%eax
 	E8 writebyte		#	CALL	writebyte
 	5B			#	POP	%ebx
@@ -1192,7 +1223,7 @@ type_02:
 
 	#  Dword is in %eax: write it.
 	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	50			#	PUSH	%eax
 	E8 writedword		#	CALL	writedword
 	5B			#	POP	%ebx
@@ -1207,26 +1238,26 @@ type_03:
 	5A			#	POP	%edx
 	59			#	POP	%ecx
 
-	# Read the register
+	#  Read the 8-bit register name
 	52			#	PUSH	%edx	# store opcode info
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
-        51			#	PUSH	%ecx
-	E8 read_rm8		#	CALL	read_rm8
-	5A			#	POP	%edx
-	5A			#	POP	%edx
+	51			#	PUSH	%ecx
+	B9 08 00 00 00		#	MOVL	$8, %ecx
+	51			#	PUSH	%ecx
+	E8 read_rm		#	CALL	read_rm
+	83 C4 0C		#	ADDL	$12, %esp
 	5A			#	POP	%edx
 
 .L21:
 	#  Write the ModR/M byte and (if present) displacement.
 	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
 	51			#	PUSH	%ecx
-        FF 75 A0		#	PUSH	-96(%ebp)	# disp
-	89 D3			#	MOVL	%edx, %ebx
+	FF 75 A0		#	PUSH	-96(%ebp)	# disp
 	C6 C1 18		#	MOVB	$24, %cl
-	D3 EB			#	SHRL	%cl, %ebx
-	53			#	PUSH	%ebx		# reg bits
+	D3 EA			#	SHRL	%cl, %edx
+	52			#	PUSH	%edx		# reg bits
 	50			#	PUSH	%eax		# modrm
 	E8 write_modrm		#	CALL	write_modrm
 	83 C4 10		#	ADDL	$16, %esp
@@ -1240,22 +1271,271 @@ type_04:
 	5A			#	POP	%edx
 	59			#	POP	%ecx
 
-	# Read the register
+	#  Read the r/m
 	52			#	PUSH	%edx	# store opcode info
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
-        51			#	PUSH	%ecx
-	E8 read_rm32		#	CALL	read_rm32
-	5A			#	POP	%edx
-	5A			#	POP	%edx
+	51			#	PUSH	%ecx
+	B9 20 00 00 00		#	MOVL	$32, %ecx
+	51			#	PUSH	%ecx
+	E8 read_rm		#	CALL	read_rm
+	83 C4 0C		#	ADDL	$12, %esp
 	5A			#	POP	%edx
 	E9 .L21			#	JMP	.L21
+
+type_05:
+	#  Write the opcode byte(s).
+	55			#	PUSH	%ebp		# main_frame
+	52			#	PUSH	%edx	# opcode info
+	E8 write_oc12		#	CALL	write_oc12
+	5A			#	POP	%edx
+	59			#	POP	%ecx
+
+	#  Store the number of bits so that .L22 is independent of bit size
+	BB 20 00 00 00		#	MOVL	$32, %ebx	# 32-bit mode
+
+.L22:
+	#  Read the r/m
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
+	51			#	PUSH	%ecx
+	53			#	PUSH	%ebx			# bits
+	E8 read_rm		#	CALL	read_rm
+	5B			#	POP	%ebx			# bits
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+
+	# Skip ws, read a comma, then skip more ws and read the '%' and reg
+	50			#	PUSH	%eax	# store r/m
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 skiphws		#	CALL	skiphws
+	E8 getone		#	CALL	getone
+	3C 2C			#	CMPB	$0x2C, %al	# ','
+	0F 85 error		#	JNE	error
+	E8 skiphws		#	CALL	skiphws
+	E8 getone		#	CALL	getone
+	3C 25			#	CMPB	$0x25, %al	# '%'
+	0F 85 error		#	JNE	error
+	53			#	PUSH	%ebx		# bits
+	E8 read_reg		#	CALL	read_reg
+	5A			#	POP	%edx	# bits
+	5A			#	POP	%edx	# ifile
+	5A			#	POP	%edx	# r/m
+
+.L22a:
+	#  Write the ModR/M byte and (if present) displacement.
+	#  So: $edx is r/m, $eax is reg
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+	51			#	PUSH	%ecx
+	FF 75 A0		#	PUSH	-96(%ebp)	# disp
+	50			#	PUSH	%eax		# reg
+	52			#	PUSH	%edx		# rm
+	E8 write_modrm		#	CALL	write_modrm
+	83 C4 10		#	ADDL	$16, %esp
+	E9 insn_end		#	JMP	insn_end
+
+type_06_rm:
+	#  %edx contains the opcode info, so %dh+2 is the opcode.  Write it.
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	51			#	PUSH	%ecx
+	88 F0			#	MOVB	%dh, %al
+	83 C0 02		#	ADDL	$2, %eax
+	50			#	PUSH	%eax
+	E8 writebyte		#	CALL	writebyte
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+
+	#  Store the number of bits so that .L22 is independent of bit size
+	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
+	E9 .L22			#	JMP	.L22
+
+type_06_reg:
+	#  %edx contains the opcode info, so %dh is the opcode.  Write it.
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	51			#	PUSH	%ecx
+	88 F0			#	MOVB	%dh, %al
+	50			#	PUSH	%eax
+	E8 writebyte		#	CALL	writebyte
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+
+	#  Store the number of bits so that .L23 is independent of bit size
+	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
+
+.L23:
+	#  Read the register
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 skiphws		#	CALL	skiphws
+	E8 getone		#	CALL	getone
+	3C 25			#	CMPB	$0x25, %al	# '%'
+	0F 85 error		#	JNE	error
+	53			#	PUSH	%ebx		# bits
+	E8 read_reg		#	CALL	read_reg
+	5B			#	POP	%ebx			# bits
+	59			#	POP	%ecx
+
+.L23a:
+	# Skip ws, read a comma, then skip more ws and read the '%' and r/m
+	50			#	PUSH	%eax	# store reg
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 skiphws		#	CALL	skiphws
+	E8 getone		#	CALL	getone
+	3C 2C			#	CMPB	$0x2C, %al	# ','
+	0F 85 error		#	JNE	error
+	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
+	51			#	PUSH	%ecx
+	53			#	PUSH	%ebx			# bits
+	E8 read_rm		#	CALL	read_rm
+	89 C2			#	MOVL	%eax, %edx
+	5B			#	POP	%ebx		# bits
+	59			#	POP	%ecx		# disp
+	59			#	POP	%ecx		# ifile
+	58			#	POP	%eax	# retrieve reg
+
+	#  Write the ModR/M byte.
+	E9 .L22a		#	JMP	.L22a
+
+.L23b:
+	#  This is the easy case: the immediate is a literal
+	52			#	PUSH	%edx		# store op info
+	55			#	PUSH	%ebp
+	53			#	PUSH	%ebx		
+	E8 read_imm		#	CALL	read_imm
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+	5A			#	POP	%edx		# opinfo
+
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	51			#	PUSH	%ecx		# ofile
+	50			#	PUSH	%eax		# data
+	53			#	PUSH	%ebx		# bits
+
+	#  Messy.  Call into the {.L23a, .L22a, insn_end, ret1} block.
+	#  That isn't a real function.   It expects %al to contain reg bits
+	88 F0			#	MOVL	%dh, %al
+	E8 .L23a		#	CALL	.L23a
+
+	#  Now write the immediate.  The stack is already set up.
+	E8 writedata		#	CALL	writedata
+	5B			#	POP	%ebx
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+	E9 insn_end		#	JMP	insn_end
+	
+
+type_06_imm:
+	#  Shift %edx so %dl is the opcode byte and %dh the extension bits
+	C6 C1 10		#	MOVB	$16, %cl
+	D3 EA			#	SHRL	%cl, %edx
+	52			#	PUSH	%edx		# store op info
+
+	#  Write the opcode byte from %dl
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	51			#	PUSH	%ecx
+	88 D0			#	MOVB	%dl, %al
+	50			#	PUSH	%eax
+	E8 writebyte		#	CALL	writebyte
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+
+	#  The AT&T naming convention makes this awkward.  We need to 
+	#  write the ModR/M bytes *before* looking up the symbol in the 
+	#  immediate.  Unfortunately, in AT&T syntax, the immediate is before 
+	#  the r/m argument which means we don't know whether it's a got 
+	#  a disp word.
+
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 skiphws		#	CALL	skiphws
+	59			#	POP	%ecx
+	5A			#	POP	%edx	# retrieve op info
+	3C 24			#	CMPB	$0x24, %al	# '$'
+	0F 84 .L23b		#	JE	.L23b
+	
+	#  We've got a an intermediate label.  Get first char into buffer,
+	#  and then read the label.
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 getone		#	CALL	getone
+	88 41 A0		#	MOVB	%al, -96(%ecx)
+	55			#	PUSH	%ebp		# main_frame
+	E8 read_id		#	CALL	read_id
+	59			#	POP	%ecx
+	59			#	POP	%ecx		# ifile
+	
+	#  Write back the last byte
+	50			#	PUSH	%eax		# save endp
+	51			#	PUSH	%ecx		# ifile
+	FF 30			#	PUSH	(%eax)		# char
+	E8 unread		#	CALL	unread
+	5A			#	POP	%ecx
+	5A			#	POP	%ecx		# ifile
+	58			#	POP	%eax		# endp
+
+	#  Calculate the string length
+	8D 55 A0		#	LEA	-96(%ebp), %edx
+	29 D0			#	SUBL	%edx, %eax
+	55			#	PUSH	%ebp		# main_frame
+	5B			#	PUSH	%ebx		# bits
+	58			#	PUSH	%eax		# strlen
+	FF 32			#	PUSH	(%edx)		# first dword
+
+	#  Now call into the {.L23a, .L22a, insn_end, ret1} block to handle
+	#  the ModR/M (incl. disp32).   Urgh.
+	E8 .L23a		#	CALL	.L23a
+
+	#  Restore first dword of the label, and then look up the immediate
+	#  label now that ModR/M is written
+	8F 45 A0		#	POP	-96(%ebp)
+	E8 get_label		#	CALL	get_label
+	59			#	POP	%ecx
+	5B			#	POP	%ebx		# bits
+	59			#	POP	%ecx
+
+	#  And write the immediate data
+	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	51			#	PUSH	%ecx
+	58			#	PUSH	%eax		# byte(s)
+	5B			#	PUSH	%ebx		# bits
+	E8 writedata		#	CALL	writedata
+	59			#	POP	%ecx
+	59			#	POP	%ecx
+
+	E9 insn_end		#	JMP	insn_end
+
+type_06:
+	#  Store the number of bits so that we're independent of bit size
+	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
+
+	#  First, skip whitespace, leaving %eax containing the peek-ahead char
+	52			#	PUSH	%edx	# opcode info
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 skiphws		#	CALL	skiphws
+	59			#	POP	%ecx	# ifile
+	5A			#	POP	%edx
+
+	#  Need to determine which of the three types of instruction it is.
+	3C 25			#	CMPB	0x25, %al	# '%'
+	0F 84 type_06_reg	#	JE	type_06_reg
+	3C 28			#	CMPB	0x28, %al	# '('
+	0F 84 type_06_rm	#	JE	type_06_rm
+	50			#	PUSH	%eax
+	E8 dchr			#	CALL	dchr
+	59			#	POP	%ecx
+	3C FF			#	CMPB	$-1, %al
+	0F 85 type_06_rm	#	JNE	type_06_rm
+	E9 type_06_imm		#	JMP	type_06_imm
 
 hex_bytes:
 	#  Skip horizontal whitespace and read a byte
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
 	51			#	PUSH	%ecx
@@ -1263,7 +1543,7 @@ hex_bytes:
 	5A			#	POP	%edx
 	5A			#	POP	%edx
 
-	# Is it a line ending?  If so, end parsing the directive.
+	#  Is it a line ending?  If so, end parsing the directive.
 	80 7D A0 0A		#	CMPL	$0x0A, -96(%ebp)	# '\n'
 	B8 01 00 00 00		#	MOVL	$1, %eax
 	0F 84 ret1		#	JE	ret1	# to main loop
@@ -1278,7 +1558,7 @@ hex_bytes:
 	#  Read the next byte
 	50			#	PUSH	%eax
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	8D 4D A1		#	LEA	-95(%ebp), %ecx
 	51			#	PUSH	%ecx
 	E8 readonex		#	CALL	readonex
@@ -1298,7 +1578,7 @@ hex_bytes:
 
 	#  Byte is in %al; let's write it, and increment the address counter
 	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	50			#	PUSH	%eax
 	E8 writebyte		#	CALL	writebyte
 	5B			#	POP	%ebx
@@ -1307,7 +1587,7 @@ hex_bytes:
 
 
 	#  --- Test for an identifier at top level in the source file.
-        #  This might be a label, a mnemonic or a directive.
+	#  This might be a label, a mnemonic or a directive.
 tl_ident:
 	55			#	PUSH	%ebp
 	E8 read_id		#	CALL	read_id
@@ -1332,7 +1612,7 @@ tl_ident:
 	#  It must be either a directive or an instruction
 	8D 85 98 FB FF FF	#	LEA	-1128(%ebp), %eax	# ifile
 	51			#	PUSH	%ecx	# we care about this
-        50			#	PUSH	%eax
+	50			#	PUSH	%eax
 	52			#	PUSH	%edx
 	E8 unread		#	CALL	unread
 	59			#	POP	%ecx
@@ -1372,9 +1652,13 @@ tl_ident:
 	0F 84 type_03		#	JE	type_03
 	80 FA 04		#	CMPB	$04, %dl
 	0F 84 type_04		#	JE	type_04
+	80 FA 05		#	CMPB	$05, %dl
+	0F 84 type_05		#	JE	type_05
+	80 FA 06		#	CMPB	$06, %dl
+	0F 84 type_06		#	JE	type_06
 
 	#  XXX  write code for the other types of instruction; exit(3) for now
-        BB 03 00 00 00          #       MOVL    $3, %ebx
+	BB 03 00 00 00          #       MOVL    $3, %ebx
 	E9 success		#	JMP	success
 	C3			#	RET	# to main loop
 
@@ -1404,9 +1688,9 @@ main:
 .L8:
 	#  Read one byte (not with readonex because EOF is permitted)
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
-        51			#	PUSH	%ecx
+	51			#	PUSH	%ecx
 	E8 readone		#	CALL	readone
 	5A			#	POP	%edx
 	5A			#	POP	%edx
@@ -1438,6 +1722,6 @@ main:
 
 
 ####    #  And finally, the entry point.
-        #  Last per requirement for elfify.
-        E9 main                 #       JMP     main
+	#  Last per requirement for elfify.
+	E9 main                 #       JMP     main
 
