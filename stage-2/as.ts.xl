@@ -651,8 +651,6 @@ skiphws:
 ####	#  Function:	int read_int( int bits, ifile* in );
 	#  Read an integer: either decimal (which must not have a leading 0),
 	#  or hex (which must have an 0x prefix).  Error on overflow.
-	#  TODO:  Support a prefix minus sign.
-
 .L17:
 	#  Have we read any digits?  If not, it's an error
 	83 7D F8 00		#	CMPL	$0, -8(%ebp)
@@ -664,6 +662,7 @@ skiphws:
 	E8 unread		#	CALL	unread
 	5A			#	POP	%edx		# char
 
+.L17b:
 	#  Stack cleanup and exit
 	5A			#	POP	%edx		# ifile
 	5A			#	POP	%edx		# count
@@ -671,13 +670,30 @@ skiphws:
 	5D			#	POP	%ebp
 	C3			#	RET
 
+.L17c:
+	#  Have we an overflow?  Don't care if bits == 32
+	80 7D 08 20		#	CMPB	$32, 8(%ebp)
+	0F 84 .L17		#	JE	.L17
+
+	#  This branch is only used for decimals and before applying the
+	#  minus sign.   We only test whether it's >= 2^bits because 
+	#  we don't know whether 200 is a valid unsigned 8-bit number or
+	#  an invalid signed 8-bit number.
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	8B 4D 08		#	MOVL	8(%ebp), %ecx
+	D3 E0			#	SALL	%cl, %eax
+	39 45 FC		#	CMPL	$eax, -4(%ebp)
+	0F 83 error		#	JAE	error
+
+	E9 .L17			#	JMP	.L17
+
 .L16:
 	#  We're reading decimal and the first digit is already in %eax
 	50			#	PUSH	%eax
 	E8 dchr			#	CALL	dchr
 	5A			#	POP	%edx		# char
 	3C FF			#	CMPB	$-1, %al
-	0F 84 .L17		#	JE	.L17		# done
+	0F 84 .L17c		#	JE	.L17		# done
 	
 	#  Add the digit to the current value -- tedious as IMUL only
 	#  acts on the accumulator and cannot read immediates.  Test for
@@ -697,22 +713,8 @@ skiphws:
 	#  Read another digit
 	E8 getone		#	CALL	getone
 	E9 .L16			#	JMP	.L16		# loop
-	#  TODO:  Test bits
 
-read_int:
-	#  The function entry point
-	55			#	PUSH	%ebp
-	89 E5			#	MOVL	%esp, %ebp
-	31 C9			#	XORL	%ecx, %ecx
-	51			#	PUSH	%ecx		# int val = 0;
-	51			#	PUSH	%ecx		# int count = 0;
-
-	#  Have as got an '0' followed by an 'x'?
-	FF 75 0C		#	PUSH	12(%ebp)	# ifile
-	E8 getone		#	CALL	getone
-	3C 30			#	CMPB	$0x30, %al	# '0'
-	0F 85 .L16		#	JNE	.L16
-
+.L16b:
 	#  This would be where we'd consider octal, if we cared about it.
 	#  We don't, but we do care about the special case of zero, so we
 	#  assume anything begining '0' but not continuing 'x' is a plain
@@ -747,6 +749,50 @@ read_int:
 	39 45 F8		#	CMPL	%eax, -8(%ebp)
 	0F 8F error		#	JG	error
 	E9 .L18			#	JMP	.L18	# loop
+
+.L18a:
+	F7 D8			#	NEGL	%eax
+	89 45 FC		#	MOVL	%eax, -4(%ebp)	# save
+	E9 .L17b		#	JMP	.L17b
+
+read_int:
+	#  The function entry point
+	55			#	PUSH	%ebp
+	89 E5			#	MOVL	%esp, %ebp
+	31 C9			#	XORL	%ecx, %ecx
+	51			#	PUSH	%ecx		# int val = 0;
+	51			#	PUSH	%ecx		# int count = 0;
+
+	#  Have as got an '0' followed by an 'x'?
+	FF 75 0C		#	PUSH	12(%ebp)	# ifile
+	E8 getone		#	CALL	getone
+	3C 30			#	CMPB	$0x30, %al	# '0'
+	0F 84 .L16b		#	JE	.L16b		# hex / zero
+	3C 2D			#	CMPB	$0x2D, %al	# '-'
+	0F 85 .L16		#	JNE	.L16		# deciml
+
+	#  Recurse to read_int and negate the answer
+	FF 75 0C		#	PUSH	12(%ebp)
+	FF 75 08		#	PUSH	8(%ebp)
+	E8 read_int		#	CALL	read_int
+	5A			#	POP	%edx
+	5A			#	POP	%edx
+
+	#  Have we an overflow?  Don't care if bits == 32
+	80 7D 08 20		#	CMPB	$32, 8(%ebp)
+	0F 84 .L18a		#	JE	.L18a
+
+	#  This branch is only used for decimals and before applying the
+	#  minus sign.   We only test whether it's >= 2^bits because 
+	#  we don't know whether 200 is a valid unsigned 8-bit number or
+	#  an invalid signed 8-bit number.
+	BA 01 00 00 00		#	MOVL	$1, %edx
+	8B 4D 08		#	MOVL	8(%ebp), %ecx
+	FF C9			#	DECL	%ecx
+	D3 E2			#	SALL	%cl, %edx
+	39 D0			#	CMPL	$edx, %eax
+	0F 87 error		#	JA	error
+	E9 .L18a		#	JMP	.18a
 
 
 ####	#  Function:	int read_rm( int bits, int* disp, ifile* in )
@@ -1169,9 +1215,7 @@ labeldef:
 	C3			#	RET	# to main loop
 
 insn_end:
-	#  TODO:  Should we require only ws or comments until end of line?
-	#  TODO:  Or support a ';' instruction separator?
-	B8 01 00 00 00		#	MOVL	$1, %eax
+	B8 01 00 00 00		#	MOVL	$2, %eax
 	E9 ret1			#	JMP	ret1
 
 type_00:
@@ -1302,8 +1346,6 @@ type_06_rm:
 	59			#	POP	%ecx
 	59			#	POP	%ecx
 
-	#  Store the number of bits so that .L22 is independent of bit size
-	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
 	E9 .L22			#	JMP	.L22
 
 type_06_reg:
@@ -1315,9 +1357,6 @@ type_06_reg:
 	E8 writebyte		#	CALL	writebyte
 	59			#	POP	%ecx
 	59			#	POP	%ecx
-
-	#  Store the number of bits so that .L23 is independent of bit size
-	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
 
 .L23:
 	#  Read the register
@@ -1333,7 +1372,9 @@ type_06_reg:
 	59			#	POP	%ecx
 
 .L23a:
-	# Skip ws, read a comma, then skip more ws and read the '%' and r/m
+	#  Skip ws, read a comma, then skip more ws and read the '%' and r/m
+	#  We expect %eax to contain the reg bytes already read, and
+	#  %ebx the number of bits.
 	50			#	PUSH	%eax	# store reg
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
@@ -1371,7 +1412,7 @@ type_06_reg:
 
 	#  Messy.  Call into the {.L23a, .L22a, insn_end, ret1} block.
 	#  That isn't a real function.   It expects %al to contain reg bits
-	88 F0			#	MOVL	%dh, %al
+	88 F0			#	MOVB	%dh, %al
 	E8 .L23a		#	CALL	.L23a
 
 	#  Now write the immediate.  The stack is already set up.
@@ -1413,10 +1454,11 @@ type_06_imm:
 	
 	#  We've got a an intermediate label.  Get first char into buffer,
 	#  and then read the label.
+	52			#	PUSH	%edx		# store op info
 	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 getone		#	CALL	getone
-	88 41 A0		#	MOVB	%al, -96(%ecx)
+	88 45 A0		#	MOVB	%al, -96(%ebp)
 	55			#	PUSH	%ebp		# main_frame
 	E8 read_id		#	CALL	read_id
 	59			#	POP	%ecx
@@ -1434,13 +1476,15 @@ type_06_imm:
 	#  Calculate the string length
 	8D 55 A0		#	LEA	-96(%ebp), %edx
 	29 D0			#	SUBL	%edx, %eax
+	59			#	POP	%ecx	# retrieve op info
 	55			#	PUSH	%ebp		# main_frame
-	5B			#	PUSH	%ebx		# bits
-	58			#	PUSH	%eax		# strlen
+	53			#	PUSH	%ebx		# bits
+	50			#	PUSH	%eax		# strlen
 	FF 32			#	PUSH	(%edx)		# first dword
 
 	#  Now call into the {.L23a, .L22a, insn_end, ret1} block to handle
 	#  the ModR/M (incl. disp32).   Urgh.
+	88 E8			#	MOVB	%ch, %al
 	E8 .L23a		#	CALL	.L23a
 
 	#  Restore first dword of the label, and then look up the immediate
@@ -1454,9 +1498,10 @@ type_06_imm:
 	#  And write the immediate data
 	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
 	51			#	PUSH	%ecx
-	58			#	PUSH	%eax		# byte(s)
-	5B			#	PUSH	%ebx		# bits
+	50			#	PUSH	%eax		# byte(s)
+	53			#	PUSH	%ebx		# bits
 	E8 writedata		#	CALL	writedata
+	59			#	POP	%ecx
 	59			#	POP	%ecx
 	59			#	POP	%ecx
 
@@ -1472,9 +1517,11 @@ type_06:
 	5A			#	POP	%edx
 
 	#  Need to determine which of the three types of instruction it is.
-	3C 25			#	CMPB	0x25, %al	# '%'
+	3C 25			#	CMPB	$0x25, %al	# '%'
 	0F 84 type_06_reg	#	JE	type_06_reg
-	3C 28			#	CMPB	0x28, %al	# '('
+	3C 28			#	CMPB	$0x28, %al	# '('
+	0F 84 type_06_rm	#	JE	type_06_rm
+	3C 2D			#	CMPB	$0x2D, %al	# '-'
 	0F 84 type_06_rm	#	JE	type_06_rm
 	50			#	PUSH	%eax
 	E8 dchr			#	CALL	dchr
@@ -1670,13 +1717,41 @@ main:
 	83 F8 00		#	CMP	$0, %eax
 	0F 85 .L8		#	JNE	.L8
 
-	#  or perhaps a top-level identifier (label / mnemonic / directive)
+	#  Or perhaps a top-level identifier (label / mnemonic / directive);
+	#  nothing else is permitted here.
 	E8 tl_ident		#	CALL	tl_ident
 	83 F8 00		#	CMP	$0, %eax
-	0F 85 .L8		#	JNE	.L8
+	0F 84 error		#	JE	error
+	83 F8 00		#	CMP	$1, %eax
+	0F 84 .L8		#	JE	.L8
+
+	#  We only get here if we've had an instruction (as opposed to a 
+	#  comment, label, or directive.)
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 skiphws		#	CALL	skiphws
+	59			#	POP	%ecx	# ifile
+
+	#  The next character should be either a '\n', a '#' or a ';',
+	#  but we'll be permissive here.  Effectively we make the ';'
+	#  between instructions on a single line optional.
+#	3C 0A			#	CMPB	$0x0a, %al	# '\n'
+#	0F 84 .L8		#	JE	.L8
+#	3C 23			#	CMPB	$0x23, %al	# '#'
+#	0F 84 .L8		#	JE	.L8
+#	3C 3B			#	CMPB	$0x3B, %al	# ';'
+#	0F 85 error		#	JNE	error
+	3C 3B			#	CMPB	$0x3B, %al	# ';'
+	0F 85 .L8		#	JNE	.L8	# Permissive
+
+	#  Skip over the semicolon (statement separator)
+	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	51			#	PUSH	%ecx
+	E8 getone		#	CALL	getone
+	59			#	POP	%ecx	# ifile
 
 	#  Nothing else is permitted here.	
-	E9 error		#	JMP	error
+	E9 .L8		#	JMP	.L8
 
 
 ####    #  And finally, the entry point.
