@@ -13,7 +13,15 @@ as:	as.ts.xl
 	$(CHMOD) a+x as
 	$(RM) as.ts
 
-check:
+check:	check-as
+
+check-as:	as as.s
+	as < as.s > as2.ts
+	../stage-1/elfify as2.ts > as2
+	$(CHMOD) a+x as2
+	as2 < as.s > as3.ts
+	$(CMP) as2.ts as3.ts
+	$(RM) as2.ts as3.ts as2
 
 clean:
-	$(RM) -f as as.ts 
+	$(RM) -f as as.ts as2.ts as3.ts as2

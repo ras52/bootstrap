@@ -1,12 +1,20 @@
+SHELL = /bin/sh
+PATH  = .
+
+CHMOD = /bin/chmod
+RM    = /bin/rm
+CMP   = /usr/bin/cmp
+
+
 all:
 
 check:	check-unhex
 
 check-unhex:
-	chmod a+x unhex
-	./unhex < unhex.x > unhex2
-	cmp unhex unhex2
-	rm unhex2
+	$(CHMOD) a+x unhex
+	unhex < unhex.x > unhex2
+	$(CMP) unhex unhex2
+	$(RM) unhex2
 
 clean:
-	rm -f unhex2
+	$(RM) -f unhex2

@@ -32,6 +32,7 @@ mnemonics:
 53 43 41 53  42 00 00 00  00 00 00 00    00 01 AE 00    # SCASB
 43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW    [aka CBTW]
 43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE   [aka CWTL]
+52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00	# RET
 
 
 # Type 01 instructions.   A single immediate 8-bit argument, e.g.
@@ -328,7 +329,7 @@ writebyte:
 	BA 01 00 00 00		#	MOVL	$1, %edx
 .L5a:
 	53			#	PUSH	%ebx
-	8D 4D 08		#	LEAL	8(%ebp), %ecx	# ofile*
+	8D 4D 08		#	LEA	8(%ebp), %ecx	# ofile*
 	8B 5D 0C		#	MOVL	12(%ebp), $ebx
 	01 53 04		#	ADDL	%edx, 4(%ebx)	# inc counter
 	8B 1B 			#	MOVL	(%ebx), %ebx	# fd from ofile
@@ -695,9 +696,9 @@ skiphws:
 	3C FF			#	CMPB	$-1, %al
 	0F 84 .L17c		#	JE	.L17		# done
 	
-	#  Add the digit to the current value -- tedious as IMUL only
+	#  Add the digit to the current value -- tedious as MUL only
 	#  acts on the accumulator and cannot read immediates.  Test for
-	#  overflow as we go along by using the fact that IMUL and ADDL
+	#  overflow as we go along by using the fact that MUL and ADDL
 	#  are both signed operations which set the OF flag on overflow.
 	50			#	PUSH	%eax		# this digit
 	8B 45 FC		#	MOVL	-4(%ebp), %eax	# value so far
@@ -792,7 +793,7 @@ read_int:
 	D3 E2			#	SALL	%cl, %edx
 	39 D0			#	CMPL	$edx, %eax
 	0F 87 error		#	JA	error
-	E9 .L18a		#	JMP	.18a
+	E9 .L18a		#	JMP	.L18a
 
 
 ####	#  Function:	int read_rm( int bits, int* disp, ifile* in )
@@ -857,7 +858,7 @@ read_rm:
 	89 E5			#	MOVL	%esp, %ebp
 	31 C9			#	XORL	%ecx, %ecx
 	51			#	PUSH	%ecx		# for ret val
-	51			#	PUsH	%ecx		# for or val
+	51			#	PUSH	%ecx		# for or val
 
 	#  What sort of argument is it?  Direct memory accesses will begin '(',
 	#  registers will start with an '%', and memory accesses with
@@ -905,8 +906,19 @@ get_label:
 	8B 4D 08		#	MOVL	8(%ebp), %ecx	# strlen
 	8B 5D 10		#	MOVL	16(%ebp), %ebx
 	8D 73 A0		#	LEA	-96(%ebx), %esi
-	8D BB 90 FB FF FF	#	LEA	-1136(%ebx), %edi
+	8D BB 90 EF FF FF	#	LEA	-4208(%ebx), %edi
+
+	#  Null terminate
+	89 F2			#	MOVL	%esi, %edx
+	01 CA			#	ADDL	%ecx, %edx
+	31 C0			#	XORL	%eax, %eax
+	89 02			#	MOVL	%eax, (%edx)
+	FF C1			#	INCL	%ecx
+
+	51			#	PUSH	%ecx
 .L11:
+	59			#	POP	%ecx
+
 	83 C7 10		#	ADDL	$16, %edi
 	3B 7B F8		#	CMPL	-8(%ebx), %edi
 	0F 8D error		#	JGE	error
@@ -917,14 +929,16 @@ get_label:
 	   A6			#	  CMPSB
 	5F			#	POP	%edi
 	5E			#	POP	%esi
+	0F 85 .L11		#	JNE	.L11
+	81 F9 00 00 00 00	#	CMPL	$0, %ecx
+	0F 85 .L11		#	JNE	.L11
 	59			#	POP	%ecx
-	0F 85 .L11		#	JNE	.L14
 
 	#  Found it.  Compute the value.
 	8B 45 0C		#	MOVL	12(%ebp), %eax
 	C6 C1 03		#	MOVB	$3, %cl
 	D3 F8			#	SARL	%cl, %eax
-	03 83 94 FB FF FF	#	ADDL	-1132(%ebx), %eax #ofile->count
+	03 83 94 EF FF FF	#	ADDL	-4204(%ebx), %eax #ofile->count
 	2B 47 0C		#	SUBL	12(%edi), %eax
 	F7 D8			#	NEGL	%eax
 
@@ -966,7 +980,7 @@ read_id:
 
 	#  Continue to read an identifier
 	8B 45 08		#	MOVL	8(%ebp), %eax
-	8D 88 98 FB FF FF	#	LEA	-1128(%eax), %ecx
+	8D 88 98 EF FF FF	#	LEA	-4200(%eax), %ecx
 	51			#	PUSH	%ecx
 	8D 48 A0		#	LEA	-96(%eax), %ecx
 .L12:
@@ -1053,7 +1067,7 @@ read_imm:
 
 	#  Skip horizontal whitespace
 	8B 4D 0C		#	MOVL	12(%ebp), %ecx
-	8D 89 98 FB FF FF	#	LEA	-1128(%ecx), %ecx
+	8D 89 98 EF FF FF	#	LEA	-4200(%ecx), %ecx
 	51			#	PUSH	%ecx		# ifile
 	E8 skiphws		#	CALL	skiphws
 
@@ -1093,7 +1107,7 @@ write_oc12:
 
 	#  Find the ofile object
 	8B 45 0C		#	MOVL	12(%ebp), %eax
-	8D 88 90 FB FF FF	#	LEA	-1136(%eax), %ecx
+	8D 88 90 EF FF FF	#	LEA	-4208(%eax), %ecx
 	51			#	PUSH	%ecx
 
 	#  Unconditionally write the first byte
@@ -1107,7 +1121,7 @@ write_oc12:
 
 	#  Is there a second byte?
 	8B 55 08		#	MOVL	8(%ebp), %edx
-	80 FE 01		#	CMPB	$01, %dh
+	80 FE 01		#	CMPB	$1, %dh
 	0F 8E .L19		#	JLE	.L19
 	C6 C1 08		#	MOVB	$8, %cl
 	D3 EB			#	SHRL	%cl, %ebx
@@ -1160,9 +1174,9 @@ write_modrm:
 	#       -8(%ebp)	label* label_end
 	#      -12(%ebp)	label* label_end_store
 	#      -96(%ebp)	char buffer[80]
-	#    -1120(%ebp)	label labels[64]
-	#    -1128(%ebp)        ifile stdout
-	#    -1136(%ebp)	ofile stdin
+	#    -4192(%ebp)	label labels[64]
+	#    -4200(%ebp)        ifile stdout
+	#    -4208(%ebp)	ofile stdin
 	#
 	#  where label is a { char name[12]; int addr; },
 	#  instrct is a { char name[12]; char type; char data[3]; },
@@ -1183,7 +1197,7 @@ ret1:
 comment:
 	80 7D A0 23             #       CMPB    $0x23, -96(%ebp)        # '#'
 	0F 85 ret		#	JNE	ret
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
 	51			#	PUSH	%ecx
@@ -1207,7 +1221,7 @@ labeldef:
 	0F 8D error		#	JGE	error
 	F3			#	REP
 	   A4			#	  MOVSB
-	8B 85 94 FB FF FF	#	MOVL	-1132(%ebp), %eax #ofile->count
+	8B 85 94 EF FF FF	#	MOVL	-4204(%ebp), %eax #ofile->count
 	8B 3B			#	MOVL	(%ebx), %edi
 	89 47 0C		#	MOVL	%eax, 12(%edi)
 	83 03 10		#	ADDL	$16, (%ebx)
@@ -1236,14 +1250,13 @@ type_01:
 	5A			#	POP	%edx
 
 	#  Skip ws and read immediate.
-	B8 08 00 00 00		#	MOVL	$8, %eax	# bits
-	50			#	PUSH	%eax
+	53			#	PUSH	%ebx
 	E8 read_imm		#	CALL	read_imm
 	59			#	POP	%ecx
 	59			#	POP	%ecx
 
 	#  Byte is in %al (as part of return from read_imm): write it.
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx	# ofile
 	51			#	PUSH	%ecx
 	50			#	PUSH	%eax
 	53			#	PUSH	%ebx
@@ -1263,7 +1276,7 @@ type_03:
 
 	#  Read the r/m
 	52			#	PUSH	%edx	# store opcode info
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
 	51			#	PUSH	%ecx
@@ -1274,7 +1287,7 @@ type_03:
 
 .L21:
 	#  Write the ModR/M byte and (if present) displacement.
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx	# ofile
 	51			#	PUSH	%ecx
 	FF 75 A0		#	PUSH	-96(%ebp)	# disp
 	C6 C1 18		#	MOVB	$24, %cl
@@ -1295,7 +1308,7 @@ type_05:
 
 .L22:
 	#  Read the r/m
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx		# disp
 	51			#	PUSH	%ecx
@@ -1307,7 +1320,7 @@ type_05:
 
 	# Skip ws, read a comma, then skip more ws and read the '%' and reg
 	50			#	PUSH	%eax	# store r/m
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
 	E8 getone		#	CALL	getone
@@ -1326,7 +1339,7 @@ type_05:
 .L22a:
 	#  Write the ModR/M byte and (if present) displacement.
 	#  So: $edx is r/m, $eax is reg
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx	# ofile
 	51			#	PUSH	%ecx
 	FF 75 A0		#	PUSH	-96(%ebp)	# disp
 	50			#	PUSH	%eax		# reg
@@ -1337,7 +1350,7 @@ type_05:
 
 type_06_rm:
 	#  %edx contains the opcode info, so %dh+2 is the opcode.  Write it.
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx
 	51			#	PUSH	%ecx
 	88 F0			#	MOVB	%dh, %al
 	83 C0 02		#	ADDL	$2, %eax
@@ -1350,7 +1363,7 @@ type_06_rm:
 
 type_06_reg:
 	#  %edx contains the opcode info, so %dh is the opcode.  Write it.
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx
 	51			#	PUSH	%ecx
 	88 F0			#	MOVB	%dh, %al
 	50			#	PUSH	%eax
@@ -1360,7 +1373,7 @@ type_06_reg:
 
 .L23:
 	#  Read the register
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
 	E8 getone		#	CALL	getone
@@ -1376,7 +1389,7 @@ type_06_reg:
 	#  We expect %eax to contain the reg bytes already read, and
 	#  %ebx the number of bits.
 	50			#	PUSH	%eax	# store reg
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
 	E8 getone		#	CALL	getone
@@ -1405,7 +1418,7 @@ type_06_reg:
 	59			#	POP	%ecx
 	5A			#	POP	%edx		# opinfo
 
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx
 	51			#	PUSH	%ecx		# ofile
 	50			#	PUSH	%eax		# data
 	53			#	PUSH	%ebx		# bits
@@ -1430,7 +1443,7 @@ type_06_imm:
 	52			#	PUSH	%edx		# store op info
 
 	#  Write the opcode byte from %dl
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx
 	51			#	PUSH	%ecx
 	88 D0			#	MOVB	%dl, %al
 	50			#	PUSH	%eax
@@ -1444,7 +1457,7 @@ type_06_imm:
 	#  the r/m argument which means we don't know whether it's a got 
 	#  a disp word.
 
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
 	59			#	POP	%ecx
@@ -1455,7 +1468,7 @@ type_06_imm:
 	#  We've got a an intermediate label.  Get first char into buffer,
 	#  and then read the label.
 	52			#	PUSH	%edx		# store op info
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 getone		#	CALL	getone
 	88 45 A0		#	MOVB	%al, -96(%ebp)
@@ -1496,7 +1509,7 @@ type_06_imm:
 	59			#	POP	%ecx
 
 	#  And write the immediate data
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx
 	51			#	PUSH	%ecx
 	50			#	PUSH	%eax		# byte(s)
 	53			#	PUSH	%ebx		# bits
@@ -1510,7 +1523,7 @@ type_06_imm:
 type_06:
 	#  First, skip whitespace, leaving %eax containing the peek-ahead char
 	52			#	PUSH	%edx	# opcode info
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
 	59			#	POP	%ecx	# ifile
@@ -1532,19 +1545,25 @@ type_06:
 
 hex_bytes:
 	#  Skip horizontal whitespace and read a byte
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
+	59			#	POP	%ecx
+
+	#  Is it a line ending?  If so, end parsing the directive.
+	3C 0A			#	CMPB	$0x0A, %al	# '\n'
+	0F 84 insn_end		#	JE	insn_end
+	3C 3B			#	CMPB	$0x3B, %al	# ';'
+	0F 84 insn_end		#	JE	insn_end
+	3C 23			#	CMPB	$0x23, %al	# '#'
+	0F 84 insn_end		#	JE	insn_end
+
+	51			#	PUSH	%ecx		# ifile
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
 	51			#	PUSH	%ecx
 	E8 readonex		#	CALL	readonex
 	5A			#	POP	%edx
 	5A			#	POP	%edx
-
-	#  Is it a line ending?  If so, end parsing the directive.
-	80 7D A0 0A		#	CMPL	$0x0A, -96(%ebp)	# '\n'
-	B8 01 00 00 00		#	MOVL	$1, %eax
-	0F 84 ret1		#	JE	ret1	# to main loop
 
 	#  Start parsing an octet
 	FF 75 A0		#	PUSH	-96(%ebp)
@@ -1555,7 +1574,7 @@ hex_bytes:
 
 	#  Read the next byte
 	50			#	PUSH	%eax
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	8D 4D A1		#	LEA	-95(%ebp), %ecx
 	51			#	PUSH	%ecx
@@ -1575,7 +1594,7 @@ hex_bytes:
 	00 D8			#	ADDB	%bl, %al
 
 	#  Byte is in %al; let's write it, and increment the address counter
-	8D 8D 90 FB FF FF	#	LEA	-1136(%ebp), %ecx	# ofile
+	8D 8D 90 EF FF FF	#	LEA	-4208(%ebp), %ecx	# ofile
 	51			#	PUSH	%ecx
 	50			#	PUSH	%eax
 	E8 writebyte		#	CALL	writebyte
@@ -1608,7 +1627,7 @@ tl_ident:
 	0F 84 labeldef		#	JE	labeldef
 
 	#  It must be either a directive or an instruction
-	8D 85 98 FB FF FF	#	LEA	-1128(%ebp), %eax	# ifile
+	8D 85 98 EF FF FF	#	LEA	-4200(%ebp), %eax	# ifile
 	51			#	PUSH	%ecx	# we care about this
 	50			#	PUSH	%eax
 	52			#	PUSH	%edx
@@ -1643,24 +1662,24 @@ tl_ident:
 
 	#  Instructions with 8-bit operands
 	BB 08 00 00 00		#	MOVL	$8, %ebx	# 8-bit mode
-	80 FA 00		#	CMPB	$00, %dl
+	80 FA 00		#	CMPB	$0, %dl
 	0F 84 type_00		#	JE	type_00
-	80 FA 01		#	CMPB	$01, %dl
+	80 FA 01		#	CMPB	$1, %dl
 	0F 84 type_01		#	JE	type_01
-	80 FA 03		#	CMPB	$03, %dl
+	80 FA 03		#	CMPB	$3, %dl
 	0F 84 type_03		#	JE	type_03
-	80 FA 06		#	CMPB	$06, %dl
+	80 FA 06		#	CMPB	$6, %dl
 	0F 84 type_06		#	JE	type_06
 
 	#  Instructions with 32-bit operands
 	BB 20 00 00 00		#	MOVL	$32, %ebx	# 32-bit mode
-	80 FA 02		#	CMPB	$02, %dl
+	80 FA 02		#	CMPB	$2, %dl
 	0F 84 type_01		#	JE	type_01		# 1 & 2 same
-	80 FA 04		#	CMPB	$04, %dl
+	80 FA 04		#	CMPB	$4, %dl
 	0F 84 type_03		#	JE	type_03		# 3 & 4 same
-	80 FA 05		#	CMPB	$05, %dl
+	80 FA 05		#	CMPB	$5, %dl
 	0F 84 type_05		#	JE	type_05
-	80 FA 07		#	CMPB	$07, %dl
+	80 FA 07		#	CMPB	$7, %dl
 	0F 84 type_06		#	JE	type_06		# 6 & 7 same
 
 	BB 03 00 00 00          #       MOVL    $3, %ebx
@@ -1670,19 +1689,19 @@ tl_ident:
 	#  --- The main loop
 main:
 	89 E5			#	MOVL	%esp, %ebp
-	81 EC 70 04 00 00	#	SUBL	$1136, %esp
+	81 EC 70 04 00 00	#	SUBL	$4208, %esp
 	#  label* label_end = &labels[0];
-	8D 85 A0 FB FF FF	#	LEA	-1120(%ebp), %eax
+	8D 85 A0 EF FF FF	#	LEA	-4192(%ebp), %eax
 	89 45 F8		#	MOVL	%eax, -8(%ebp)
-	#  label* label_end_store = &labels[64];  # 1024 == 64 * sizeof(label)
-	81 C0 00 04 00 00	#	ADDL	$1024, %eax
+	#  label* label_end_store = &labels[256];  # 4096 == 256*sizeof(label)
+	81 C0 00 10 00 00	#	ADDL	$4096, %eax
 	89 45 F4		#	MOVL	%eax, -12(%ebp)
 	#  memset( &stdout, 0, sizeof(ofile) );
-	C7 85 90 FB FF FF 01 00 00 00 #	MOVL	$0, -1136(%ebp) # 1 == stdout
-	C7 85 94 FB FF FF 00 00 00 00 #	MOVL	$0, -1132(%ebp)
+	C7 85 90 EF FF FF 01 00 00 00 #	MOVL	$1, -4208(%ebp) # 1 == stdout
+	C7 85 94 EF FF FF 00 00 00 00 #	MOVL	$0, -4204(%ebp)
 	#  memset( &stdin, 0, sizeof(ifile) );
-	C7 85 98 FB FF FF 00 00 00 00 #	MOVL	$0, -1128(%ebp) # 0 == stdin
-	C7 85 9C FB FF FF 00 00 00 00 #	MOVL	$0, -1124(%ebp)
+	C7 85 98 EF FF FF 00 00 00 00 #	MOVL	$0, -4200(%ebp) # 0 == stdin
+	C7 85 9C EF FF FF 00 00 00 00 #	MOVL	$0, -4196(%ebp)
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
 	E8 getip		#	CALL	getip
@@ -1692,7 +1711,7 @@ main:
 
 .L8:
 	#  Read one byte (not with readonex because EOF is permitted)
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx
 	51			#	PUSH	%ecx
 	8D 4D A0		#	LEA	-96(%ebp), %ecx
 	51			#	PUSH	%ecx
@@ -1725,9 +1744,9 @@ main:
 	83 F8 00		#	CMP	$1, %eax
 	0F 84 .L8		#	JE	.L8
 
-	#  We only get here if we've had an instruction (as opposed to a 
-	#  comment, label, or directive.)
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	#  We only get here if we've had an instruction or directive (as 
+	#  opposed to a comment, label, or whitespace.)
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 skiphws		#	CALL	skiphws
 	59			#	POP	%ecx	# ifile
@@ -1745,7 +1764,7 @@ main:
 	0F 85 .L8		#	JNE	.L8	# Permissive
 
 	#  Skip over the semicolon (statement separator)
-	8D 8D 98 FB FF FF	#	LEA	-1128(%ebp), %ecx	# ifile
+	8D 8D 98 EF FF FF	#	LEA	-4200(%ebp), %ecx	# ifile
 	51			#	PUSH	%ecx
 	E8 getone		#	CALL	getone
 	59			#	POP	%ecx	# ifile
