@@ -323,22 +323,32 @@ success:
 
 ####	#  Function:	void writebyte( int c, ofile* of )
 	#  Write out character c
+.L5d:
+	5B			#	POP	%ebx
+	5D			#	POP	%ebp
+	C3			#	RET
+
 writebyte:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
 	BA 01 00 00 00		#	MOVL	$1, %edx
+	
 .L5a:
 	53			#	PUSH	%ebx
-	8D 4D 08		#	LEA	8(%ebp), %ecx	# ofile*
+
+	#  Increment counter
 	8B 5D 0C		#	MOVL	12(%ebp), $ebx
 	01 53 04		#	ADDL	%edx, 4(%ebx)	# inc counter
+
+	#  If the fd is -ve, we're not actually writing
 	8B 1B 			#	MOVL	(%ebx), %ebx	# fd from ofile
+	83 FB 00		#	CMPL	$0, %ebx
+	0F 8C .L5d		#	JL	.L5d
+
+	8D 4D 08		#	LEA	8(%ebp), %ecx	# ofile*
 	B8 04 00 00 00		#	MOVL	$4, %eax   # 4 == __NR_write
 	CD 80			#	INT	$0x80
-
-	5B			#	POP	%ebx
-	5D			#	POP	%ebp
-	C3			#	RET
+	E9 .L5d			#	JMP	.L5d
 
 
 ####	#  Function:	void writedword( int dw, ofile* of )
@@ -889,6 +899,12 @@ read_rm:
 	#  so the end of instruction happens after writing the number of bits
 	#  in the BITS parameter).  Check the offset can be expressed as a
 	#  BITS-bit signed (2's-complement) integer.
+.L11b:
+	#  The label wasn't found.  Only allow this if we're not writing.
+	81 BB 90 EF FF FF 00 00 00 00 #	CMPL	$0, -4208(%ebx)
+	0F 8D error		#	JGE	error
+	31 C0			#	XORL	%eax, %eax
+
 .L11a:
 	5F			#	POP	%edi
 	5E			#	POP	%esi
@@ -921,7 +937,7 @@ get_label:
 
 	83 C7 10		#	ADDL	$16, %edi
 	3B 7B F8		#	CMPL	-8(%ebx), %edi
-	0F 8D error		#	JGE	error
+	0F 8D .L11b		#	JGE	.L11b
 	51			#	PUSH	%ecx
 	56			#	PUSH	%esi
 	57			#	PUSH	%edi
@@ -1175,8 +1191,8 @@ write_modrm:
 	#      -12(%ebp)	label* label_end_store
 	#      -96(%ebp)	char buffer[80]
 	#    -4192(%ebp)	label labels[64]
-	#    -4200(%ebp)        ifile stdout
-	#    -4208(%ebp)	ofile stdin
+	#    -4200(%ebp)        ifile fin
+	#    -4208(%ebp)	ofile fout
 	#
 	#  where label is a { char name[12]; int addr; },
 	#  instrct is a { char name[12]; char type; char data[3]; },
@@ -1682,32 +1698,8 @@ tl_ident:
 	80 FA 07		#	CMPB	$7, %dl
 	0F 84 type_06		#	JE	type_06		# 6 & 7 same
 
-	BB 03 00 00 00          #       MOVL    $3, %ebx
-	E9 success		#	JMP	success
+	E9 error		#	JMP	error
 	C3			#	RET	# to main loop
-
-	#  --- The main loop
-main:
-	89 E5			#	MOVL	%esp, %ebp
-	81 EC 70 04 00 00	#	SUBL	$4208, %esp
-	#  label* label_end = &labels[0];
-	8D 85 A0 EF FF FF	#	LEA	-4192(%ebp), %eax
-	89 45 F8		#	MOVL	%eax, -8(%ebp)
-	#  label* label_end_store = &labels[256];  # 4096 == 256*sizeof(label)
-	81 C0 00 10 00 00	#	ADDL	$4096, %eax
-	89 45 F4		#	MOVL	%eax, -12(%ebp)
-	#  memset( &stdout, 0, sizeof(ofile) );
-	C7 85 90 EF FF FF 01 00 00 00 #	MOVL	$1, -4208(%ebp) # 1 == stdout
-	C7 85 94 EF FF FF 00 00 00 00 #	MOVL	$0, -4204(%ebp)
-	#  memset( &stdin, 0, sizeof(ifile) );
-	C7 85 98 EF FF FF 00 00 00 00 #	MOVL	$0, -4200(%ebp) # 0 == stdin
-	C7 85 9C EF FF FF 00 00 00 00 #	MOVL	$0, -4196(%ebp)
-
-	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
-	E8 getip		#	CALL	getip
-	81 C0 mnemonics		#	ADDL	mnemonics, %eax
-	81 C0 06 00 00 00	#	ADDL	$6, %eax   # len of prev instr
-	89 45 FC		#	MOVL	%eax, -4(%ebp)
 
 .L8:
 	#  Read one byte (not with readonex because EOF is permitted)
@@ -1721,7 +1713,7 @@ main:
 	83 F8 00		#	CMPL	$0, %eax
 	0F 8C error		#	JL	error
 	89 C3			#	MOVL	%eax, %ebx  # zero exit status
-	0F 84 success		#	JE	success
+	0F 84 ret1		#	JE	ret1
 
 	#  Is the byte white space?  If so, loop back
 	8A 45 A0		#	MOVB	-96(%ebp), %al
@@ -1751,15 +1743,9 @@ main:
 	E8 skiphws		#	CALL	skiphws
 	59			#	POP	%ecx	# ifile
 
-	#  The next character should be either a '\n', a '#' or a ';',
-	#  but we'll be permissive here.  Effectively we make the ';'
-	#  between instructions on a single line optional.
-#	3C 0A			#	CMPB	$0x0a, %al	# '\n'
-#	0F 84 .L8		#	JE	.L8
-#	3C 23			#	CMPB	$0x23, %al	# '#'
-#	0F 84 .L8		#	JE	.L8
-#	3C 3B			#	CMPB	$0x3B, %al	# ';'
-#	0F 85 error		#	JNE	error
+	#  Ordinarily, the next character should be either a '\n', '#' or ';',
+	#  but we'll be permissive here to allow things like REPE CMPSB.  So
+	#  we make the ';' between instructions on a single line optional.
 	3C 3B			#	CMPB	$0x3B, %al	# ';'
 	0F 85 .L8		#	JNE	.L8	# Permissive
 
@@ -1771,7 +1757,61 @@ main:
 
 	#  Nothing else is permitted here.	
 	E9 .L8		#	JMP	.L8
+	#  --- The main loop
+main:
+	89 E5			#	MOVL	%esp, %ebp
+	81 EC 74 04 00 00	#	SUBL	$4212, %esp
+	#  label* label_end = &labels[0];
+	8D 85 A0 EF FF FF	#	LEA	-4192(%ebp), %eax
+	89 45 F8		#	MOVL	%eax, -8(%ebp)
+	#  label* label_end_store = &labels[256];  # 4096 == 256*sizeof(label)
+	81 C0 00 10 00 00	#	ADDL	$4096, %eax
+	89 45 F4		#	MOVL	%eax, -12(%ebp)
 
+	#  Check we have a command line argument
+	81 7D 00 02 00 00 00	#	CMPL	$2, 0(%ebp)
+	0F 85 error		#	JNE	error
+
+	#  Open the file
+	31 C9			#	XORL	%ecx, %ecx
+	8B 5D 08		#	MOVL	8(%ebp), %ebx
+	B8 05 00 00 00		#	MOVL	$5, %eax	# 3 = __NR_open
+	CD 80			#	INT	$0x80
+	83 F8 00		#	CMPL	$0, %eax
+	0F 8C error		#	JL	error
+
+	#  memset( &fout, 0, sizeof(ofile) );
+	#  No write on first pass, so fout.fd = -1
+	C7 85 90 EF FF FF FF FF FF FF #	MOVL	$-1, -4208(%ebp)
+	C7 85 94 EF FF FF 00 00 00 00 #	MOVL	$0, -4204(%ebp)
+
+	#  memset( &fin, 0, sizeof(ifile) );
+	89 85 98 EF FF FF	#	MOVL	%eax, -4200(%ebp)
+	C7 85 9C EF FF FF 00 00 00 00 #	MOVL	$0, -4196(%ebp)
+
+	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
+	E8 getip		#	CALL	getip
+	81 C0 mnemonics		#	ADDL	mnemonics, %eax
+	81 C0 06 00 00 00	#	ADDL	$6, %eax   # len of prev instr
+	89 45 FC		#	MOVL	%eax, -4(%ebp)
+
+	E8 .L8			#	CALL	.L8
+
+	#  Set fout.fd = 1 (for stdout) to initiate writing, and reset counter
+	C7 85 90 EF FF FF 01 00 00 00 #	MOVL	$1, -4208(%ebp)
+	C7 85 94 EF FF FF 00 00 00 00 #	MOVL	$0, -4204(%ebp)
+
+	#  Seek to the beginning of the file for second pass
+	31 D2			#	XORL	%edx, %edx	SEEK_SET=0
+	31 C9			#	XORL	%ecx, %ecx	offset = 0
+	8B 9D 98 EF FF FF	#	MOVL	-4200(%ebp), %ebx	# fd
+	C7 C0 13 00 00 00	#	MOVL	$19, %eax	# _NR_lseek
+	CD 80			#	INT	$0x80
+	81 F8 00 00 00 00	#	CMPL	$0, %eax
+	0F 8C success		#	JL	error
+
+	E8 .L8			#	CALL	.L8
+	E9 success		#	JMP	success
 
 ####    #  And finally, the entry point.
 	#  Last per requirement for elfify.

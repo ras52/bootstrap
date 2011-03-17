@@ -323,22 +323,31 @@ success:
 
 ####	#  Function:	void writebyte( int c, ofile* of )
 	#  Write out character c
+.L5d:
+	POP	%ebx
+	POP	%ebp
+	RET
+
 writebyte:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	MOVL	$1, %edx
 .L5a:
 	PUSH	%ebx
-	LEA	8(%ebp), %ecx	# ofile*
+
+	#  Increment counter
 	MOVL	12(%ebp), %ebx
 	ADDL	%edx, 4(%ebx)	# inc counter
+
+	#  If the fd is -ve, we're not actually writing
 	MOVL	(%ebx), %ebx	# fd from ofile
+	CMPL	$0, %ebx
+	JL	.L5d
+
+	LEA	8(%ebp), %ecx	# ofile*
 	MOVL	$4, %eax   # 4 == __NR_write
 	INT	$0x80
-
-	POP	%ebx
-	POP	%ebp
-	RET
+	JMP	.L5d
 
 
 ####	#  Function:	void writedword( int dw, ofile* of )
@@ -889,6 +898,12 @@ read_rm:
 	#  so the end of instruction happens after writing the number of bits
 	#  in the BITS parameter).  Check the offset can be expressed as a
 	#  BITS-bit signed (2's-complement) integer.
+.L11b:
+	#  The label wasn't found.  Only allow this if we're not writing.
+	CMPL	$0, -4208(%ebx)
+	JG	error
+	XORL	%eax, %eax
+
 .L11a:
 	POP	%edi
 	POP	%esi
@@ -921,7 +936,7 @@ get_label:
 
 	ADDL	$16, %edi
 	CMPL	-8(%ebx), %edi
-	JGE	error
+	JGE	.L11b
 	PUSH	%ecx
 	PUSH	%esi
 	PUSH	%edi
@@ -1174,8 +1189,8 @@ write_modrm:
 	#      -12(%ebp)	label* label_end_store
 	#      -96(%ebp)	char buffer[80]
 	#    -4192(%ebp)	label labels[64]
-	#    -4200(%ebp)        ifile stdout
-	#    -4208(%ebp)	ofile stdin
+	#    -4200(%ebp)        ifile fin
+	#    -4208(%ebp)	ofile fout
 	#
 	#  where label is a { char name[12]; int addr; },
 	#  instrct is a { char name[12]; char type; char data[3]; },
@@ -1679,32 +1694,8 @@ tl_ident:
 	CMPB	$7, %dl
 	JE	type_06		# 6 & 7 same
 
-	MOVL    $3, %ebx
-	JMP	success
+	JMP	error
 	RET	# to main loop
-
-	#  --- The main loop
-main:
-	MOVL	%esp, %ebp
-	SUBL	$4208, %esp
-	#  label* label_end = &labels[0];
-	LEA	-4192(%ebp), %eax
-	MOVL	%eax, -8(%ebp)
-	#  label* label_end_store = &labels[256];  # 4096 == 256*sizeof(label)
-	ADDL	$4096, %eax
-	MOVL	%eax, -12(%ebp)
-	#  memset( &stdout, 0, sizeof(ofile) );
-	MOVL	$1, -4208(%ebp) # 1 == stdout
-	MOVL	$0, -4204(%ebp)
-	#  memset( &stdin, 0, sizeof(ifile) );
-	MOVL	$0, -4200(%ebp) # 0 == stdin
-	MOVL	$0, -4196(%ebp)
-
-	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
-	CALL	getip
-	ADDL	mnemonics, %eax
-	ADDL	$6, %eax   # len of prev instr
-	MOVL	%eax, -4(%ebp)
 
 .L8:
 	#  Read one byte (not with readonex because EOF is permitted)
@@ -1718,7 +1709,7 @@ main:
 	CMPL	$0, %eax
 	JL	error
 	MOVL	%eax, %ebx  # zero exit status
-	JE	success
+	JE	ret1
 
 	#  Is the byte white space?  If so, loop back
 	MOVB	-96(%ebp), %al
@@ -1748,15 +1739,9 @@ main:
 	CALL	skiphws
 	POP	%ecx	# ifile
 
-	#  The next character should be either a '\n', a '#' or a ';',
-	#  but we'll be permissive here.  Effectively we make the ';'
-	#  between instructions on a single line optional.
-#	CMPB	$0x0a, %al	# '\n'
-#	JE	.L8
-#	CMPB	$0x23, %al	# '#'
-#	JE	.L8
-#	CMPB	$0x3B, %al	# ';'
-#	JNE	error
+	#  Ordinarily, the next character should be either a '\n', '#' or ';',
+	#  but we'll be permissive here to allow things like REPE CMPSB.  So
+	#  we make the ';' between instructions on a single line optional.
 	CMPB	$0x3B, %al	# ';'
 	JNE	.L8	# Permissive
 
@@ -1768,6 +1753,61 @@ main:
 
 	#  Nothing else is permitted here.	
 	JMP	.L8
+
+	#  --- The main loop
+main:
+	MOVL	%esp, %ebp
+	SUBL	$4212, %esp
+	#  label* label_end = &labels[0];
+	LEA	-4192(%ebp), %eax
+	MOVL	%eax, -8(%ebp)
+	#  label* label_end_store = &labels[256];  # 4096 == 256*sizeof(label)
+	ADDL	$4096, %eax
+	MOVL	%eax, -12(%ebp)
+
+	#  Check we have a command line argument
+	CMPL	$2, 0(%ebp)
+	JNE	error
+
+	#  Open the file
+	XORL	%ecx, %ecx	# 0 == O_RDONLY
+	MOVL	8(%ebp), %ebx
+	MOVL	$5, %eax	# 5 == __NR_open
+	INT	$0x80
+	CMPL	$0, %eax
+	JL	error
+
+	#  memset( &fout, 0, sizeof(ofile) );
+	#  No write on first pass, so fout.fd = -1
+	MOVL	$-1, -4208(%ebp)
+	MOVL	$0, -4204(%ebp)
+	#  memset( &fin, 0, sizeof(ifile) );
+	MOVL	%eax, -4200(%ebp) # 0 == stdin
+	MOVL	$0, -4196(%ebp)
+
+	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
+	CALL	getip
+	ADDL	mnemonics, %eax
+	ADDL	$6, %eax   # len of prev instr
+	MOVL	%eax, -4(%ebp)
+
+	CALL	.L8
+
+	#  Set fout.fd = 1 (for stdout) to initiate writing, and reset counter
+	MOVL	$1, -4208(%ebp)
+	MOVL	$0, -4204(%ebp)
+
+	#  Seek to the beginning of the file for second pass
+	XORL	%edx, %edx		# SEEK_SET=0
+	XORL	%ecx, %ecx		# offset = 0
+	MOVL	-4200(%ebp), %ebx	# fd
+	MOVL	$19, %eax		# _NR_lseek
+	INT	$0x80
+	CMPL	$0, %eax
+	JL	error
+
+	CALL	.L8
+	JMP	success
 
 
 ####    #  And finally, the entry point.
