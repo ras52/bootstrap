@@ -185,27 +185,8 @@ mnemonics:
 # ########################################################################
 
 
-####	#  Function: void* getip(void)
-	#  A function to load %eip for the calling frame (specifically
-	#  the return address) into %eax.  The usual trick of
-	#    CALL next_line; next_line: POP %eax
-	#  relies on a forward jump, so we need a separate function.
-getip:
-	PUSH	%ebp
-	MOVL	%esp, %ebp
-	MOVL	4(%ebp), %eax
-	POP	%ebp
-	RET
-
-####    #  Function: bool isws(char)
-	#  Tests whether its argument is in [ \t\r\n]
-
-	#  As with many of the functions here, it is turned upside down
-	#  so the entry point is in the middle.  This is because unhexl
-	#  is limited to jumps up the file.
-.L1:
-	POP	%ebp
-	RET
+####    #  Function: bool ishws(char)
+	#  Tests whether its argument is in [ \t]
 ishws:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -216,8 +197,12 @@ ishws:
 	CMPB	$0x09, %al	# '\t'
 	JE	.L1
 	XORL	%eax, %eax
-	JMP	.L1
+.L1:
+	POP	%ebp
+	RET
 
+####    #  Function: bool isws(char)
+	#  Tests whether its argument is in [ \t\r\n]
 isws:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -231,11 +216,6 @@ isws:
 
 ####	#  Function: bool isidchr(char)
 	#  Tests whether its argument is in [0-9A-Za-z_]
-.L2:
-	XORL	%eax, %eax
-.L3:
-	POP	%ebp
-	RET
 isidchr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -255,7 +235,11 @@ isidchr:
 	JL	.L2
 	CMPB	$0x7A, %al	# 'z'
 	JLE	.L3
-	JMP	.L2
+.L2:
+	XORL	%eax, %eax
+.L3:
+	POP	%ebp
+	RET
 
 
 ####	#  Function: bool isid1chr(char)
@@ -272,17 +256,6 @@ isid1chr:
 ####	#  Function: int xchr(int c)
 	#  Tests whether its argument, c, is a character in [0-9A-F], and if 
 	#  so, coverts it to an integer; otherwise returns -1.
-.L6:
-	SUBB	$0x37, %al	# 'A'-10
-.L7:
-	POP	%ebp
-	RET
-.L4:
-	MOVB	$-1, %al
-	JMP	.L7
-.L5:
-	SUBB	$0x30, %al	# '0'
-	JMP	.L7
 xchr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -294,8 +267,17 @@ xchr:
 	CMPB	$0x41, %al	# 'A'
 	JL	.L4
 	CMPB	$0x46, %al	# 'F'
-	JLE	.L6
-	JMP	.L4
+	JG	.L4
+	SUBB	$0x37, %al	# 'A'-10
+	JMP	.L7
+.L4:
+	MOVB	$-1, %al
+	JMP	.L7
+.L5:
+	SUBB	$0x30, %al	# '0'
+.L7:
+	POP	%ebp
+	RET
 
 
 ####	#  Function: int dchr(int c)
@@ -323,11 +305,6 @@ success:
 
 ####	#  Function:	void writebyte( int c, ofile* of )
 	#  Write out character c
-.L5d:
-	POP	%ebx
-	POP	%ebp
-	RET
-
 writebyte:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -347,7 +324,11 @@ writebyte:
 	LEA	8(%ebp), %ecx	# ofile*
 	MOVL	$4, %eax   # 4 == __NR_write
 	INT	$0x80
-	JMP	.L5d
+.L5d:
+	POP	%ebx
+	POP	%ebp
+	RET
+
 
 
 ####	#  Function:	void writedword( int dw, ofile* of )
@@ -360,14 +341,6 @@ writedword:
 
 
 ####	#  Function:	void writedata( int bits, int data, ofile* of )
-.L5b:
-	CALL	writebyte
-.L5c:
-	POP	%edx
-	POP	%edx
-	POP	%ebp
-	RET
-
 writedata:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -378,6 +351,14 @@ writedata:
 	JE	.L5b
 	CALL	writedword
 	JMP	.L5c
+.L5b:
+	CALL	writebyte
+.L5c:
+	POP	%edx
+	POP	%edx
+	POP	%ebp
+	RET
+
 	
 
 ####	#  Function:	void unread( char c, ifile* f )
@@ -405,16 +386,6 @@ unread:
 	#
 	#  This function contains the sole read syscall (syscall #3) so we 
 	#  can plumb in use of the pushback slot (pback_slot)
-.L9:
-	MOVL	$1, %edx
-	MOVL	(%ebx), %ebx	# fd from ifile
-	MOVL	$3, %eax	# 3 = __NR_read
-	INT	$0x80
-.L9a:
-	POP	%ebx
-	POP	%ebp
-	RET
-	
 readone:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -433,6 +404,16 @@ readone:
 	MOVL	$1, %eax
 	JMP	.L9a
 
+.L9:
+	MOVL	$1, %edx
+	MOVL	(%ebx), %ebx	# fd from ifile
+	MOVL	$3, %eax	# 3 = __NR_read
+	INT	$0x80
+.L9a:
+	POP	%ebx
+	POP	%ebp
+	RET
+	
 
 ####	#  Function:	void readonex( char* p, ifile* f ) 
 	#  Reads one byte into p which should already be set (as above);
@@ -1786,9 +1767,14 @@ main:
 	MOVL	$0, -4196(%ebp)
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
-	CALL	getip
-	ADDL	mnemonics, %eax
-	ADDL	$6, %eax   # len of prev instr
+	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
+	CALL	.L8a
+.L8a:
+	POP	%eax		# Currently assembled sub-optimally as 2 bytes
+	ADDL	mnemonics, %eax	# Assembled as six bytes (op, modrm, imm32)
+
+	#  And add the length of the previous two instructions
+	ADDL	$8, %eax   # len of prev two instr
 	MOVL	%eax, -4(%ebp)
 
 	CALL	.L8

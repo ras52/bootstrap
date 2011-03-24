@@ -197,8 +197,8 @@ getip:
 	5D      		#	POP	%ebp
 	C3   			#	RET
 
-####    #  Function: bool isws(char)
-	#  Tests whether its argument is in [ \t\r\n]
+####    #  Function: bool ishws(char)
+	#  Tests whether its argument is in [ \t]
 
 	#  As with many of the functions here, it is turned upside down
 	#  so the entry point is in the middle.  This is because unhexl
@@ -218,6 +218,8 @@ ishws:
 	31 C0			#	XORL	%eax, %eax
 	E9 .L1			#	JMP	.L1
 
+####    #  Function: bool isws(char)
+	#  Tests whether its argument is in [ \t\r\n]
 isws:
 	55			#	PUSH	%ebp
 	89 E5			#	MOVL	%esp, %ebp
@@ -1760,7 +1762,7 @@ tl_ident:
 	#  --- The main loop
 main:
 	89 E5			#	MOVL	%esp, %ebp
-	81 EC 74 04 00 00	#	SUBL	$4212, %esp
+	81 EC 74 10 00 00	#	SUBL	$4212, %esp
 	#  label* label_end = &labels[0];
 	8D 85 A0 EF FF FF	#	LEA	-4192(%ebp), %eax
 	89 45 F8		#	MOVL	%eax, -8(%ebp)
