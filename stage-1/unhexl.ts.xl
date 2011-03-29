@@ -1,3 +1,8 @@
+# unhexl.ts.xl
+
+# Copyright (C) 2009, 2011 Richard Smith <richard@ex-parrot.com>
+# All rights reserved.
+
 ####    #  Function: bool isws(char)
 	#  Tests whether its argument is in [ \t\n]
 

@@ -1,3 +1,8 @@
+# Makefile
+
+# Copyright (C) 2009, 2011 Richard Smith <richard@ex-parrot.com>
+# All rights reserved.
+
 STAGES = 2
 
 all:

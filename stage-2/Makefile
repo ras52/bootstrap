@@ -1,3 +1,8 @@
+# stage-2/Makefile
+
+# Copyright (C) 2010, 2011 Richard Smith <richard@ex-parrot.com>
+# All rights reserved.
+
 SHELL = /bin/sh
 PATH  = .
 
