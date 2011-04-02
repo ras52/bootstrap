@@ -10,8 +10,9 @@ CHMOD = /bin/chmod
 RM    = /bin/rm
 CMP   = /usr/bin/cmp
 
-
 all:
+
+init:
 
 check:	check-unhex
 

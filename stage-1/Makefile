@@ -9,16 +9,23 @@ PATH  = .
 CHMOD = /bin/chmod
 RM    = /bin/rm
 CMP   = /usr/bin/cmp
+LN_S  = /bin/ln -s
+MAKE  = /usr/bin/make
 
+all:	unhexl elfify 
 
-all:	elfify unhexl
+init unhexl elfify: unhex
+
+unhex:
+	$(MAKE) -C ../stage-0
+	$(LN_S) ../stage-0/unhex
 
 elfify:	elfify.x
-	../stage-0/unhex < elfify.x > elfify
+	unhex < elfify.x > elfify
 	$(CHMOD) a+x elfify
 
 unhexl:	elfify unhexl.ts.x
-	../stage-0/unhex < unhexl.ts.x > unhexl.ts
+	unhex < unhexl.ts.x > unhexl.ts
 	elfify unhexl.ts > unhexl
 	$(CHMOD) a+x unhexl
 	$(RM) unhexl.ts
@@ -38,4 +45,4 @@ check-elfify:	elfify
 	! elfify no-such-file
 	
 clean:
-	$(RM) -f unhexl elfify unhexl.ts unhexl2.ts unhexl2
+	$(RM) -f unhex unhexl elfify unhexl.ts unhexl2.ts
