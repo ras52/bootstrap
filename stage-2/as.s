@@ -31,7 +31,7 @@ mnemonics:
 .hex_bytes  50 4F 50 46  00 00 00 00  00 00 00 00    00 01 9D 00    # POPF
 .hex_bytes  52 45 50 00  00 00 00 00  00 00 00 00    00 01 F3 00    # REP
 .hex_bytes  52 45 50 45  00 00 00 00  00 00 00 00    00 01 F3 00    # REPE
-.hex_bytes  52 45 50 4E  45 00 00 00  00 00 00 00    00 01 F4 00    # REPNE
+.hex_bytes  52 45 50 4E  45 00 00 00  00 00 00 00    00 01 F2 00    # REPNE
 .hex_bytes  4D 4F 56 53  42 00 00 00  00 00 00 00    00 01 A4 00    # MOVSB
 .hex_bytes  43 4D 50 53  42 00 00 00  00 00 00 00    00 01 A6 00    # CMPSB
 .hex_bytes  53 43 41 53  42 00 00 00  00 00 00 00    00 01 AE 00    # SCASB
