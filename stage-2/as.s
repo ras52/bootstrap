@@ -37,6 +37,7 @@ mnemonics:
 .hex_bytes  53 43 41 53  42 00 00 00  00 00 00 00    00 01 AE 00    # SCASB
 .hex_bytes  43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW
 .hex_bytes  43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE
+.hex_bytes  43 44 51 00  00 00 00 00  00 00 00 00    00 01 99 00    # CDQ
 .hex_bytes  52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
 
 
@@ -1599,7 +1600,7 @@ hex_bytes:
 	CALL	writebyte
 	POP	%ebx
 	POP	%ebx
-	JNE	hex_bytes
+	JMP	hex_bytes
 
 
 	#  --- Test for an identifier at top level in the source file.

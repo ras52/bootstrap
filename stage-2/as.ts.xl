@@ -37,6 +37,7 @@ mnemonics:
 53 43 41 53  42 00 00 00  00 00 00 00    00 01 AE 00    # SCASB
 43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW    [aka CBTW]
 43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE   [aka CWTL]
+43 44 51 00  00 00 00 00  00 00 00 00    00 01 99 00    # CDQ    [aka CLTD]
 52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00	# RET
 
 
@@ -1623,7 +1624,7 @@ hex_bytes:
 	E8 writebyte		#	CALL	writebyte
 	5B			#	POP	%ebx
 	5B			#	POP	%ebx
-	0F 85 hex_bytes		#	JNE	hex_bytes
+	E9 hex_bytes		#	JMP	hex_bytes
 
 
 	#  --- Test for an identifier at top level in the source file.
