@@ -12,6 +12,10 @@ CMP   = /usr/bin/cmp
 LN_S  = /bin/ln -s
 MAKE  = /usr/bin/make
 
+# XXX Temporarily use GNU ld to test our code
+LD    = /usr/bin/ld
+CP    = /bin/cp
+
 all:	as
 
 init as:	as0 elfify
@@ -31,12 +35,11 @@ check:	check-as
 
 check-as:	as as.s
 	as as.s
-	elfify as.o > as2
-	$(CHMOD) a+x as2
-	as2 as.s
-	elfify as.o > as3
-	$(CMP) as2 as3
-	$(RM) as.o as2 as3
+	$(LD) -o as2 as.o 
+	$(CP) as.s as2.s
+	as2 as2.s
+	$(CMP) as.o as2.o
+	$(RM) as.o as2.o as2.s as2
 
 clean:
 	$(RM) -f as0 elfify as as.ts as.o as2
