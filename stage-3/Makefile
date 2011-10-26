@@ -1,4 +1,4 @@
-# stage-2/Makefile
+# stage-3/Makefile
 
 # Copyright (C) 2010, 2011 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
@@ -42,4 +42,4 @@ check-as:	as as.s
 	$(RM) as.o as2.o as2.s as2
 
 clean:
-	$(RM) -f as0 elfify as as.ts as.o as2
+	$(RM) -f as0 elfify as as.ts as.o as2.o as2.s as2
