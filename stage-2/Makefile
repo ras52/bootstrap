@@ -18,7 +18,8 @@ init as:	unhexl elfify
 
 unhexl elfify:
 	$(MAKE) -C ../stage-1
-	for f in unhexl elfify; do $(LN_S) ../stage-1/$$f; done
+	$(LN_S) ../stage-1/unhexl
+	$(LN_S) ../stage-1/elfify
 
 as:	as.ts.xl
 	unhexl < as.ts.xl > as.ts
