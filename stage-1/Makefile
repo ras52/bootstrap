@@ -7,9 +7,9 @@ SHELL = /bin/sh
 PATH  = .
 
 CHMOD = /bin/chmod
-RM    = /bin/rm
+RM    = /bin/rm -f
 CMP   = /usr/bin/cmp
-LN_S  = /bin/ln -s
+LN_S  = /bin/ln -sf
 MAKE  = /usr/bin/make
 
 all:	unhexl elfify 
@@ -20,17 +20,17 @@ unhex:
 	$(MAKE) -C ../stage-0
 	$(LN_S) ../stage-0/unhex
 
-elfify:	elfify.x
+elfify:	unhex elfify.x
 	unhex < elfify.x > elfify
 	$(CHMOD) a+x elfify
 
-unhexl:	elfify unhexl.ts.x
+unhexl:	unhex elfify unhexl.ts.x
 	unhex < unhexl.ts.x > unhexl.ts
 	elfify unhexl.ts > unhexl
 	$(CHMOD) a+x unhexl
 	$(RM) unhexl.ts
 
-check:	check-unhexl check-elfify
+check:	check-unhexl
 
 check-unhexl:	unhexl elfify unhexl.ts.xl
 	unhexl < unhexl.ts.xl > unhexl.ts
@@ -40,9 +40,5 @@ check-unhexl:	unhexl elfify unhexl.ts.xl
 	$(CMP) unhexl.ts unhexl2.ts
 	$(RM) unhexl.ts unhexl2.ts unhexl2
 
-check-elfify:	elfify
-	! elfify
-	! elfify no-such-file
-	
 clean:
 	$(RM) -f unhex unhexl elfify unhexl.ts unhexl2.ts

@@ -7,7 +7,7 @@ SHELL = /bin/sh
 PATH  = .
 
 CHMOD = /bin/chmod
-RM    = /bin/rm
+RM    = /bin/rm -f
 CMP   = /usr/bin/cmp
 
 all:
