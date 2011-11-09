@@ -12,18 +12,14 @@ CMP   = /usr/bin/cmp
 LN_S  = /bin/ln -s
 MAKE  = /usr/bin/make
 
-# XXX Temporarily use GNU ld to test our code
-LD    = /usr/bin/ld
-CP    = /bin/cp
+all:	as ld
 
-all:	as
-
-init as:	as0 elfify
+init as ld:	as0 elfify
 
 as0 elfify:
 	$(MAKE) -C ../stage-2
-	$(LN_S) ../stage-2/elfify
 	$(LN_S) ../stage-2/as as0
+	$(LN_S) ../stage-2/elfify
 
 as:	as.s
 	as0 as.s > as.ts
@@ -31,15 +27,36 @@ as:	as.s
 	$(CHMOD) a+x as
 	$(RM) as.ts
 
-check:	check-as
+ld:	ld.s
+	as0 ld.s > ld.ts
+	elfify ld.ts > ld
+	$(CHMOD) a+x ld
+	$(RM) ld.ts
 
-check-as:	as as.s
+check:	check-as check-ld
+	$(RM) as2 ld2
+
+as2:	as ld as.s
 	as as.s
-	$(LD) -o as2 as.o 
-	$(CP) as.s as2.s
-	as2 as2.s
-	$(CMP) as.o as2.o
-	$(RM) as.o as2.o as2.s as2
+	ld -o as2 as.o
+	$(RM) as.o
+
+ld2:	as ld ld.s
+	as ld.s
+	ld -o ld2 ld.o
+	$(RM) ld.o
+
+check-as:	as2 ld2 as.s
+	as2 as.s
+	ld2 -o as3 as.o
+	$(CMP) as2 as3
+	$(RM) as.o as3
+
+check-ld:	as2 ld2 ld.s
+	as2 ld.s
+	ld2 -o ld3 ld.o
+	$(CMP) ld2 ld3
+	$(RM) ld.o ld3
 
 clean:
-	$(RM) -f as0 elfify as as.ts as.o as2.o as2.s as2
+	$(RM) -f as0 elfify as ld as.ts ld.ts as.o ld.o as2 ld2 as3 ld3

@@ -1,4 +1,4 @@
-# unhexl.ts.xl
+# as.s
 
 # Copyright (C) 2011 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
@@ -1987,7 +1987,7 @@ _start:
 	MOVL	$-1, -4208(%ebp)
 	MOVL	$0, -4204(%ebp)
 	#  memset( &fin, 0, sizeof(ifile) );
-	MOVL	%eax, -4200(%ebp) # 0 == stdin
+	MOVL	%eax, -4200(%ebp) # fin.fd
 	MOVL	$0, -4196(%ebp)
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
