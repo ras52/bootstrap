@@ -43,9 +43,9 @@ sect_hdr:
 # (Offset +0x3C requires text section size.)
 #
 #           name-str--\  PROGBITS--\    EXEC|ALLOC\  load-addr-\
-.hex_bytes  01 00 00 00  01 00 00 00    06 00 00 00  C0 80 04 08
+.hex_bytes  01 00 00 00  01 00 00 00    06 00 00 00  54 80 04 08
 #           offset----\  **size**--\    /-- Fig 4.12 in gABI --\
-.hex_bytes  20 01 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+.hex_bytes  54 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #           align-----\  entry-sz--\
 .hex_bytes  04 00 00 00  00 00 00 00
 
