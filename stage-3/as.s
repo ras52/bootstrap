@@ -263,6 +263,82 @@ elf_hdr:
 
 # ########################################################################
 
+####	#  Function: void* malloc(size_t sz)
+	#  Crude dynamic memory allocation, by punting directly to kernel 
+malloc:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	#  How many bytes do we need?
+	MOVL	8(%ebp), %ecx		# sz
+	ADDL	$0x4, %ecx		# header containing size
+
+	#  Punt off to mmap(MAP_ANON).  Highly suboptimal, but simple to code.
+	XORL	%eax, %eax		# 0 offset
+	PUSH	%eax
+	DECL	%eax
+	PUSH	%eax			# fd -1 for MAP_ANON
+	MOVL	$0x22, %eax		# MAP_ANON (0x20) | MAP_PRIVATE (0x2)
+	PUSH	%eax
+	MOVL	$0x3, %eax		# PROT_READ (0x1) | PROT_WRITE (0x2)
+	PUSH	%eax
+	PUSH	%ecx			# size
+	XORL	%eax, %eax		# NULL 
+	PUSH	%eax
+	MOVL	%esp, %ebx
+	MOVL	$90, %eax		# 90 == __NR_mmap
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JA	error			# unsigned comparison handles above
+	MOVL	-24(%ebp), %ecx		# restore %ecx
+	ADDL	$0x18, %esp		# 6x POP
+	
+	#  Write size into malloc header
+	MOVL	%ecx, (%eax)
+	ADDL	$4, %eax
+
+	#  Cleanup
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+####	#  Function: void* realloc(void* ptr, size_t sz)
+	#  Grows memory allocated by malloc, above
+realloc:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+	PUSH	%esi
+
+	#  Leave space for header (4 bytes)
+	MOVL	8(%ebp), %ebx		# ptr
+	SUBL	$4, %ebx
+	MOVL	(%ebx), %ecx		# old size
+	MOVL	12(%ebp), %edx		# size
+	ADDL	$4, %edx
+	PUSH	%ecx
+
+	#  Get kernel to mremap the block
+	MOVL	$1, %esi		# 1 == MREMAP_MAYMOVE
+	MOVL	$163, %eax		# 163 == __NR_mremap
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JA	error			# unsigned comparison handles above
+
+	#  Write header
+	POP	%ecx
+	MOVL	%ecx, (%eax)
+	ADDL	$4, %eax
+
+	#  Cleanup
+	POP	%esi
+	POP	%ebx
+	POP	%ebp
+	RET
+	
+
 ####	#  Function: size_t strlen(char const* str)
 	#  Finds the lengths of str
 strlen:
@@ -281,6 +357,7 @@ strlen:
 	POP	%ebp
 	RET
 
+
 ####    #  Function: bool ishws(char)
 	#  Tests whether its argument is in [ \t]
 ishws:
@@ -296,6 +373,7 @@ ishws:
 .L1:
 	POP	%ebp
 	RET
+
 
 ####    #  Function: bool isws(char)
 	#  Tests whether its argument is in [ \t\r\n]
@@ -400,6 +478,7 @@ success:
 
 
 ####	#  Function:    void writedptr( int bytes, void* data, ofile* of )
+	#  A thin wrapper around write(2)
 writedptr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -429,7 +508,6 @@ writedptr:
 	POP	%ebx
 	POP	%ebp
 	RET
-
 
 
 ####	#  Function:	void writebyte( int c, ofile* of )
@@ -473,6 +551,7 @@ writedword:
 
 
 ####	#  Function:	void writedata( int bits, int data, ofile* of )
+	#  A wrapper around writedword / writebyte.  BITS must be 8 or 32.
 writedata:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -531,6 +610,7 @@ writedwat:
 	POP	%ebx
 	POP	%ebp
 	RET
+
 
 ####	#  Function:	void unread( char c, ifile* f )
 	#  Puts c onto the pushback slot
@@ -810,41 +890,47 @@ skiphws:
 ####	#  Function:	int read_int( int bits, ifile* in );
 	#  Read an integer: either decimal (which must not have a leading 0),
 	#  or hex (which must have an 0x prefix).  Error on overflow.
-.L17:
-	#  Have we read any digits?  If not, it's an error
-	CMPL	$0, -8(%ebp)
-	JE	error
+read_int:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	XORL	%ecx, %ecx
+	PUSH	%ecx		# int val = 0;
+	PUSH	%ecx		# int count = 0;
 
-.L17a:
-	#  Unread the last character read (now in %edx)
-	PUSH	%edx
-	CALL	unread
-	POP	%edx		# char
+	#  Have as got an '0' followed by an 'x'?
+	PUSH	12(%ebp)	# ifile
+	CALL	getone
+	CMPB	$0x30, %al	# '0'
+	JE	.L16b		# hex / zero
+	CMPB	$0x2D, %al	# '-'
+	JNE	.L16		# deciml
 
-.L17b:
-	#  Stack cleanup and exit
-	POP	%edx		# ifile
-	POP	%edx		# count
-	POP	%eax		# ret val
-	POP	%ebp
-	RET
+	#  Recurse to read_int and negate the answer
+	PUSH	12(%ebp)
+	PUSH	8(%ebp)
+	CALL	read_int
+	POP	%edx
+	POP	%edx
 
-.L17c:
-	#  Have we an overflow?  Don't care if bits == 32
+	#  Don't care about overflow if bits == 32
 	CMPB	$32, 8(%ebp)
-	JE	.L17
+	JE	.L18a
 
+	#  Test for overflow.
 	#  This branch is only used for decimals and before applying the
 	#  minus sign.   We only test whether it's >= 2^bits because 
 	#  we don't know whether 200 is a valid unsigned 8-bit number or
 	#  an invalid signed 8-bit number.
-	MOVL	$1, %eax
+	MOVL	$1, %edx
 	MOVL	8(%ebp), %ecx
-	SALL	%eax		# by %cl
-	CMPL	%eax, -4(%ebp)
-	JAE	error
-
-	JMP	.L17
+	DECL	%ecx
+	SALL	%edx		# by %cl
+	CMPL	%edx, %eax
+	JA	error
+.L18a:
+	NEGL	%eax
+	MOVL	%eax, -4(%ebp)	# save
+	JMP	.L17b
 
 .L16:
 	#  We're reading decimal and the first digit is already in %eax
@@ -909,55 +995,73 @@ skiphws:
 	JG	error
 	JMP	.L18	# loop
 
-.L18a:
-	NEGL	%eax
-	MOVL	%eax, -4(%ebp)	# save
-	JMP	.L17b
-
-read_int:
-	#  The function entry point
-	PUSH	%ebp
-	MOVL	%esp, %ebp
-	XORL	%ecx, %ecx
-	PUSH	%ecx		# int val = 0;
-	PUSH	%ecx		# int count = 0;
-
-	#  Have as got an '0' followed by an 'x'?
-	PUSH	12(%ebp)	# ifile
-	CALL	getone
-	CMPB	$0x30, %al	# '0'
-	JE	.L16b		# hex / zero
-	CMPB	$0x2D, %al	# '-'
-	JNE	.L16		# deciml
-
-	#  Recurse to read_int and negate the answer
-	PUSH	12(%ebp)
-	PUSH	8(%ebp)
-	CALL	read_int
-	POP	%edx
-	POP	%edx
-
+.L17c:
 	#  Have we an overflow?  Don't care if bits == 32
 	CMPB	$32, 8(%ebp)
-	JE	.L18a
+	JE	.L17
 
 	#  This branch is only used for decimals and before applying the
 	#  minus sign.   We only test whether it's >= 2^bits because 
 	#  we don't know whether 200 is a valid unsigned 8-bit number or
 	#  an invalid signed 8-bit number.
-	MOVL	$1, %edx
+	MOVL	$1, %eax
 	MOVL	8(%ebp), %ecx
-	DECL	%ecx
-	SALL	%edx		# by %cl
-	CMPL	%edx, %eax
-	JA	error
-	JMP	.L18a
+	SALL	%eax		# by %cl
+	CMPL	%eax, -4(%ebp)
+	JAE	error
+
+.L17:
+	#  Have we read any digits?  If not, it's an error
+	CMPL	$0, -8(%ebp)
+	JE	error
+
+.L17a:
+	#  Unread the last character read (now in %edx)
+	PUSH	%edx
+	CALL	unread
+	POP	%edx		# char
+
+.L17b:
+	#  Stack cleanup and exit
+	POP	%edx		# ifile
+	POP	%edx		# count
+	POP	%eax		# ret val
+	POP	%ebp
+	RET
 
 
 ####	#  Function:	int read_rm( int bits, int* disp, ifile* in )
 	#  Skip whitespace then read an r/m8 or r/m32 depending on BITS.  
 	#  Returns the ModR/M byte and if a displacement is present, stores 
 	#  it in disp.
+read_rm:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	XORL	%ecx, %ecx
+	PUSH	%ecx		# for ret val
+	PUSH	%ecx		# for or val
+
+	#  What sort of argument is it?  Direct memory accesses will begin '(',
+	#  registers will start with an '%', and memory accesses with
+	#  a displacement will start with a number?
+	PUSH	16(%ebp)	# ifile
+	CALL	skiphws
+	CALL	getone
+	CMPB	$0x28, %al	# '('
+	JE	.L15a
+	CMPB	$0x25, %al	# '%'
+	JNE	.L15b
+
+	#  Save 0xC0 for |= later
+	MOVL	$0xC0, -8(%ebp)
+
+	#  Read the 32-bit register name (ifile is still on stack)
+	PUSH	8(%ebp)		# bits
+	CALL	read_reg
+	POP	%ecx
+	MOVL	%eax, -4(%ebp)	# save
+	JMP	.L15c
+
 .L15b:
 	#  It's not a '(' or '%' so it must be the start of a number
 	PUSH	%eax
@@ -1011,34 +1115,6 @@ read_int:
 	POP	%ebp
 	RET
 
-read_rm:
-	PUSH	%ebp
-	MOVL	%esp, %ebp
-	XORL	%ecx, %ecx
-	PUSH	%ecx		# for ret val
-	PUSH	%ecx		# for or val
-
-	#  What sort of argument is it?  Direct memory accesses will begin '(',
-	#  registers will start with an '%', and memory accesses with
-	#  a displacement will start with a number?
-	PUSH	16(%ebp)	# ifile
-	CALL	skiphws
-	CALL	getone
-	CMPB	$0x28, %al	# '('
-	JE	.L15a
-	CMPB	$0x25, %al	# '%'
-	JNE	.L15b
-
-	#  Save 0xC0 for |= later
-	MOVL	$0xC0, -8(%ebp)
-
-	#  Read the 32-bit register name (ifile is still on stack)
-	PUSH	8(%ebp)		# bits
-	CALL	read_reg
-	POP	%ecx
-	MOVL	%eax, -4(%ebp)	# save
-	JMP	.L15c
-
 
 ####	#  Function:	int getlabel( int strlen, main_frame* p ):
 	#  Lookup the text in p->buffer (which has known length strlen),
@@ -1054,7 +1130,8 @@ getlabel:
 	MOVL	8(%ebp), %ecx	# strlen
 	MOVL	12(%ebp), %ebx
 	LEA	-96(%ebx), %esi
-	LEA	-4208(%ebx), %edi
+	MOVL	-116(%ebx), %edi
+	SUBL	$16, %edi
 
 	#  Null terminate
 	MOVL	%esi, %edx
@@ -1097,7 +1174,6 @@ getlabel:
 	POP	%ebp
 	RET
 
-
 	
 ####	#  Function:	int labelref( int strlen, int bits, main_frame* p ):
 	#  Lookup the text in p->buffer (which has known length strlen),
@@ -1125,7 +1201,7 @@ labelref:
 	MOVB	$3, %cl
 	SARL	%eax		# by %cl  -- %eax is now a number of bytes
 	MOVL	16(%ebp), %ecx
-	ADDL	-4204(%ecx), %eax	# Add ofile->count
+	ADDL	-108(%ecx), %eax	# Add ofile->count
 	SUBL	%edx, %eax		# Subtract position
 	NEGL	%eax
 
@@ -1150,7 +1226,7 @@ labelref:
 .L11d:
 	#  The label wasn't found.  Only allow this if we're not writing.
 	MOVL	16(%ebp), %ecx
-	CMPL	$0, -4208(%ecx)
+	CMPL	$0, -112(%ecx)
 	JG	error
 	XORL	%eax, %eax
 	DECL	%eax		# Use -1 as error value
@@ -1179,7 +1255,7 @@ read_id:
 
 	#  Continue to read an identifier
 	MOVL	8(%ebp), %eax
-	LEA	-4200(%eax), %ecx
+	LEA	-104(%eax), %ecx
 	PUSH	%ecx
 	LEA	-96(%eax), %ecx
 .L12:
@@ -1211,10 +1287,37 @@ read_id:
 	RET
 
 
-
 ####	#  Function:	int read_imm( int bits, main_frame* p );
 	#  Skip whitespace and then read an immediate value ($0xXX or $NNN)
 	#  Returns the value read or exits if unable to read.
+read_imm:
+	#  The function entry point
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	XORL	%ecx, %ecx
+	PUSH	%ecx		# char buf[4];
+	PUSH	%ecx		# int val = 0;
+	PUSH	%ecx		# int count = 0;
+
+	#  Skip horizontal whitespace
+	MOVL	12(%ebp), %ecx
+	LEA	-104(%ecx), %ecx
+	PUSH	%ecx		# ifile
+	CALL	skiphws
+
+	#  Check it is a '$' marking the start of an immediate;
+	#  if not, it must be an identifier
+	LEA	-4(%ebp), %ecx
+	PUSH	%ecx		# char* bufp
+	CALL	readonex
+	CMPB	$0x24, -4(%ebp)	# '$'
+	JNE	.L16a
+
+	#  It's an integer
+	POP	%edx		# bufp
+	PUSH	8(%ebp)		# bits
+	CALL	read_int
+	JMP	.L16c
 
 .L16a:
 	#  Put the byte into the main buffer and read a label
@@ -1249,40 +1352,8 @@ read_id:
 	PUSH	-4(%ebp)	#   bufp
 	CALL	unread
 
-	#  Stack cleanup and exit
 	MOVL	-8(%ebp), %eax	# return val
-	ADDL	$20, %esp
-	POP	%ebp
-	RET
-
-read_imm:
-	#  The function entry point
-	PUSH	%ebp
-	MOVL	%esp, %ebp
-	XORL	%ecx, %ecx
-	PUSH	%ecx		# char buf[4];
-	PUSH	%ecx		# int val = 0;
-	PUSH	%ecx		# int count = 0;
-
-	#  Skip horizontal whitespace
-	MOVL	12(%ebp), %ecx
-	LEA	-4200(%ecx), %ecx
-	PUSH	%ecx		# ifile
-	CALL	skiphws
-
-	#  Check it is a '$' marking the start of an immediate;
-	#  if not, it must be an identifier
-	LEA	-4(%ebp), %ecx
-	PUSH	%ecx		# char* bufp
-	CALL	readonex
-	CMPB	$0x24, -4(%ebp)	# '$'
-	JNE	.L16a
-
-	#  It's an integer
-	POP	%edx		# bufp
-	PUSH	8(%ebp)		# bits
-	CALL	read_int
-
+.L16c:
 	#  Stack clean-up and exit
 	ADDL	$20, %esp
 	POP	%ebp
@@ -1293,12 +1364,6 @@ read_imm:
 	#  Uses the second byte in opcode_info to determine how many
 	#  bytes to write (1 or 2) and then writes the third and perhaps
 	#  fourth byte out.
-.L19:
-	POP	%ebx	# ofile
-	POP	%ebx	# Restore %ebx
-	POP	%ebp
-	RET
-
 write_oc12:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -1306,7 +1371,7 @@ write_oc12:
 
 	#  Find the ofile object
 	MOVL	12(%ebp), %eax
-	LEA	-4208(%eax), %ecx
+	LEA	-112(%eax), %ecx
 	PUSH	%ecx
 
 	#  Unconditionally write the first byte
@@ -1327,15 +1392,14 @@ write_oc12:
 	PUSH	%ebx
 	CALL	writebyte
 	POP	%ebx
-	JMP	.L19
-
-
-####	#  Function:	void write_mrm( int rm, int reg, int disp, ofile* )
-.L20:
-	POP	%edx		# ofile
+.L19:
+	POP	%ebx	# ofile
+	POP	%ebx	# Restore %ebx
 	POP	%ebp
 	RET
 
+
+####	#  Function:	void write_mrm( int rm, int reg, int disp, ofile* )
 write_mrm:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -1363,7 +1427,10 @@ write_mrm:
 	PUSH	16(%ebp)		# disp
 	CALL	writedword
 	POP	%ebx
-	JMP	.L20
+.L20:
+	POP	%edx		# ofile
+	POP	%ebp
+	RET
 
 	
 ####    #  The main function.
@@ -1373,9 +1440,9 @@ write_mrm:
 	#       -8(%ebp)	label* label_end
 	#      -12(%ebp)	label* label_end_store
 	#      -96(%ebp)	char buffer[80]
-	#    -4192(%ebp)	label labels[64]
-	#    -4200(%ebp)        ifile fin
-	#    -4208(%ebp)	ofile fout
+	#     -104(%ebp)	ifile fin
+        #     -112(%ebp)	ofile fout
+	#     -116(%ebp)	label* label_start
 	#
 	#  where label is a { char name[12]; int addr; },
 	#  instrct is a { char name[12]; char type; char data[3]; },
@@ -1396,7 +1463,7 @@ ret1:
 comment:
 	CMPB    $0x23, -96(%ebp)        # '#'
 	JNE	ret
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	LEA	-96(%ebp), %ecx
 	PUSH	%ecx
@@ -1418,27 +1485,50 @@ labeldef:
 	POP	%esi
 	PUSH	%eax
 	CALL	getlabel
-	POP	%edx
+	POP	%ecx		# strlen return
 	POP	%edx
 
 	#  Is it new?	
 	CMPL	$-1, %eax
 	JE	.L10a
 	#  Is it identical to what we already have
-	CMPL	-4204(%ebp), %eax
+	CMPL	-108(%ebp), %eax
 	JE	.L10b
 	JMP	error
 
 .L10a:
 	#  Check that we're not about to over run the label store,
-	#  and then store the label
 	LEA	-8(%ebp), %ebx
 	MOVL	(%ebx), %edi
 	MOVL	-12(%ebp), %eax
 	CMPL	%eax, %edi
-	JGE	error
+	JL	.L10c
+
+	#  Grow storage
+	PUSH	%ecx			# strlen, for later
+	XORL	%edx, %edx
+	MOVL	-12(%ebp), %eax
+	SUBL	-116(%ebp), %eax
+	MOVL	$2, %ecx
+	MULL	%ecx			# acts on %edx:%eax
+	PUSH	%eax			# new size (twice old)
+	PUSH	-116(%ebp)		# ptr
+	CALL	realloc
+
+	#  Store pointers
+	MOVL	%eax, -116(%ebp)	# store new pointer
+	POP	%ecx
+	SUBL	%ecx, -8(%ebp)
+	ADDL	%eax, -8(%ebp)		# new end data
+	POP	%ecx
+	ADDL	%eax, %ecx
+	MOVL	%ecx, -12(%ebp)		# new end storage
+	POP	%ecx			# restore strlen
+
+.L10c:
+	#  And then store the label
 	REP MOVSB
-	MOVL	-4204(%ebp), %eax #ofile->count
+	MOVL	-108(%ebp), %eax #ofile->count
 	MOVL	(%ebx), %edi
 	MOVL	%eax, 12(%edi)
 	ADDL	$16, (%ebx)
@@ -1474,7 +1564,7 @@ type_01:
 	POP	%ecx
 
 	#  Byte is in %al (as part of return from read_imm): write it.
-	LEA	-4208(%ebp), %ecx	# ofile
+	LEA	-112(%ebp), %ecx	# ofile
 	PUSH	%ecx
 	PUSH	%eax
 	PUSH	%ebx
@@ -1494,7 +1584,7 @@ type_03:
 
 	#  Read the r/m
 	PUSH	%edx	# store opcode info
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	LEA	-96(%ebp), %ecx		# disp
 	PUSH	%ecx
@@ -1505,7 +1595,7 @@ type_03:
 
 .L21:
 	#  Write the ModR/M byte and (if present) displacement.
-	LEA	-4208(%ebp), %ecx	# ofile
+	LEA	-112(%ebp), %ecx	# ofile
 	PUSH	%ecx
 	PUSH	-96(%ebp)	# disp
 	MOVB	$24, %cl
@@ -1526,7 +1616,7 @@ type_05:
 
 .L22:
 	#  Read the r/m
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	LEA	-96(%ebp), %ecx		# disp
 	PUSH	%ecx
@@ -1538,7 +1628,7 @@ type_05:
 
 	# Skip ws, read a comma, then skip more ws and read the '%' and reg
 	PUSH	%eax	# store r/m
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	skiphws
 	CALL	getone
@@ -1557,7 +1647,7 @@ type_05:
 .L22a:
 	#  Write the ModR/M byte and (if present) displacement.
 	#  So: %edx is r/m, %eax is reg
-	LEA	-4208(%ebp), %ecx	# ofile
+	LEA	-112(%ebp), %ecx	# ofile
 	PUSH	%ecx
 	PUSH	-96(%ebp)	# disp
 	PUSH	%eax		# reg
@@ -1568,7 +1658,7 @@ type_05:
 
 type_06_rm:
 	#  %edx contains the opcode info, so %dh+2 is the opcode.  Write it.
-	LEA	-4208(%ebp), %ecx
+	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
 	MOVB	%dh, %al
 	ADDL	$2, %eax
@@ -1581,7 +1671,7 @@ type_06_rm:
 
 type_06_rg:
 	#  %edx contains the opcode info, so %dh is the opcode.  Write it.
-	LEA	-4208(%ebp), %ecx
+	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
 	MOVB	%dh, %al
 	PUSH	%eax
@@ -1591,7 +1681,7 @@ type_06_rg:
 
 .L23:
 	#  Read the register
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	skiphws
 	CALL	getone
@@ -1607,7 +1697,7 @@ type_06_rg:
 	#  We expect %eax to contain the reg bytes already read, and
 	#  %ebx the number of bits.
 	PUSH	%eax	# store reg
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	skiphws
 	CALL	getone
@@ -1636,7 +1726,7 @@ type_06_rg:
 	POP	%ecx
 	POP	%edx		# opinfo
 
-	LEA	-4208(%ebp), %ecx
+	LEA	-112(%ebp), %ecx
 	PUSH	%ecx		# ofile
 	PUSH	%eax		# data
 	PUSH	%ebx		# bits
@@ -1661,7 +1751,7 @@ type_06_im:
 	PUSH	%edx		# store op info
 
 	#  Write the opcode byte from %dl
-	LEA	-4208(%ebp), %ecx
+	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
 	MOVB	%dl, %al
 	PUSH	%eax
@@ -1675,7 +1765,7 @@ type_06_im:
 	#  the r/m argument which means we don't know whether it's a got 
 	#  a disp word.
 
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	skiphws
 	POP	%ecx
@@ -1686,7 +1776,7 @@ type_06_im:
 	#  We've got a an intermediate label.  Get first char into buffer,
 	#  and then read the label.
 	PUSH	%edx		# store op info
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	getone
 	MOVB	%al, -96(%ebp)
@@ -1727,7 +1817,7 @@ type_06_im:
 	POP	%ecx
 
 	#  And write the immediate data
-	LEA	-4208(%ebp), %ecx
+	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
 	PUSH	%eax		# byte(s)
 	PUSH	%ebx		# bits
@@ -1741,7 +1831,7 @@ type_06_im:
 type_06:
 	#  First, skip whitespace, leaving %eax containing the peek-ahead char
 	PUSH	%edx	# opcode info
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	skiphws
 	POP	%ecx	# ifile
@@ -1763,7 +1853,7 @@ type_06:
 
 hex_bytes:
 	#  Skip horizontal whitespace and read a byte
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	skiphws
 	POP	%ecx
@@ -1792,7 +1882,7 @@ hex_bytes:
 
 	#  Read the next byte
 	PUSH	%eax
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	LEA	-95(%ebp), %ecx
 	PUSH	%ecx
@@ -1812,7 +1902,7 @@ hex_bytes:
 	ADDB	%bl, %al
 
 	#  Byte is in %al; let's write it, and increment the address counter
-	LEA	-4208(%ebp), %ecx	# ofile
+	LEA	-112(%ebp), %ecx	# ofile
 	PUSH	%ecx
 	PUSH	%eax
 	CALL	writebyte
@@ -1845,7 +1935,7 @@ tl_ident:
 	JE	labeldef
 
 	#  It must be either a directive or an instruction
-	LEA	-4200(%ebp), %eax	# ifile
+	LEA	-104(%ebp), %eax	# ifile
 	PUSH	%ecx	# we care about this
 	PUSH	%eax
 	PUSH	%edx
@@ -1904,7 +1994,7 @@ tl_ident:
 
 .L8:
 	#  Read one byte (not with readonex because EOF is permitted)
-	LEA	-4200(%ebp), %ecx
+	LEA	-104(%ebp), %ecx
 	PUSH	%ecx
 	LEA	-96(%ebp), %ecx
 	PUSH	%ecx
@@ -1939,7 +2029,7 @@ tl_ident:
 
 	#  We only get here if we've had an instruction or directive (as 
 	#  opposed to a comment, label, or whitespace.)
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	skiphws
 	POP	%ecx	# ifile
@@ -1951,7 +2041,7 @@ tl_ident:
 	JNE	.L8	# Permissive
 
 	#  Skip over the semicolon (statement separator)
-	LEA	-4200(%ebp), %ecx	# ifile
+	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	CALL	getone
 	POP	%ecx	# ifile
@@ -1962,12 +2052,19 @@ tl_ident:
 	#  --- The main loop
 _start:
 	MOVL	%esp, %ebp
-	SUBL	$4212, %esp
+	SUBL	$120, %esp
+
+	#  label* label_start = malloc(64 * sizeof(label));
+	MOVL	$1024, %ecx
+	PUSH	%ecx
+	CALL	malloc
+	POP	%ecx
+	MOVL	%eax, -116(%ebp)
+
 	#  label* label_end = &labels[0];
-	LEA	-4192(%ebp), %eax
 	MOVL	%eax, -8(%ebp)
-	#  label* label_end_store = &labels[256];  # 4096 == 256*sizeof(label)
-	ADDL	$4096, %eax
+	#  label* label_end_store = &labels[64];
+	ADDL	%ecx, %eax		 # %ecx still has size
 	MOVL	%eax, -12(%ebp)
 
 	#  Check we have a command line argument
@@ -1984,11 +2081,11 @@ _start:
 
 	#  memset( &fout, 0, sizeof(ofile) );
 	#  No write on first pass, so fout.fd = -1
-	MOVL	$-1, -4208(%ebp)
-	MOVL	$0, -4204(%ebp)
+	MOVL	$-1, -112(%ebp)
+	MOVL	$0, -108(%ebp)
 	#  memset( &fin, 0, sizeof(ifile) );
-	MOVL	%eax, -4200(%ebp) # fin.fd
-	MOVL	$0, -4196(%ebp)
+	MOVL	%eax, -104(%ebp) # fin.fd
+	MOVL	$0, -100(%ebp)
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
@@ -2022,7 +2119,7 @@ _start:
 	CMPL	$0, %eax
 	JL	error
 	#  Set fout.fd to initiate writing
-	MOVL	%eax, -4208(%ebp)
+	MOVL	%eax, -112(%ebp)
 
 	#  Locate the ELF header
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
@@ -2042,11 +2139,11 @@ _start:
 	JL	error
 
 	#  Offset 0x70 needs .text section size
-	LEA	-4208(%ebp), %eax
+	LEA	-112(%ebp), %eax
 	PUSH	%eax			# ofile
 	MOVL	$0x70, %ecx
 	PUSH	%ecx
-	MOVL	-4204(%ebp), %eax	# .text size
+	MOVL	-108(%ebp), %eax	# .text size
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -2054,12 +2151,12 @@ _start:
 	POP	%eax	# ofile
 
 	#  Reset write counter
-	MOVL	$0, -4204(%ebp)
+	MOVL	$0, -108(%ebp)
 
 	#  Seek to the beginning of input for second pass, and reset counter
 	XORL	%edx, %edx		# SEEK_SET=0
 	XORL	%ecx, %ecx		# offset = 0
-	MOVL	-4200(%ebp), %ebx	# fd
+	MOVL	-104(%ebp), %ebx	# fd
 	MOVL	$19, %eax		# _NR_lseek
 	INT	$0x80
 	CMPL	$0, %eax
@@ -2070,7 +2167,7 @@ _start:
 
 	#  Pad to a 16-byte boundary
 	XORL	%edx, %edx		# prevents #
-	MOVL	-4204(%ebp), %eax	# ofile->count
+	MOVL	-108(%ebp), %eax	# ofile->count
 	MOVL	$16, %ecx
 	DIVL	%ecx			# acts on %edx:%eax
 	SUBL	%edx, %ecx
@@ -2086,7 +2183,7 @@ _start:
 
 	#  Write padding
 	MOVL	%esp, %edx		# pointer to padding
-	LEA	-4208(%ebp), %eax
+	LEA	-112(%ebp), %eax
 	PUSH	%eax			# ofile
 	PUSH	%edx			# data
 	PUSH	%ecx			# count
@@ -2096,11 +2193,11 @@ _start:
 .L8b2:
 	#  Fix up ELF header to point to symbol table
 	#  Offset 0xBC needs offset to symbol table
-	LEA	-4208(%ebp), %eax
+	LEA	-112(%ebp), %eax
 	PUSH	%eax			# ofile
 	MOVL	$0xBC, %ecx
 	PUSH	%ecx
-	MOVL	-4204(%ebp), %eax	# .text size + padding
+	MOVL	-108(%ebp), %eax	# .text size + padding
 	ADDL	$0x120, %eax		# ELF header size
 	PUSH	%eax
 	CALL	writedwat
@@ -2108,7 +2205,7 @@ _start:
 	POP	%ecx
 
 	#  Store the current file offset so we can determine section size
-	MOVL	-4204(%ebp), %esi
+	MOVL	-108(%ebp), %esi
 
 	#  Null symbol, per gABI-4.1, Fig 4-18
 	XORL	%eax, %eax	# 0 -- placeholder for string
@@ -2119,7 +2216,8 @@ _start:
 	CALL	writedword	
 	POP	%eax
 
-	LEA	-4208(%ebp), %edi	# labels - 1 
+	MOVL	-116(%ebp), %edi
+	SUBL	$16, %edi		# labels - 1 
 
 .L8c:	
 	#  Loop: Generate the symbol table, initially without string pointers
@@ -2159,7 +2257,7 @@ _start:
 	#  Offset 0xE4 needs offset to string table
 	MOVL	$0xE4, %ecx
 	PUSH	%ecx
-	MOVL	-4204(%ebp), %eax	# .text + padding + .symtab
+	MOVL	-108(%ebp), %eax	# .text + padding + .symtab
 	ADDL	$0x120, %eax		# ELF header size
 	PUSH	%eax
 	CALL	writedwat
@@ -2170,7 +2268,7 @@ _start:
 	# %esi is counter at start of .symtab
 	MOVL	$0xC0, %ecx
 	PUSH	%ecx
-	MOVL	-4204(%ebp), %eax	# .text + padding + .symtab
+	MOVL	-108(%ebp), %eax	# .text + padding + .symtab
 	SUBL	%esi, %eax		# .text + padding
 	PUSH	%eax
 	CALL	writedwat
@@ -2179,9 +2277,10 @@ _start:
 	
 	# %edi is the label pointer; %esi is the offset for the next symbol
 	# table entry; %ebx is the start of the string section
-	LEA	-4208(%ebp), %edi	# labels - 1 
+	MOVL	-116(%ebp), %edi
+	SUBL	$16, %edi		# labels - 1
 	ADDL	$0x130, %esi		# ELF header size + skip null symbol
-	MOVL    -4204(%ebp), %ebx
+	MOVL    -108(%ebp), %ebx
 
 	# Null symbol's name
 	XORL	%eax, %eax
@@ -2201,7 +2300,7 @@ _start:
 .L8h:
 	#  We have a non-local symbol
 	PUSH	%esi			# Symbol table entry
-	MOVL	-4204(%ebp), %eax
+	MOVL	-108(%ebp), %eax
 	SUBL	%ebx, %eax		# Offset into string table
 	PUSH	%eax
 	CALL	writedwat
@@ -2223,7 +2322,7 @@ _start:
 	#  Offset 0xE8 needs size of string table
 	MOVL	$0xE8, %eax
 	PUSH	%eax
-	MOVL	-4204(%ebp), %eax
+	MOVL	-108(%ebp), %eax
 	SUBL	%ebx, %eax		# Offset into string table
 	PUSH	%eax
 	CALL	writedwat
