@@ -7,7 +7,7 @@ SHELL = /bin/sh
 PATH  = .
 
 CHMOD = /bin/chmod
-RM    = /bin/rm -f
+RM    = /bin/rm
 CMP   = /usr/bin/cmp
 LN_S  = /bin/ln -sf
 MAKE  = /usr/bin/make
