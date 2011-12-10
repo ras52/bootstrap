@@ -7,7 +7,7 @@ and calculating the file offsets used as arguments to various JMP and
 Jcc statements.  These two tasks were particularly prone to introduce
 errors as the code was modified, perhaps to correct some error found
 during testing.  Keeping all of the offsets and sizes updated proved
-rather more onerous than manually convertible the assembly language 
+rather more onerous than manually converting the assembly language 
 into hexadecimal values.
 
 Therefore stage 1 adds two new tools, unhexl and elfify, to handle 

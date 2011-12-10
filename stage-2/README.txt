@@ -85,8 +85,23 @@ source.  The shift opcodes (SAL, SAR, SHL, SHR) always shift by %cl
 bits, and the multiplication-like opcodes (MUL, IMUL, DIV, IDIV) always
 act of %edx:%eax (in 32-bit mode) or %ax (in 8-bit mode).
 
+Not all instructions canonically represented by these mnemonics are 
+supported.  INT only takes a 8-bit immediate; CALL, JMP and Jcc take a
+(program counter relative) 32-bit immediate; the unary arithmetics, 
+INCx, DECx, NEGx, SALx, SHLx, SARx, SHRx, MULx, IMULx, DIVx and IDIVx, 
+take a single 8- or 32-bit r/m operand (that is, something matching the 
+regmem production, above), and PUSH and POP take a 32-bit r/m.
+LEA takes a 32-bit r/m followed by a 32-bit register; the binary 
+arithmetics, MOVx, ADDx, SUBx, CMPx, ANDx, ORx, XORx take either a r/m
+and a register (in either order) or an immediate followed by a r/m, all 
+of the appropriate size.  The remaining mnemonics have no operands.
+
 Because of the need to make two passes over the source, it takes the
 name of the source code file as its only command line argument; a
 .text section is printed on standard output.
 
-  Usage: as test.s > test
+  Usage: as test.s > test.ts
+
+The output is not a valid executable -- it just the text section.  It
+therefore needs using inconjunction with the stage 1 elfify tool to
+produce an executable.
