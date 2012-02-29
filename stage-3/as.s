@@ -350,7 +350,7 @@ realloc:
 	
 
 ####	#  Function: size_t strlen(char const* str)
-	#  Finds the lengths of str
+	#  Finds the length of str
 strlen:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -2247,6 +2247,24 @@ _start:
 	MOVL	%esp, %ebp
 	SUBL	$132, %esp
 
+	#  Check we have a command line argument
+	CMPL	$2, 0(%ebp)
+	JNE	error
+
+	#  Open the file
+	XORL	%ecx, %ecx		# 0 == O_RDONLY
+	MOVL	8(%ebp), %ebx
+	MOVL	$5, %eax		# 5 == __NR_open
+	INT	$0x80
+	CMPL	$0, %eax
+	JL	error
+
+	#  Set up the stream objects
+	MOVL	$-1, -112(%ebp)		# fout.fd = -1: no write on pass #1
+	MOVL	$0, -108(%ebp)		# zero the count 
+	MOVL	%eax, -104(%ebp) 	# fin.fd = fd returned by open
+	MOVL	$0, -100(%ebp)		# putback boolean and data
+
 	#  Set up the label vector
 	MOVL	$1024, %ecx
 	PUSH	%ecx
@@ -2266,24 +2284,6 @@ _start:
 	MOVL	%eax, -124(%ebp)
 	ADDL	%ecx, %eax		 # %ecx still has size
 	MOVL	%eax, -128(%ebp)
-
-	#  Check we have a command line argument
-	CMPL	$2, 0(%ebp)
-	JNE	error
-
-	#  Open the file
-	XORL	%ecx, %ecx		# 0 == O_RDONLY
-	MOVL	8(%ebp), %ebx
-	MOVL	$5, %eax		# 5 == __NR_open
-	INT	$0x80
-	CMPL	$0, %eax
-	JL	error
-
-	#  Set up the stream objects
-	MOVL	$-1, -112(%ebp)		# fout.fd = -1: no write on pass #1
-	MOVL	$0, -108(%ebp)		# zero the count 
-	MOVL	%eax, -104(%ebp) 	# fin.fd = fd returned by open
-	MOVL	$0, -100(%ebp)		# putback boolean and data
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
@@ -2592,7 +2592,6 @@ POP	%ecx			# ofile -- from way above **
 
 	XORL	%ebx, %ebx
 	JMP	success
-
 
 ####    #  And finally, the entry point.
 	#  Last per requirement for elfify.

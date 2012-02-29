@@ -5,9 +5,10 @@ small fixed limits to many quantities: labels are limited to 11
 characters, and there must be no more than 256 of them; lines can be no
 more than 80 characters long.  These limits exist because there is no
 heap allocation of memory, and fixed-sized arrays are declared on the
-stack.  This stage adds dynamic memory mangement to the assembler with 
-a standard malloc() and realloc() interface, and uses this to remove
-the 256 label limit.
+stack.  This stage takes the stage 2 assembler, translates it into
+assembly language (from hexadecimal), and adds dynamic memory mangement 
+to the assembler with a standard malloc() and realloc() interface. 
+This is used to remove the limit of 256 labels.
 
 The present malloc implementation is very inefficient because it punts
 all the work to the kernel with a mmap(MAP_ANON) syscall.  This results
@@ -24,5 +25,11 @@ allowing each executable to be formed from multiple object files.  This
 means that some object files (for instance, those containing the 
 malloc implementation) can linked into several different executables.
 To support this, the assembler now includes ELF .rel.text, .symtab and 
-.strtab sections in its output.
+.strtab sections in its output, removing the need for the stage 1 
+elfify program.  
 
+The assembler requires its source file to be suffixed .s and
+automatically assigns the output file name by replacing the .s with a
+.o suffix.
+
+  Usage: as test.s
