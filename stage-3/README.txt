@@ -33,3 +33,10 @@ automatically assigns the output file name by replacing the .s with a
 .o suffix.
 
   Usage: as test.s
+
+The linker can take arbitrary input and output file names.  The output
+file is specified with the -o option which must be first on the command
+line.
+
+  Usage: ld -o executable file1.o file2.o ...
+
