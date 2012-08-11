@@ -103,5 +103,5 @@ name of the source code file as its only command line argument; a
   Usage: as test.s > test.ts
 
 The output is not a valid executable -- it just the text section.  It
-therefore needs using inconjunction with the stage 1 elfify tool to
+therefore needs using in conjunction with the stage 1 elfify tool to
 produce an executable.
