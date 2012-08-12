@@ -1,6 +1,6 @@
 # as.ts.xl
 
-# Copyright (C) 2010, 2011 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2010, 2011, 2012 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 # ########################################################################
@@ -1198,7 +1198,7 @@ write_modrm:
 	#       -8(%ebp)	label* label_end
 	#      -12(%ebp)	label* label_end_store
 	#      -96(%ebp)	char buffer[80]
-	#    -4192(%ebp)	label labels[64]
+	#    -4192(%ebp)	label labels[256]
 	#    -4200(%ebp)        ifile fin
 	#    -4208(%ebp)	ofile fout
 	#
@@ -1234,8 +1234,16 @@ comment:
 	B8 01 00 00 00		#	MOVL	$1, %eax
 	C3			#	RET	# to main loop
 
+.L10a:
+	B8 01 00 00 00		#	MOVL	$1, %eax
+	C3			#	RET	# to main loop
+
 	#  Parts of the label section
 labeldef:
+	#  If we're in pass 2, we don't need to store it again
+	81 BD 90 EF FF FF FF FF FF FF #	CMPL	$-1, -4208(%ebp)
+	0F 85 .L10a		#	JNE	.L10a
+
 	#  Check that we're not about to over run the label store,
 	#  and then store the label
 	8D 5D F8		#	LEA	-8(%ebp), %ebx
