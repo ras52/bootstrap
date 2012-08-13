@@ -58,12 +58,15 @@ check-ld:	as2 ld2 ld.s
 	$(CMP) ld2 ld3
 	$(RM) ld.o ld3
 
-check-sep:	as2 ld2 test1.s test2.s
+testprog:	as2 ld2 test1.s test2.s
 	as2 test1.s
 	as2 test2.s
 	ld2 -o testprog test1.o test2.o
+	$(RM) test1.o test2.o
+
+check-sep:	testprog
 	testprog
-	$(RM) test1.o test2.o testprog
+	$(RM) testprog
 
 clean:
 	$(RM) -f as0 elfify as ld as.ts ld.ts as.o ld.o as2 ld2 as3 ld3

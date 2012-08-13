@@ -206,7 +206,7 @@ elf_hdr:
 #           shdr-off--\  flags-----\    ehsz\
 .hex_bytes  34 00 00 00  00 00 00 00    34 00
 #           phsz\ phn-\  shsz\ shn-\    shst\
-.hex_bytes  00 00 00 00  28 00 08 00    02 00 
+.hex_bytes  00 00 00 00  28 00 08 00    03 00 
 
 # #0  Null section header.   start: 0x34; length: 0x28
 # c.f. Fig 4.10 in gABI 4.1
@@ -215,7 +215,7 @@ elf_hdr:
 .hex_bytes  00 00 00 00  00 00 00 00
 
 # #1  Text section header.   start: 0x5C; length: 0x28
-# (Offset: 0x70 requires text section size.)	# TODO:  Done
+# (Offset: 0x70 requires text section size.)  Y
 #
 #           name-str--\  PROGBITS--\    EXEC|ALLOC\  load-addr-\
 .hex_bytes  1F 00 00 00  01 00 00 00    06 00 00 00  00 00 00 00
@@ -224,7 +224,17 @@ elf_hdr:
 #           align-----\  entry-sz--\
 .hex_bytes  04 00 00 00  00 00 00 00
 
-# #2  Shstrtab section hdr.  start: 0x84; length: 0x28
+# #2  Data section header.   start: 0x84; length: 0x28
+# (Offsets 0x94, 0x98 need setting)  Y Y
+#
+#           name-str--\  PROGBITS--\    WRIT|ALLOC\  load-addr-\
+.hex_bytes  29 00 00 00  01 00 00 00    03 00 00 00  00 00 00 00
+#           **offset**\  **size**--\    /-- Fig 4.12 in gABI --\ 
+.hex_bytes  00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+#           align-----\  entry-sz--\
+.hex_bytes  04 00 00 00  00 00 00 00
+
+# #3  Shstrtab section hdr.  start: 0xAC; length: 0x28
 #
 #           name-str--\  STRTAB----\    no-flags--\  load-addr-\ 
 .hex_bytes  01 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
@@ -233,18 +243,18 @@ elf_hdr:
 #           align-----\  entry-sz--\
 .hex_bytes  01 00 00 00  00 00 00 00
 
-# #3  Symbol table.          start: 0xAC; length: 0x28
-# (Offsets 0xBC, 0xC0 need setting)	# TODO ???
+# #4  Symbol table.          start: 0xD4; length: 0x28
+# (Offsets 0xE4, 0xE8 need setting) Y Y
 #
 #           name-str--\  SYMTAB----\    no-flags--\  load-addr-\ 
 .hex_bytes  0B 00 00 00  02 00 00 00    00 00 00 00  00 00 00 00
 #           **offset**\  **size**--\    .strtab---\  **LOCAL**-\ 
-.hex_bytes  00 00 00 00  00 00 00 00    04 00 00 00  00 00 00 00
+.hex_bytes  00 00 00 00  00 00 00 00    05 00 00 00  00 00 00 00
 #           align-----\  entry-sz--\
 .hex_bytes  04 00 00 00  10 00 00 00
 
-# #4  String table.          start: 0xD4; length: 0x28
-# (Offsets 0xE4, 0xE8 need setting)	# TODO ???
+# #5  String table.          start: 0xFC; length: 0x28
+# (Offsets 0x10C, 0x110 need setting) Y Y
 #
 #           name-str--\  STRTAB----\    no-flags--\  load-addr-\
 .hex_bytes  13 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
@@ -253,32 +263,22 @@ elf_hdr:
 #           align-----\  entry-sz--\
 .hex_bytes  01 00 00 00  00 00 00 00
 
-# #5 Text relocations.      start: 0xFC; length: 0x28
-# (Offsets 0x10C, 0x110 need setting)
+# #6 Text relocations.      start: 0x124; length: 0x28
+# (Offsets 0x134, 0x138 need setting)
 #
 #           name-str--\  SHT_REL---\    no-flags--\  load-addr-\
 .hex_bytes  1B 00 00 00  09 00 00 00    00 00 00 00  00 00 00 00
 #           **offset**\  **size**--\    .symtab---\  .text-----\
-.hex_bytes  00 00 00 00  00 00 00 00    03 00 00 00  01 00 00 00
+.hex_bytes  00 00 00 00  00 00 00 00    04 00 00 00  01 00 00 00
 #           align-----\  entry-sz--\
 .hex_bytes  04 00 00 00  08 00 00 00
-
-# #6  Data section header.  start: 0x124; length: 0x28
-# (Offsets 0x134, 0x138 need setting)   # TODO 0x138 done; 0x134 not done
-#
-#           name-str--\  PROGBITS--\    WRIT|ALLOC\  load-addr-\
-.hex_bytes  2A 00 00 00  01 00 00 00    03 00 00 00  00 00 00 00
-#           **offset**\  **size**--\    /-- Fig 4.12 in gABI --\ 
-.hex_bytes  00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
-#           align-----\  entry-sz--\
-.hex_bytes  04 00 00 00  00 00 00 00
 
 # #7  Data relocations.     start: 0x14C; length: 0x28
 #
 #           name-str--\  SHT_REL--\     no-flags\    load-addr-\
 .hex_bytes  25 00 00 00  09 00 00 00    00 00 00 00  00 00 00 00
 #           **offset**\  **size**--\    .symtab---\  .data-----\
-.hex_bytes  00 00 00 00  00 00 00 00    03 00 00 00  06 00 00 00
+.hex_bytes  00 00 00 00  00 00 00 00    04 00 00 00  02 00 00 00
 #           align-----\  entry-sz--\
 .hex_bytes  04 00 00 00  08 00 00 00
 
@@ -289,7 +289,8 @@ elf_hdr:
 .hex_bytes  2E 73 79 6D 74 61 62 00           # .symtab     Offset 0x0B
 .hex_bytes  2E 73 74 72 74 61 62 00           # .strtab     Offset 0x13
 .hex_bytes  2E 72 65 6C 2E 74 65 78 74 00     # .rel.text   Offset 0x1B (0x1F)
-.hex_bytes  2E 64 61 74 61 2E 64 61 74 61 00  # .data.text  Offset 0x25 (0x2A)
+.hex_bytes  2E 72 65 6C 2E 64 61 74 61 00     # .rel.data   Offset 0x25 (0x29)
+.hex_bytes  00
 
 # End of headers.   offset 0x1A4
 
@@ -1200,7 +1201,7 @@ getlabel:
 	MOVL	16(%ebp), %ebx
 	LEA	-96(%ebx), %esi
 	MOVL	-4(%ebx), %edi
-	SUBL	$16, %edi
+	SUBL	$20, %edi		# sizeof(label)
 
 	#  Null terminate
 	MOVL	%esi, %edx
@@ -1218,7 +1219,7 @@ getlabel:
 	POP	%ecx
 
 	INCL	%edx
-	ADDL	$16, %edi
+	ADDL	$20, %edi		# sizeof(label)
 	CMPL	-8(%ebx), %edi
 	JGE	.L11b
 	PUSH	%ecx
@@ -1301,7 +1302,9 @@ savelabel:
 	MOVL	8(%ebp), %eax 		# value
 	MOVL	-8(%ebx), %edi
 	MOVL	%eax, 12(%edi)
-	ADDL	$16, -8(%ebx)
+	MOVL	-132(%ebx), %eax	# section
+	MOVL	%eax, 16(%edi)
+	ADDL	$20, -8(%ebx)		# sizeof(label)
 
 	POP	%edi
 	POP	%esi
@@ -1310,14 +1313,14 @@ savelabel:
 	RET
 
 
-####	#  Function:	void saverel( int symbol, main_frame* p);
+####	#  Function:	void saverel( int type, int symbol, main_frame* p);
 	#  Save a relocation at the current ofile offset.  
 saverel:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	PUSH	%ebx
 
-	MOVL	12(%ebp), %ebx
+	MOVL	16(%ebp), %ebx
 
 	#  Check that we're not about to over run the rel store
 	MOVL	-128(%ebx), %eax	# end_store
@@ -1347,10 +1350,15 @@ saverel:
 	#  Save the relocation position
 	MOVL	-124(%ebx), %edx
 	MOVL	-108(%ebx), %eax	# ofile->count
-	MOVL	%eax, (%edx)
-	MOVL	8(%ebp), %eax		# The symbol slot index
-	MOVL	%eax, 4(%edx)
-	ADDL	$8, -124(%ebx)
+	MOVL	%eax, (%edx)		# rel->offset
+	MOVL	12(%ebp), %eax		# The symbol slot index
+	MOVL	%eax, 4(%edx)		# rel->sym_no
+	MOVL	-132(%ebx), %eax	# parse_sect
+	MOVL	%eax, 8(%edx)		# rel->sect
+	MOVL	8(%ebp), %eax
+	MOVL	%eax, 12(%edx)		# rel->type
+
+	ADDL	$16, -124(%ebx)		# sizeof(rel)
 
 	POP	%ebx
 	POP	%ebp
@@ -1367,10 +1375,11 @@ saverel:
 labelref:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
+	PUSH	%ebx
 
 	#  If we're in pass #1, do nothing
-	MOVL	16(%ebp), %ecx
-	CMPL	$0, -112(%ecx)
+	MOVL	16(%ebp), %ebx
+	CMPL	$0, -112(%ebx)
 	JLE	.L11e
 
 	#  Make a slot for the index of the undefined symbol
@@ -1380,7 +1389,7 @@ labelref:
 
 	PUSH	16(%ebp)
 	PUSH	8(%ebp)
-	LEA	-4(%ebp), %eax		# the symbol table slot, above
+	LEA	-8(%ebp), %eax		# the symbol table slot, above
 	PUSH	%eax
 	CALL	getlabel
 	POP	%ecx
@@ -1389,8 +1398,37 @@ labelref:
 
 	CMPL	$-1, %eax
 	JE	.L11d
-	MOVL	%eax, %edx
+	PUSH	%eax
 
+	#  Is it in the current section?
+	MOVL	-8(%ebp), %eax		# symbol number (from slot)
+	MOVL	$20, %ecx		# sizeof(label)
+	MULL	%ecx
+	ADDL	-4(%ebx), %eax		# + label_start
+	MOVL	-132(%ebx), %ecx	# parse_sect
+	CMPL	16(%eax), %ecx
+	JE	.L11g
+
+	#  It's in a different section, so we need a relocation
+	POP 	%edx			# symbol value
+	POP 	%edx			# symbol slot
+	CMPL	$-1, %edx
+	JE	error			# Shouldn't be possible
+
+	#  Save the relocation.  TODO:  Should be R_386_32, not PC32
+	PUSH	16(%ebp)		# main frame bp
+	PUSH	%edx			# symbol
+	MOVL	$1, %eax		# 1 == R_386_32
+	PUSH	%eax
+	CALL	saverel
+	POP	%eax
+	POP	%eax
+	POP	%eax
+	XORL	%eax, %eax		# The relocation addend
+	JMP	.L11c
+
+.L11g:
+	POP 	%edx			# symbol value
 	POP	%eax			# symbol slot
 
 	#  Found it.  Compute the value.
@@ -1444,7 +1482,7 @@ labelref:
 	MOVL	-8(%edx), %eax		# label_end
 	SUBL	-4(%edx), %eax		# - label_start
 	XORL	%edx, %edx
-	MOVL	$16, %ecx
+	MOVL	$20, %ecx		# sizeof(label)
 	DIVL	%ecx			# acts on %edx:%eax
 	DECL	%eax			# want an index (0 based)
 	MOVL	%eax, %edx
@@ -1453,7 +1491,10 @@ labelref:
 	#  Save the relocation
 	PUSH	16(%ebp)		# main frame bp
 	PUSH	%edx			# symbol
+	MOVL	$2, %eax		# 1 == R_386_PC32
+	PUSH	%eax
 	CALL	saverel
+	POP	%eax
 	POP	%eax
 	POP	%eax
 	MOVL	$-4, %eax		# The relocation addend
@@ -1464,6 +1505,7 @@ labelref:
 	DECL	%eax			# Use -1 as error value
 
 .L11c:
+	POP	%ebx
 	POP	%ebp
 	RET
 
@@ -1682,8 +1724,8 @@ write_mrm:
 	#     -140(%ebp)	int sect_len[2];   # 0 .text; 1 .data
 	#     -148(%ebp)	int sect_fd[2];
 	#
-	#  where label is a { char name[12]; int addr; },
-	#  rel is a { int offset; int sym_no; },
+	#  where label is a { char name[12]; int addr; int sect; },
+	#  rel is a { int offset; int sym_no; int sect; int reltype; },
 	#  instrct is a { char name[12]; char type; char data[3]; },
 	#  ifile is a { int fd; bool has_pback :8; char pback_char; int:16; }.
 	#  and ofile is a { int fd; int count; }.
@@ -1717,6 +1759,12 @@ comment:
 
 	#  Parts of the label section
 labeldef:
+	#  Ignore label definitions in pass #2 or pass #3
+	CMPL	$-1, -148(%ebp)
+	JNE	.L10b
+	CMPL	$-1, -144(%ebp)
+	JNE	.L10b
+
 	#  Have we already seen this label?
 	PUSH	%ebp
 	PUSH	%esi
@@ -2185,7 +2233,7 @@ tl_ident:
 	#  Look up the mnemonic or directive
 	#  %esi points to the null-terminated identifier name
 	MOVL	-116(%ebp), %edi
-	SUBL	$16, %edi
+	SUBL	$16, %edi		# sizeof(mnemonic)
 .L14a:
 	ADDL	$16, %edi		# sizeof(mnemonic)
 	CMPL	$0, (%edi)
@@ -2322,23 +2370,23 @@ _start:
 	MOVL	$0, -100(%ebp)		# putback boolean and data
 
 	#  Set up the label vector
-	MOVL	$1024, %ecx
+	MOVL	$1280, %ecx		# 64 * sizeof(label)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
 	MOVL	%eax, -4(%ebp)
 	MOVL	%eax, -8(%ebp)
-	ADDL	%ecx, %eax		 # %ecx still has size
+	ADDL	%ecx, %eax		# %ecx still has size
 	MOVL	%eax, -12(%ebp)
 
 	#  Set up the rel vector
-	MOVL	$512, %ecx
+	MOVL	$1024, %ecx		# 64 * sizeof(rel)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
 	MOVL	%eax, -120(%ebp)
 	MOVL	%eax, -124(%ebp)
-	ADDL	%ecx, %eax		 # %ecx still has size
+	ADDL	%ecx, %eax		# %ecx still has size
 	MOVL	%eax, -128(%ebp)
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
@@ -2414,8 +2462,8 @@ _start:
 	POP	%eax
 	POP	%ecx
 
-	#  And offset 0x138 needs .data section size
-	MOVL	$0x138, %ecx
+	#  And offset 0x98 needs .data section size
+	MOVL	$0x98, %ecx
 	PUSH	%ecx
 	MOVL	-136(%ebp), %eax	# .data size
 	PUSH	%eax
@@ -2456,10 +2504,10 @@ _start:
 	POP	%ecx
 	POP	%ecx			# ofile
 
-	#  Offset 0x134 needs offset of .data
+	#  Offset 0x94 needs offset of .data
 	LEA	-112(%ebp), %eax
 	PUSH	%eax			# ofile
-	MOVL	$0x134, %ecx
+	MOVL	$0x94, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text size + padding
 	ADDL	$0x1A4, %eax		# size of ELF headers
@@ -2488,7 +2536,13 @@ _start:
 	MOVL	-148(%ebp), %eax	# sect_fd[.text]
 	MOVL	%eax, -144(%ebp)	# sect_fd[.data]
 	MOVL	$-1, -148(%ebp)
+	MOVL	$-1, -112(%ebp) 	# fin.fd = fd returned by open
 	CALL	.L8
+
+	#  Change back to the .data section
+	XORL	%edx, %edx
+	INCL	%edx
+	CALL	set_sect
 
 	#  Add .text and .data sizes together
 	POP	%eax			# pop .text + padding
@@ -2503,15 +2557,15 @@ _start:
 	POP	%ecx
 
 	#  Fix up ELF header to point to symbol table
-	#  Offset 0xBC needs offset to symbol table
-	MOVL	$0xBC, %ecx
-	PUSH	%ecx
-	MOVL	-108(%ebp), %eax	# .text size + padding
-	ADDL	$0x1A4, %eax		# ELF header size
-	PUSH	%eax
-	CALL	writedwat
-	POP	%eax
-	POP	%ecx
+	#  Offset 0xE4 needs offset to symbol table
+	MOVL    $0xE4, %ecx
+	PUSH    %ecx
+	MOVL    -108(%ebp), %eax        # .text size + padding
+	ADDL    $0x1A4, %eax            # ELF header size
+	PUSH    %eax
+	CALL    writedwat
+	POP     %eax
+	POP     %ecx
 
 	#  Store the current file offset so we can determine section size
 	#  %ebx is the global symbol number
@@ -2530,11 +2584,11 @@ _start:
 
 	#  Write .symtab section
 	MOVL	-4(%ebp), %edi
-	SUBL	$16, %edi		# labels - 1 
+	SUBL	$20, %edi		# start at labels - 1;  sizeof(label)
 
 .L8c:	
 	#  Loop: Generate the symbol table, initially without string pointers
-	ADDL	$16, %edi		# sizeof(label)
+	ADDL	$20, %edi		# sizeof(label)
 	CMPL	-8(%ebp), %edi
 	JGE	.L8d			# finished
 
@@ -2544,9 +2598,9 @@ _start:
 	JE	.L8c
 .L8e:
 	#  We have a non-local symbol
-	XORL	%eax, %eax	# 0 -- placeholder for string
+	XORL	%eax, %eax		# 0 -- placeholder for link to string
 	PUSH	%eax
-	CALL	writedword	
+	CALL	writedword		# st_name
 	POP	%eax
 
 	#  Use 0 as the address of an undefined symbol
@@ -2556,22 +2610,26 @@ _start:
 	XORL	%eax, %eax
 .L8e2:
 	PUSH	%eax
-	CALL	writedword	
+	CALL	writedword		# st_value
 	POP	%eax
 
 	XORL	%eax, %eax		# 0 -- symbol size is not known
 	PUSH	%eax
-	CALL	writedword	
+	CALL	writedword		# st_size
 	POP	%eax
 	
-	MOVL	$0x00010010, %eax	# STB_GLOBAL, STT_NOTYPE, .text
+	MOVL	16(%edi), %eax		# label->section
+	INCL	%eax			# .text is 1
+	MOVB	$16, %cl
+	SHLL	%eax
+	ADDL	$0x00000010, %eax	# STB_GLOBAL, STT_NOTYPE, .text
 	MOVL	0xC(%edi), %ecx		# offset from start of .text
 	CMPL	$-1, %ecx
 	JNE	.L8e3
 	MOVL	$0x00000010, %eax	# STB_GLOBAL, STT_NOTYPE, SHN_UNDEF
 .L8e3:
 	PUSH	%eax
-	CALL	writedword	
+	CALL	writedword		# st_info, st_other, st_shndx
 	POP	%eax
 
 	#  The symbol value is not needed any more.  
@@ -2579,10 +2637,11 @@ _start:
 	MOVL	%ebx, 0xC(%edi)
 	INCL	%ebx
 	JMP	.L8c
+
 .L8d:
 	#  Fix up ELF header to point to string table
-	#  Offset 0xE4 needs offset to string table
-	MOVL	$0xE4, %ecx
+	#  Offset 0x10C needs offset to string table
+	MOVL	$0x10C, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text + .rel.text + padding + .symtab
 	ADDL	$0x1A4, %eax		# ELF header size
@@ -2591,9 +2650,9 @@ _start:
 	POP	%eax
 	POP	%ecx
 
-	# And offset 0xC0 needs the size of the symbol table
+	# And offset 0xE8 needs the size of the symbol table
 	# %esi is counter at start of .symtab
-	MOVL	$0xC0, %ecx
+	MOVL	$0xE8, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text + .rel.text + padding + .symtab
 	SUBL	%esi, %eax		# .text + .rel.text + padding
@@ -2605,7 +2664,7 @@ _start:
 	# %edi is the label pointer; %esi is the offset for the next symbol
 	# table entry; %ebx is the start of the string section
 	MOVL	-4(%ebp), %edi
-	SUBL	$16, %edi		# labels - 1   (sizeof(label))
+	SUBL	$20, %edi		# labels - 1   (sizeof(label))
 	ADDL	$0x1B4, %esi		# ELF header size (0x1A4) + null symbol
 	MOVL    -108(%ebp), %ebx
 
@@ -2616,7 +2675,7 @@ _start:
 	POP	%eax
 .L8f:
 	# Loop writing strings and fixing up references to symbol names
-	ADDL	$16, %edi		# sizeof(label)
+	ADDL	$20, %edi		# sizeof(label)
 	CMPL	-8(%ebp), %edi
 	JGE	.L8i			# finished
 
@@ -2633,12 +2692,12 @@ _start:
 	CALL	writedwat
 	POP	%eax
 	POP	%eax
-	ADDL	$16, %esi		# sizeof(label)
+	ADDL	$16, %esi		# sizeof(Elf32_Sym)
 
-	#  Write its symbol
+	#  Write its symbol name 
 	PUSH	%edi
 	CALL	strlen
-	INCL	%eax		# Write '\0' too
+	INCL	%eax			# Write '\0' too
 	PUSH	%eax
 	CALL	writedptr
 	POP	%eax
@@ -2646,8 +2705,8 @@ _start:
 	JMP	.L8f
 .L8i:
 	#  Fix up ELF header for string table
-	#  Offset 0xE8 needs size of string table
-	MOVL	$0xE8, %eax
+	#  Offset 0x110 needs size of string table
+	MOVL	$0x110, %eax
 	PUSH	%eax
 	MOVL	-108(%ebp), %eax
 	SUBL	%ebx, %eax		# Offset into string table
@@ -2662,8 +2721,8 @@ _start:
 	CALL	writepad
 	POP	%ecx
 
-	#  Offset 0x10C needs offset to start of .rel.text
-	MOVL	$0x10C, %eax
+	#  Offset 0x134 needs offset to start of .rel.text
+	MOVL	$0x134, %eax
 	PUSH	%eax
 	MOVL	-108(%ebp), %eax 	# ofile->count
 	ADDL	$0x1A4, %eax		# Length of ELF header
@@ -2682,6 +2741,9 @@ _start:
 	CMPL	-124(%ebp), %edi
 	JGE	.L26			# finished
 
+	CMPL	$0, 8(%edi)
+	JNE	.L25a
+
 	#  Relocation offset
 	PUSH	(%edi)			# r_offset
 	CALL	writedword
@@ -2690,7 +2752,7 @@ _start:
 	#  Get the symbol number
 	MOVL	4(%edi), %eax		# in-memory symbol number
 	XORL	%edx, %edx
-	MOVL	$16, %ecx
+	MOVL	$20, %ecx		# sizeof(label)
 	MULL	%ecx			# acts on %edx:%eax
 	ADDL	-4(%ebp), %eax		# label_start
 	MOVL	0xC(%eax), %eax		# look up the value for the global no.
@@ -2698,18 +2760,19 @@ _start:
 	#  Compose and write the r_info field
 	MOVB 	$8, %cl
 	SHLL	%eax			# by %cl
-	ADDL	$2, %eax		# R_386_PC32
+	ADDL	12(%edi), %eax		# relocation type (e.g. R_386_PC32)
 	PUSH	%eax
 	CALL	writedword
 	POP	%eax
 
-	ADDL	$8, %edi
+.L25a:
+	ADDL	$16, %edi		# sizeof(rel)
 	JMP	.L25
 
 .L26:
-	# Offset 0x110 needs the size of the .rel.text table
+	# Offset 0x138 needs the size of the .rel.text table
 	# %esi is counter at start of .rel.text
-	MOVL	$0x110, %ecx
+	MOVL	$0x138, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text + padding + .rel.text
 	SUBL	%esi, %eax		# .text + padding
