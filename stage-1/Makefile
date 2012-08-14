@@ -38,7 +38,9 @@ check-unhexl:	unhexl elfify unhexl.ts.xl
 	$(CHMOD) a+x unhexl2
 	unhexl2 < unhexl.ts.xl > unhexl2.ts
 	$(CMP) unhexl.ts unhexl2.ts
-	$(RM) unhexl.ts unhexl2.ts unhexl2
+	elfify unhexl2.ts > unhexl3
+	$(CMP) unhexl2 unhexl3
+	$(RM) unhexl.ts unhexl2.ts unhexl2 unhexl3
 
 clean:
-	$(RM) -f unhex unhexl elfify unhexl.ts unhexl2.ts
+	$(RM) -f unhex unhexl elfify unhexl.ts unhexl2.ts unhexl2 unhexl3

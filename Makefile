@@ -10,3 +10,8 @@ all init check:
 
 clean:
 	for n in `seq $(STAGES) -1 0`; do $(MAKE) -C stage-$$n $@; done
+
+world:
+	$(MAKE) clean
+	$(MAKE) all
+	$(MAKE) check
