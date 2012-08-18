@@ -74,10 +74,10 @@ instructions, not one with a prefix.  The full grammar is:
 
 The list of supported mnemonics is:
 
-  ADDx, ANDx, CALL, CBW, CDQ, CMPx, CMPSB, CWDE, DECB, DECL, DIVx, 
-  IDIVx, IMULx, INCx, INT, Jcc, LEA, MOVx, MOVSB, MULx, NEGx, NOP, ORx, 
-  POP, POPF, PUSH, PUSHF, REP, REPE, REPNE, RET, SALx, SARx, SCASB, 
-  SHLx, SHRx, SUBx, XORx.
+  ADDx, ANDx, CALL, CBW, CDQ, CMPx, CMPSB, CWDE, DECB, DECL, DIVx, HLT,
+  IDIVx, IMULx, INCx, INT, Jcc, LEA, LEAVE, MOVx, MOVSB, MULx, NEGx, 
+  NOP, ORx, POP, POPF, PUSH, PUSHF, REP, REPE, REPNE, RET, SALx, SARx, 
+  SCASB, SHLx, SHRx, SUBx, XORx.
 
 In that list, 'x' represents a size suffix L or B, and 'cc' is a
 condition (A, AE, B, BE, C, E, G, GE, L, LE, NE, O).  Some instructions 

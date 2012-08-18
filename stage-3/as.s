@@ -40,6 +40,7 @@ mnemonics:
 .hex	43 44 51 00  00 00 00 00  00 00 00 00    00 01 99 00    # CDQ
 .hex	52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
 .hex	48 4C 54 00  00 00 00 00  00 00 00 00    00 01 F4 00    # HLT
+.hex	4C 45 41 56  45 00 00 00  00 00 00 00    00 01 C9 00    # LEAVE
 
 
 # Type 01 instructions.   A single immediate 8-bit argument, e.g.
@@ -533,13 +534,13 @@ writedptr:
 	CMPL	$0, %ebx
 	JL	.L5d
 
-        PUSH	%edx
+	PUSH	%edx
 	MOVL	12(%ebp), %ecx		# data
 	MOVL	$4, %eax   		# 4 == __NR_write
-        INT	$0x80
-        POP	%edx
-        CMPL	%edx, %eax
-        JNE	error
+	INT	$0x80
+	POP	%edx
+	CMPL	%edx, %eax
+	JNE	error
 
 .L5d:
 	POP	%ebx
@@ -559,11 +560,7 @@ writebyte:
 	MOVL	$1, %eax	# Write one byte
 	PUSH	%eax
 	CALL	writedptr
-	POP	%eax
-	POP	%eax
-	POP	%eax
-
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -579,11 +576,8 @@ writedword:
 	MOVL	$4, %eax	# Write one byte
 	PUSH	%eax
 	CALL	writedptr
-	POP	%eax
-	POP	%eax
-	POP	%eax
 
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -602,9 +596,7 @@ writedata:
 .L5b:
 	CALL	writebyte
 .L5c:
-	POP	%edx
-	POP	%edx
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -776,8 +768,7 @@ getone:
 	CALL	readonex
 	MOVB	-4(%ebp), %al
 
-	ADDL	$12, %esp
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -857,9 +848,7 @@ read_r32:
 
 .L9h:
 	MOVL	%ecx, %eax
-	POP	%edx		# value
-	POP	%edx		# ifile
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -904,9 +893,7 @@ read_r8:
 
 .L9c:
 	MOVL	%ecx, %eax
-	POP	%edx		# value
-	POP	%edx		# ifile
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -925,8 +912,7 @@ read_reg:
 .L13:
 	CALL	read_r8
 .L13a:
-	POP	%ecx
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -956,8 +942,7 @@ skiphws:
 	POP	%eax
 
 	#  Stack cleanup and exit
-	POP	%edx
-	POP	%ebp
+	LEAVE
 	RET
 	
 
@@ -1632,9 +1617,7 @@ read_imm:
 
 	MOVL	-8(%ebp), %eax	# return val
 .L16c:
-	#  Stack clean-up and exit
-	ADDL	$20, %esp
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -1706,8 +1689,7 @@ write_mrm:
 	CALL	writedword
 	POP	%ebx
 .L20:
-	POP	%edx		# ofile
-	POP	%ebp
+	LEAVE
 	RET
 
 	
@@ -1719,7 +1701,7 @@ write_mrm:
 	#      -12(%ebp)	label* label_end_store
 	#      -96(%ebp)	char buffer[80]
 	#     -104(%ebp)	ifile fin
-        #     -112(%ebp)	ofile fout
+	#     -112(%ebp)	ofile fout
 	#     -116(%ebp)	instrct* mnemonics
 	#     -120(%ebp)	rel* rel_start
 	#     -124(%ebp)	rel* rel_end

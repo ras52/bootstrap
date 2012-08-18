@@ -39,6 +39,8 @@ mnemonics:
 .hex	43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE
 .hex	43 44 51 00  00 00 00 00  00 00 00 00    00 01 99 00    # CDQ
 .hex	52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
+.hex	48 4C 54 00  00 00 00 00  00 00 00 00    00 01 F4 00    # HLT
+.hex	4C 45 41 56  45 00 00 00  00 00 00 00    00 01 C9 00    # LEAVE
 
 
 # Type 01 instructions.   A single immediate 8-bit argument, e.g.
@@ -360,9 +362,7 @@ writedata:
 .L5b:
 	CALL	writebyte
 .L5c:
-	POP	%edx
-	POP	%edx
-	POP	%ebp
+	LEAVE
 	RET
 
 	
@@ -457,8 +457,7 @@ getone:
 	CALL	readonex
 	MOVB	-4(%ebp), %al
 
-	ADDL	$12, %esp
-	POP	%ebp
+	LEAVE
 	RET
 
 
@@ -1053,8 +1052,7 @@ read_id:
 
 	#  Stack cleanup and exit
 	MOVL	-8(%ebp), %eax	# return val
-	ADDL	$20, %esp
-	POP	%ebp
+	LEAVE
 	RET
 
 read_imm:
@@ -1086,8 +1084,7 @@ read_imm:
 	CALL	read_int
 
 	#  Stack clean-up and exit
-	ADDL	$20, %esp
-	POP	%ebp
+	LEAVE
 	RET
 
 

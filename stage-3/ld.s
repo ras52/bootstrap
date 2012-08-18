@@ -619,7 +619,7 @@ findsym:
 error:
 	MOVL    $1, %ebx
 success:
-	MOVL    $1, %eax   # 1 == __NR_exit
+	MOVL    $1, %eax   		# 1 == __NR_exit
 	INT     $0x80
 
 

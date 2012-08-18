@@ -32,8 +32,8 @@ grammar is:
   file    := ( comment | octet | lref | ldef | WS* )*
 
 In order to keep the grammar simple, only upper case letters are 
-accepted in hexidecimal octets and labels must not start with a
-valid hexidecimal digit.  It is suggested that labels start with
+accepted in hexadecimal octets and labels must not start with a
+valid hexadecimal digit.  It is suggested that labels start with
 a '.' or a lower case letter.
 
 Label references are converted into little-endian 32-bit offsets 
@@ -83,3 +83,8 @@ relative jump requires precisely 5 bytes and can easily be generated
 by unhexl by ending the file with:
 
   E9 main
+
+We check the stage 1 tools are working correctly by using them to build
+a new copy of unhexl from source in its own input language.  This is
+repeated and the second and third generation unhexl binaries are
+required to be identical.
