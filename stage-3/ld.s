@@ -617,9 +617,9 @@ findsym:
 ####    #  Not a proper function.
 	#  Exits program
 error:
-	MOVL    $1, %ebx
+	MOVL	$1, %ebx
 success:
-	MOVL    $1, %eax   		# 1 == __NR_exit
+	MOVL	$1, %eax   		# 1 == __NR_exit
 	INT     $0x80
 
 
@@ -832,7 +832,7 @@ _start:
 .L16:
 	POP	%eax
 	CMPL	0(%ebp), %eax
-	JGE 	.L17
+	JGE	.L17
 	INCL	%eax
 	PUSH	%eax
 	
@@ -879,7 +879,7 @@ _start:
 .L16a:
 	POP	%eax
 	CMPL	0(%ebp), %eax
-	JGE 	.L17a
+	JGE	.L17a
 	INCL	%eax
 	PUSH	%eax
 	
@@ -1097,4 +1097,4 @@ _start:
 
 ####    #  And finally, the entry point.
 	#  Last per requirement for elfify.
-	JMP    _start 
+	JMP	_start 

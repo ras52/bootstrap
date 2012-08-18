@@ -305,10 +305,10 @@ dchr:
 ####    #  Not a proper function.
 	#  Exits program
 error:
-	MOVL    $1, %ebx
+	MOVL	$1, %ebx
 success:
-	MOVL    $1, %eax   # 1 == __NR_exit
-	INT     $0x80
+	MOVL	$1, %eax   # 1 == __NR_exit
+	INT	$0x80
 
 
 ####	#  Function:	void writebyte( int c, ofile* of )
@@ -405,7 +405,7 @@ readone:
 
 	#  The pback_slot has a value in it
 	MOVB	$0, 4(%ebx)
-	MOVB    5(%ebx), %al
+	MOVB	5(%ebx), %al
 	MOVB	%al, (%ecx)
 	MOVL	$1, %eax
 	JMP	.L9a
@@ -1801,5 +1801,5 @@ main:
 
 ####    #  And finally, the entry point.
 	#  Last per requirement for elfify.
-	JMP     main
+	JMP	main
 

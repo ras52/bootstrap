@@ -140,16 +140,15 @@ mnemonics:
 
 # Type 06 instructions.   These represent a large family of op-codes, e.g.
 #
-#   MOVB    r8, r/m8        88         } These two opcodes are constrained
-#   MOVB    r/m8, r8        8A         } to $N and $N+2.
-#   MOVB    imm8, r/m8      C6 /0
+#   ADDB    r8, r/m8        00         } These two opcodes are constrained
+#   ADDB    r/m8, r8        02         } to $N and $N+2.
+#   ADDB    imm8, r/m8      80 /0
 #
 # The three parameters are:
-#   1) the r8, r/m8 op code (88 here), the 
-# immediate op code (C6 here), and the three op-code extension bits
-# that are in the reg part of the mod-r/m byte (0 here).
+#   1) the r8, r/m8 op code (00 here), 
+#   2) the imm8 op code (80 here), and 
+#   3) the three-bit reg field for the mod-r/m byte (0 here).
 
-.hex	4D 4F 56 42  00 00 00 00  00 00 00 00    06 88 C6 00    # MOVB
 .hex	41 44 44 42  00 00 00 00  00 00 00 00    06 00 80 00    # ADDB
 .hex	53 55 42 42  00 00 00 00  00 00 00 00    06 28 80 05    # SUBB
 .hex	43 4D 50 42  00 00 00 00  00 00 00 00    06 38 80 07    # CMPB
@@ -160,15 +159,15 @@ mnemonics:
 
 # Type 07 instructions.   These represent a large family of op-codes, e.g.
 #
-#   MOVL    r32,r/m32       89         } These two opcodes are constrained
-#   MOVL    r/m32,r32       8B         } to $N and $N+2.
-#   MOVL    imm32,r/m32     C7 /0
+#   ADDL    r32, r/m32      01         } These two opcodes are constrained
+#   ADDL    r/m32, r32      03         } to $N and $N+2.
+#   ADDL    imm32, r/m32    81 /0
 #
-# The three parameters are the register op code (88 here), the 
-# immediate op code (C6 here), and the three op-code extension bits
-# that are in the reg part of the mod-r/m byte (0 here).
+# The three parameters are: 
+#   1) the register op code (01 here), 
+#   2) the imm32 op code (81 here), and 
+#   3) the three-bit reg field for the mod-r/m byte (0 here).
 
-.hex	4D 4F 56 4C  00 00 00 00  00 00 00 00    07 89 C7 00    # MOVL
 .hex	41 44 44 4C  00 00 00 00  00 00 00 00    07 01 81 00    # ADDL
 .hex	53 55 42 4C  00 00 00 00  00 00 00 00    07 29 81 05    # SUBL
 .hex	43 4D 50 4C  00 00 00 00  00 00 00 00    07 39 81 07    # CMPL
@@ -176,6 +175,14 @@ mnemonics:
 .hex	4F 52 4C 00  00 00 00 00  00 00 00 00    07 09 81 01    # ORL
 .hex	58 4F 52 4C  00 00 00 00  00 00 00 00    07 31 81 06    # XORL
 
+# Type 08 and 09 instructions.  These are like types 06 and 07, respectively,
+# but with the following additional op-codes:
+#
+#   MOVL    moffs32, %eax   A1 		MOVB    moffs8, %al   A0
+#   MOVL    %eax, moffs32   A3          MOVB    %al, moffs8   A2
+
+.hex	4D 4F 56 42  00 00 00 00  00 00 00 00    08 88 C6 00    # MOVB
+.hex	4D 4F 56 4C  00 00 00 00  00 00 00 00    09 89 C7 00    # MOVL
 
 # Type FF 'instructions'.  These are actually directives.    
 #
@@ -716,7 +723,7 @@ readone:
 
 	#  The pback_slot has a value in it
 	MOVB	$0, 4(%ebx)
-	MOVB    5(%ebx), %al
+	MOVB	5(%ebx), %al
 	MOVB	%al, (%ecx)
 	MOVL	$1, %eax
 	JMP	.L9a
@@ -1866,6 +1873,7 @@ type_05:
 	POP	%ecx
 
 .L22:
+	#  We have:  r/m, reg
 	#  Read the r/m
 	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
@@ -1908,6 +1916,7 @@ type_05:
 	JMP	insn_end
 
 type_06_rm:
+	#  We have: MNEMONIC r/m, reg
 	#  %edx contains the opcode info, so %dh+2 is the opcode.  Write it.
 	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
@@ -1920,17 +1929,71 @@ type_06_rm:
 
 	JMP	.L22
 
-type_06_rg:
-	#  %edx contains the opcode info, so %dh is the opcode.  Write it.
+type_08_w:
+	#  We're reading from a memory location.  MOVL symbol, %eax
+	#  Find the op-code
+	MOVB	$0xA2, %dl
+	CMPL	$8, %ebx
+	JE	.L28
+	INCB	%dl
+.L28:
+	#  Write opcode byte
 	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
-	MOVB	%dh, %al
-	PUSH	%eax
+	PUSH	%edx
 	CALL	writebyte
 	POP	%ecx
 	POP	%ecx
+	
+	#  We've got an immediate label.  Get first char into buffer,
+	#  and then read the label.
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	getone
+	MOVB	%al, -96(%ebp)
+	PUSH	%ebp			# main_frame
+	CALL	read_id
+	POP	%ecx
+	POP	%ecx			# ifile
 
-.L23:
+	#  Write back the last byte
+	PUSH	%eax			# save endp
+	PUSH	%ecx			# ifile
+	PUSH	(%eax)			# char
+	CALL	unread
+	POP	%ecx
+	POP	%ecx			# ifile
+	POP	%eax			# endp
+
+	#  Calculate the string length
+	LEA	-96(%ebp), %edx
+	SUBL	%edx, %eax
+	PUSH	%ebp			# main_frame
+	PUSH	%ebx			# bits
+	PUSH	%eax			# strlen
+	CALL	labelref		# TODO:  Should always be R_386_32 here
+	POP	%ecx
+	POP	%ebx			# bits
+	POP	%ecx
+
+	#  And write the immediate data
+	LEA	-112(%ebp), %ecx
+	PUSH	%ecx
+	PUSH	%eax			# byte(s)
+	PUSH	%ebx			# bits
+	CALL	writedata
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+
+	JMP	insn_end
+
+
+type_06_rg:
+	#  We have: MNEMONIC reg, r/m  (or a type 8/9:  MOV reg, symbol)
+	#  %edx contains the opcode info, so %dh is the opcode.  Write it.
+	PUSH	%edx			# Store opcode data
+
 	#  Read the register
 	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
@@ -1942,8 +2005,76 @@ type_06_rg:
 	CALL	read_reg
 	POP	%ebx			# bits
 	POP	%ecx
+	PUSH	%eax			# Store register
+
+	#  Skip ws, read a comma, then skip more ws 
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	CALL	getone
+	CMPB	$0x2C, %al		# ','
+	JNE	error
+	CALL	skiphws
+	POP	%ecx
+
+	#  Need to determine whether the next token really is an r/m,
+	#  or if we have a type 8/9 insn and it's a symbol.
+	CMPB	$0x25, %al		# '%'
+	JE	.L23
+	CMPB	$0x28, %al		# '('
+	JE	.L23
+	CMPB	$0x2D, %al		# '-'
+	JE	.L23
+	PUSH	%eax
+	CALL	dchr
+	POP	%ecx
+	CMPB	$-1, %al
+	JNE	.L23
+
+	#  Type 8/9 instructions only allow %eax or %al as their register
+	POP	%eax			# Retrieve register
+	CMPL	$0, %eax
+	JNE	error
+
+	#  Check we really are a type 8/9 instruction
+	POP	%edx			# Retrieve opcode data
+	CMPB	$8, %dl
+	JE	type_08_w
+	CMPB	$9, %dl
+	JE	type_08_w
+	JMP	error
+
+.L23:
+	#  Write the opcode
+	POP	%eax			# Retrieve register
+	POP	%edx			# Retrieve opcode data
+	PUSH	%eax			# Store register
+	LEA	-112(%ebp), %ecx
+	PUSH	%ecx
+	MOVB	%dh, %al
+	PUSH	%eax
+	CALL	writebyte
+	POP	%ecx
+	POP	%ecx
+
+	#  Read the '%' and r/m
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	LEA	-96(%ebp), %ecx		# disp
+	PUSH	%ecx
+	PUSH	%ebx			# bits
+	CALL	read_rm
+	MOVL	%eax, %edx
+	POP	%ebx			# bits
+	POP	%ecx			# disp
+	POP	%ecx			# ifile
+	POP	%eax			# Retrieve register
+
+	#  Write the ModR/M byte.
+	JMP	.L22a
 
 .L23a:
+	#  We CALL this label.  Urgh.
 	#  Skip ws, read a comma, then skip more ws and read the '%' and r/m
 	#  We expect %eax to contain the reg bytes already read, and
 	#  %ebx the number of bits.
@@ -2024,7 +2155,7 @@ type_06_im:
 	CMPB	$0x24, %al		# '$'
 	JE	.L23b
 	
-	#  We've got a an intermediate label.  Get first char into buffer,
+	#  We've got an immediate label.  Get first char into buffer,
 	#  and then read the label.
 	PUSH	%edx			# store op info
 	LEA	-104(%ebp), %ecx	# ifile
@@ -2034,25 +2165,25 @@ type_06_im:
 	PUSH	%ebp			# main_frame
 	CALL	read_id
 	POP	%ecx
-	POP	%ecx		# ifile
+	POP	%ecx			# ifile
 	
 	#  Write back the last byte
-	PUSH	%eax		# save endp
-	PUSH	%ecx		# ifile
-	PUSH	(%eax)		# char
+	PUSH	%eax			# save endp
+	PUSH	%ecx			# ifile
+	PUSH	(%eax)			# char
 	CALL	unread
 	POP	%ecx
-	POP	%ecx		# ifile
-	POP	%eax		# endp
+	POP	%ecx			# ifile
+	POP	%eax			# endp
 
 	#  Calculate the string length
 	LEA	-96(%ebp), %edx
 	SUBL	%edx, %eax
-	POP	%ecx		# retrieve op info
-	PUSH	%ebp		# main_frame
-	PUSH	%ebx		# bits
-	PUSH	%eax		# strlen
-	PUSH	(%edx)		# first dword
+	POP	%ecx			# retrieve op info
+	PUSH	%ebp			# main_frame
+	PUSH	%ebx			# bits
+	PUSH	%eax			# strlen
+	PUSH	(%edx)			# first dword
 
 	#  Now call into the {.L23a, .L22a, insn_end, ret1} block to handle
 	#  the ModR/M (incl. disp32).   Urgh.
@@ -2064,18 +2195,97 @@ type_06_im:
 	POP	-96(%ebp)
 	CALL	labelref
 	POP	%ecx
-	POP	%ebx		# bits
+	POP	%ebx			# bits
 	POP	%ecx
 
 	#  And write the immediate data
 	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
-	PUSH	%eax		# byte(s)
-	PUSH	%ebx		# bits
+	PUSH	%eax			# byte(s)
+	PUSH	%ebx			# bits
 	CALL	writedata
 	POP	%ecx
 	POP	%ecx
 	POP	%ecx
+
+	JMP	insn_end
+
+type_08_r:
+	#  We're reading from a memory location.  MOVL symbol, %eax
+	#  Find the op-code
+	MOVB	$0xA0, %dl
+	CMPL	$8, %ebx
+	JE	.L27
+	INCB	%dl
+.L27:
+	#  Write opcode byte
+	LEA	-112(%ebp), %ecx
+	PUSH	%ecx
+	PUSH	%edx
+	CALL	writebyte
+	POP	%ecx
+	POP	%ecx
+	
+	#  We've got an immediate label.  Get first char into buffer,
+	#  and then read the label.
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	getone
+	MOVB	%al, -96(%ebp)
+	PUSH	%ebp			# main_frame
+	CALL	read_id
+	POP	%ecx
+	POP	%ecx			# ifile
+
+	#  Write back the last byte
+	PUSH	%eax			# save endp
+	PUSH	%ecx			# ifile
+	PUSH	(%eax)			# char
+	CALL	unread
+	POP	%ecx
+	POP	%ecx			# ifile
+	POP	%eax			# endp
+
+	#  Calculate the string length
+	LEA	-96(%ebp), %edx
+	SUBL	%edx, %eax
+	PUSH	%ebp			# main_frame
+	PUSH	%ebx			# bits
+	PUSH	%eax			# strlen
+	CALL	labelref		# TODO:  Should always be R_386_32 here
+	POP	%ecx
+	POP	%ebx			# bits
+	POP	%ecx
+
+	#  And write the immediate data
+	LEA	-112(%ebp), %ecx
+	PUSH	%ecx
+	PUSH	%eax			# byte(s)
+	PUSH	%ebx			# bits
+	CALL	writedata
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+
+	# Skip ws, read a comma, then skip more ws and read the '%' and reg
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	CALL	getone
+	CMPB	$0x2C, %al		# ','
+	JNE	error
+	CALL	skiphws
+	CALL	getone
+	CMPB	$0x25, %al		# '%'
+	JNE	error
+	PUSH	%ebx			# bits
+	CALL	read_reg
+	POP	%edx			# bits
+	POP	%edx			# ifile
+
+	#  Type 8/9 instructions only allow %eax or %al as their register
+	CMPL	$0, %eax
+	JNE	error
 
 	JMP	insn_end
 
@@ -2089,19 +2299,28 @@ type_06:
 	POP	%edx
 
 	#  Need to determine which of the three types of instruction it is.
-	CMPB	$0x25, %al	# '%'
+	CMPB	$0x25, %al		# '%'
 	JE	type_06_rg
-	CMPB	$0x28, %al	# '('
+	CMPB	$0x28, %al		# '('
 	JE	type_06_rm
-	CMPB	$0x2D, %al	# '-'
+	CMPB	$0x2D, %al		# '-'
 	JE	type_06_rm
+	CMPB	$0x24, %al		# '$'
+	JE	type_06_im
 	PUSH	%eax
 	CALL	dchr
 	POP	%ecx
 	CMPB	$-1, %al
 	JNE	type_06_rm
-	JMP	type_06_im
+	CMPB	$8, %dl
+	JE	type_08_r
+	CMPB	$9, %dl
+	JE	type_08_r
 
+	#  If we're here it's because there is code like: ADDL foo, %eax
+	#  This is wrong, but it's used (e.g. in this file) to overcome
+	#  the lack of .data relocations in the stage-2 as.
+	JMP	type_06_im
 
 int_direct:
 	#  We're reached with %edx containing the directive data
@@ -2287,6 +2506,8 @@ tl_ident:
 	JE	type_03
 	CMPB	$6, %dl
 	JE	type_06
+	CMPB	$8, %dl
+	JE	type_06
 
 	#  Instructions with 32-bit operands
 	MOVL	$32, %ebx	# 32-bit mode
@@ -2297,7 +2518,9 @@ tl_ident:
 	CMPB	$5, %dl
 	JE	type_05
 	CMPB	$7, %dl
-	JE	type_06		# 6 & 7 same
+	JE	type_06		# 6, 7, 8 & 9 same
+	CMPB	$9, %dl
+	JE	type_06
 
 	JMP	error
 	RET	# to main loop
@@ -2574,14 +2797,14 @@ _start:
 
 	#  Fix up ELF header to point to symbol table
 	#  Offset 0xE4 needs offset to symbol table
-	MOVL    $0xE4, %ecx
-	PUSH    %ecx
-	MOVL    -108(%ebp), %eax        # .text size + padding
-	ADDL    $0x1A4, %eax            # ELF header size
-	PUSH    %eax
-	CALL    writedwat
-	POP     %eax
-	POP     %ecx
+	MOVL	$0xE4, %ecx
+	PUSH	%ecx
+	MOVL	-108(%ebp), %eax        # .text size + padding
+	ADDL	$0x1A4, %eax            # ELF header size
+	PUSH	%eax
+	CALL	writedwat
+	POP	%eax
+	POP	%ecx
 
 	#  Store the current file offset so we can determine section size
 	#  %ebx is the global symbol number
@@ -2682,7 +2905,7 @@ _start:
 	MOVL	-4(%ebp), %edi
 	SUBL	$20, %edi		# labels - 1   (sizeof(label))
 	ADDL	$0x1B4, %esi		# ELF header size (0x1A4) + null symbol
-	MOVL    -108(%ebp), %ebx
+	MOVL	-108(%ebp), %ebx
 
 	# Null symbol's name
 	XORL	%eax, %eax
@@ -2774,7 +2997,7 @@ _start:
 	MOVL	0xC(%eax), %eax		# look up the value for the global no.
 
 	#  Compose and write the r_info field
-	MOVB 	$8, %cl
+	MOVB	$8, %cl
 	SHLL	%eax			# by %cl
 	ADDL	12(%edi), %eax		# relocation type (e.g. R_386_PC32)
 	PUSH	%eax
@@ -2804,4 +3027,4 @@ POP	%ecx			# ofile -- from way above **
 
 ####    #  And finally, the entry point.
 	#  Last per requirement for elfify.
-	JMP    _start 
+	JMP	_start 
