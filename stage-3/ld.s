@@ -295,6 +295,7 @@ findsect:
 	#                             size_t strlen, char* name,
 	#                             vec<label>* syms, vec<label>* relocs,
 	#                             int sectid )
+	#
 	#  Populate the SYM vector with data from .symtab / .strtab for
 	#  the NAME section (which has length STRLEN) of ELF, 
 	#  adding OFFSET to each symbol.  Return 
@@ -572,9 +573,10 @@ readsyms:
 	RET
 
 
-####	#  Function:  size_t findsym( size_t strlen, char* name,
+####	#  Function:  label* findsym( size_t strlen, char* name,
 	#                             vec<label>* syms )
-	#  Return offset for symbol NAME (with length STRLEN), in the 
+	#
+	#  Return the symbol NAME (with length STRLEN), in the 
 	#  symbol table SYMS.
 findsym:
 	PUSH	%ebp

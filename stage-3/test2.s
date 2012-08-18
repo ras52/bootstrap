@@ -11,3 +11,6 @@ exit:
 	POP	%ebx
 	POP	%ebp
 	RET
+
+.data
+.byte	0x21

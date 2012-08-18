@@ -1,9 +1,9 @@
 .data
 bar:
-.hex_bytes	2A 00 00 00
+	.int	0x2A
 
 foo:
-.hex_bytes	01 00 00 00
+	.int	1
 
 .text
 _start:

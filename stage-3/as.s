@@ -186,6 +186,8 @@ mnemonics:
 .hex_bytes  2E 68 65 78  5F 62 79 74  65 73 00 00    FF 00 00 00    # .hex_bytes
 .hex_bytes  2E 74 65 78  74 00 00 00  00 00 00 00    FF 01 00 00    # .text
 .hex_bytes  2E 64 61 74  61 00 00 00  00 00 00 00    FF 01 01 00    # .data
+.hex_bytes  2E 69 6E 74  00 00 00 00  00 00 00 00    FF 02 20 00    # .int
+.hex_bytes  2E 62 79 74  65 00 00 00  00 00 00 00    FF 02 08 00    # .byte
 
 zeros:
 # End of table marker -- first byte of name is NULL.
@@ -2116,6 +2118,34 @@ type_06:
 	JNE	type_06_rm
 	JMP	type_06_im
 
+
+int_direct:
+	#  We're reached with %edx containing the directive data
+	MOVB	$16, %cl
+	SHRL	%edx
+	MOVL	%edx, %ebx		# bits
+
+	#  Skip horizontal whitespace and read an integer
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	PUSH	%ebx			# bits
+	CALL	read_int
+	POP	%ecx
+	POP	%ecx			# ifile
+	
+	#  Now write the integer
+	LEA	-112(%ebp), %ecx	# ofile
+	PUSH	%ecx
+	PUSH	%eax
+	PUSH	%ebx
+	CALL	writedata
+	POP	%edx
+	POP	%edx
+	POP	%edx
+
+	JMP	insn_end
+
 set_sect:
 	#  When we jumped here, %edx is the new section number
 	PUSH	%edx			# Store across MUL
@@ -2256,6 +2286,8 @@ tl_ident:
 	#  Directives
 	CMPB	$0x00, %dh
 	JE	hex_bytes
+	CMPB	$0x02, %dh
+	JE	int_direct
 	MOVB	$0x10, %cl
 	SHRL	%edx
 	JMP	set_sect
