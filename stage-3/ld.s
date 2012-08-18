@@ -12,14 +12,14 @@ elf_hdr:
 # and offset 0x18 requires the entry point address.)
 # 
 #                        32-bit, LSB ('Intel') byte order, ELF v.1
-#           magic-----\  |      /--------------------------------/
-.hex_bytes  7F 45 4C 46  01 01 01 00    00 00 00 00  00 00 00 00
-#           exe-\ 386-\  ELF-v1----\    **entry**---\  phdr-off--\
-.hex_bytes  02 00 03 00  01 00 00 00    00 00 00 00  34 00 00 00
-#           **shdroff**  flags-----\    ehsz\
-.hex_bytes  00 00 00 00  00 00 00 00    34 00
-#           phsz\ phn-\  shsz\ shn-\    shstr\
-.hex_bytes  20 00 02 00  28 00 04 00    03 00 
+#	magic-----\  |      /--------------------------------/
+.hex	7F 45 4C 46  01 01 01 00    00 00 00 00  00 00 00 00
+#	exe-\ 386-\  ELF-v1----\    **entry**---\  phdr-off--\
+.hex	02 00 03 00  01 00 00 00    00 00 00 00  34 00 00 00
+#	**shdroff**  flags-----\    ehsz\
+.hex	00 00 00 00  00 00 00 00    34 00
+#	phsz\ phn-\  shsz\ shn-\    shstr\
+.hex	20 00 02 00  28 00 04 00    03 00 
 
 # Note that ELF requires the offset of a loadable segment to be
 # equal to its virtual address modulo its alignment.  
@@ -27,19 +27,19 @@ elf_hdr:
 # Text segment program header.  start: 0x34; length: 0x20
 # (Offsets 0x44 and 0x48 require .text size)
 #
-#           PT_LOAD---\  offset----\    vaddr-----\  paddr-----\
-.hex_bytes  01 00 00 00  74 00 00 00    74 80 04 08  74 80 04 08 
-#           **filesz**\  **memsz**-\    PF_R|PF_X-\  align-----\
-.hex_bytes  00 00 00 00  00 00 00 00    05 00 00 00  00 10 00 00
+#	PT_LOAD---\  offset----\    vaddr-----\  paddr-----\
+.hex	01 00 00 00  74 00 00 00    74 80 04 08  74 80 04 08 
+#	**filesz**\  **memsz**-\    PF_R|PF_X-\  align-----\
+.hex	00 00 00 00  00 00 00 00    05 00 00 00  00 10 00 00
 
 # Data segment program header.  start: 0x54; length: 0x20
 # (Offsets 0x5C and 0x60 require load address)
 # (Offsets 0x64 and 0x68 require .data size)
 #
-#           PT_LOAD---\  offset----\    vaddr-----\  paddr-----\
-.hex_bytes  01 00 00 00  74 00 00 00    74 90 04 08  74 90 04 08
-#           **filesz**\  **memsz**-\    PF_R|PF_W-\  align-----\
-.hex_bytes  00 00 00 00  00 00 00 00    06 00 00 00  00 10 00 00
+#	PT_LOAD---\  offset----\    vaddr-----\  paddr-----\
+.hex	01 00 00 00  74 00 00 00    74 90 04 08  74 90 04 08
+#	**filesz**\  **memsz**-\    PF_R|PF_W-\  align-----\
+.hex	00 00 00 00  00 00 00 00    06 00 00 00  00 10 00 00
 
 # end of ELF + Program headers -- position: 0x74
 
@@ -47,46 +47,46 @@ sect_hdr:
 
 # #0  Null section header.   start: +0x00; length: 0x28
 # c.f. Fig 4.10 in gABI 4.1
-.hex_bytes  00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
-.hex_bytes  00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
-.hex_bytes  00 00 00 00  00 00 00 00
+.hex	00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+.hex	00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+.hex	00 00 00 00  00 00 00 00
 
 # #1  Text section header.   start: +0x28; length: 0x28
 # (Offset +0x3C requires text section size.)
 #
-#           name-str--\  PROGBITS--\    EXEC|ALLOC\  load-addr-\
-.hex_bytes  01 00 00 00  01 00 00 00    06 00 00 00  74 80 04 08
-#           offset----\  **size**--\    /-- Fig 4.12 in gABI --\
-.hex_bytes  74 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
-#           align-----\  entry-sz--\
-.hex_bytes  04 00 00 00  00 00 00 00
+#	name-str--\  PROGBITS--\    EXEC|ALLOC\  load-addr-\
+.hex	01 00 00 00  01 00 00 00    06 00 00 00  74 80 04 08
+#	offset----\  **size**--\    /-- Fig 4.12 in gABI --\
+.hex	74 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+#	align-----\  entry-sz--\
+.hex	04 00 00 00  00 00 00 00
 
 # #2  Data section header.   start: +0x50; length: 0x28
 # (Offset +0x60, +0x64 requires data section offset and size.)
 #
-#           name-str--\  PROGBITS--\    WRITE|ALLOC\ **load**--\
-.hex_bytes  07 00 00 00  01 00 00 00    03 00 00 00  74 90 04 08
-#           **offset**\  **size**--\    /-- Fig 4.12 in gABI --\
-.hex_bytes  74 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
-#           align-----\  entry-sz--\
-.hex_bytes  04 00 00 00  00 00 00 00
+#	name-str--\  PROGBITS--\    WRITE|ALLOC\ **load**--\
+.hex	07 00 00 00  01 00 00 00    03 00 00 00  74 90 04 08
+#	**offset**\  **size**--\    /-- Fig 4.12 in gABI --\
+.hex	74 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+#	align-----\  entry-sz--\
+.hex	04 00 00 00  00 00 00 00
 
 # #3  Shstrtab section hdr.  start: +0x78; length: 0x28
 # (Offset +0x88 requires offset to shstrtab.)
 #
-#           name-str--\  STRTAB----\    no-flags--\  load-addr-\ 
-.hex_bytes  0D 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
-#           **offset**\  size------\    /-- Fig 4.12 in gABI --\
-.hex_bytes  00 00 00 00  16 00 00 00    00 00 00 00  00 00 00 00
-#           align-----\  entry-sz--\
-.hex_bytes  01 00 00 00  00 00 00 00
+#	name-str--\  STRTAB----\    no-flags--\  load-addr-\ 
+.hex	0D 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
+#	**offset**\  size------\    /-- Fig 4.12 in gABI --\
+.hex	00 00 00 00  16 00 00 00    00 00 00 00  00 00 00 00
+#	align-----\  entry-sz--\
+.hex	01 00 00 00  00 00 00 00
 
 # The shared string table itself.  start +0xA0; length: 0x16
 #
-.hex_bytes  00                             # NULL.      Offset 0x00
-.hex_bytes  2E 74 65 78 74 00              # .text      Offset 0x01
-.hex_bytes  2E 64 61 74 61 00              # .data      Offset 0x07
-.hex_bytes  2E 73 68 73 74 72 74 61 62 00  # .shstrtab  Offset 0x0D
+.hex	00                             # NULL.      Offset 0x00
+.hex	2E 74 65 78 74 00              # .text      Offset 0x01
+.hex	2E 64 61 74 61 00              # .data      Offset 0x07
+.hex	2E 73 68 73 74 72 74 61 62 00  # .shstrtab  Offset 0x0D
 
 # End of end headers.   offset 0xB6
 

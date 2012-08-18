@@ -26,19 +26,19 @@ mnemonics:
 #   2) the first op-code byte (90), and 
 #   3) the second op-code byte (n/a here).
 
-.hex_bytes  4E 4F 50 00  00 00 00 00  00 00 00 00    00 01 90 00    # NOP
-.hex_bytes  50 55 53 48  46 00 00 00  00 00 00 00    00 01 9C 00    # PUSHF
-.hex_bytes  50 4F 50 46  00 00 00 00  00 00 00 00    00 01 9D 00    # POPF
-.hex_bytes  52 45 50 00  00 00 00 00  00 00 00 00    00 01 F3 00    # REP
-.hex_bytes  52 45 50 45  00 00 00 00  00 00 00 00    00 01 F3 00    # REPE
-.hex_bytes  52 45 50 4E  45 00 00 00  00 00 00 00    00 01 F2 00    # REPNE
-.hex_bytes  4D 4F 56 53  42 00 00 00  00 00 00 00    00 01 A4 00    # MOVSB
-.hex_bytes  43 4D 50 53  42 00 00 00  00 00 00 00    00 01 A6 00    # CMPSB
-.hex_bytes  53 43 41 53  42 00 00 00  00 00 00 00    00 01 AE 00    # SCASB
-.hex_bytes  43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW
-.hex_bytes  43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE
-.hex_bytes  43 44 51 00  00 00 00 00  00 00 00 00    00 01 99 00    # CDQ
-.hex_bytes  52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
+.hex	4E 4F 50 00  00 00 00 00  00 00 00 00    00 01 90 00    # NOP
+.hex	50 55 53 48  46 00 00 00  00 00 00 00    00 01 9C 00    # PUSHF
+.hex	50 4F 50 46  00 00 00 00  00 00 00 00    00 01 9D 00    # POPF
+.hex	52 45 50 00  00 00 00 00  00 00 00 00    00 01 F3 00    # REP
+.hex	52 45 50 45  00 00 00 00  00 00 00 00    00 01 F3 00    # REPE
+.hex	52 45 50 4E  45 00 00 00  00 00 00 00    00 01 F2 00    # REPNE
+.hex	4D 4F 56 53  42 00 00 00  00 00 00 00    00 01 A4 00    # MOVSB
+.hex	43 4D 50 53  42 00 00 00  00 00 00 00    00 01 A6 00    # CMPSB
+.hex	53 43 41 53  42 00 00 00  00 00 00 00    00 01 AE 00    # SCASB
+.hex	43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW
+.hex	43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE
+.hex	43 44 51 00  00 00 00 00  00 00 00 00    00 01 99 00    # CDQ
+.hex	52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
 
 
 # Type 01 instructions.   A single immediate 8-bit argument, e.g.
@@ -50,7 +50,7 @@ mnemonics:
 #   2) the first op-code byte (CD), and 
 #   3) the second op-code byte (n/a here).
 
-.hex_bytes  49 4E 54 00  00 00 00 00  00 00 00 00    01 01 CD 00    # INT
+.hex	49 4E 54 00  00 00 00 00  00 00 00 00    01 01 CD 00    # INT
 
 
 # Type 02 instructions.   A single immediate 32-bit argument, e.g.
@@ -62,20 +62,20 @@ mnemonics:
 #   2) the first op-code byte (E8), and 
 #   3) the second op-code byte (n/a here).
 
-.hex_bytes  43 41 4C 4C  00 00 00 00  00 00 00 00    02 01 E8 00    # CALL
-.hex_bytes  4A 4D 50 00  00 00 00 00  00 00 00 00    02 01 E9 00    # JMP
-.hex_bytes  4A 45 00 00  00 00 00 00  00 00 00 00    02 02 0F 84    # JE
-.hex_bytes  4A 47 00 00  00 00 00 00  00 00 00 00    02 02 0F 8F    # JG
-.hex_bytes  4A 47 45 00  00 00 00 00  00 00 00 00    02 02 0F 8D    # JGE
-.hex_bytes  4A 41 00 00  00 00 00 00  00 00 00 00    02 02 0F 87    # JA
-.hex_bytes  4A 41 45 00  00 00 00 00  00 00 00 00    02 02 0F 83    # JAE
-.hex_bytes  4A 4C 00 00  00 00 00 00  00 00 00 00    02 02 0F 8C    # JL
-.hex_bytes  4A 4C 45 00  00 00 00 00  00 00 00 00    02 02 0F 8E    # JLE
-.hex_bytes  4A 42 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JB
-.hex_bytes  4A 42 45 00  00 00 00 00  00 00 00 00    02 02 0F 86    # JBE
-.hex_bytes  4A 4E 45 00  00 00 00 00  00 00 00 00    02 02 0F 85    # JNE
-.hex_bytes  4A 43 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JC == JB
-.hex_bytes  4A 4F 00 00  00 00 00 00  00 00 00 00    02 02 0F 80    # JO
+.hex	43 41 4C 4C  00 00 00 00  00 00 00 00    02 01 E8 00    # CALL
+.hex	4A 4D 50 00  00 00 00 00  00 00 00 00    02 01 E9 00    # JMP
+.hex	4A 45 00 00  00 00 00 00  00 00 00 00    02 02 0F 84    # JE
+.hex	4A 47 00 00  00 00 00 00  00 00 00 00    02 02 0F 8F    # JG
+.hex	4A 47 45 00  00 00 00 00  00 00 00 00    02 02 0F 8D    # JGE
+.hex	4A 41 00 00  00 00 00 00  00 00 00 00    02 02 0F 87    # JA
+.hex	4A 41 45 00  00 00 00 00  00 00 00 00    02 02 0F 83    # JAE
+.hex	4A 4C 00 00  00 00 00 00  00 00 00 00    02 02 0F 8C    # JL
+.hex	4A 4C 45 00  00 00 00 00  00 00 00 00    02 02 0F 8E    # JLE
+.hex	4A 42 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JB
+.hex	4A 42 45 00  00 00 00 00  00 00 00 00    02 02 0F 86    # JBE
+.hex	4A 4E 45 00  00 00 00 00  00 00 00 00    02 02 0F 85    # JNE
+.hex	4A 43 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JC == JB
+.hex	4A 4F 00 00  00 00 00 00  00 00 00 00    02 02 0F 80    # JO
 
 
 # Type 03 instructions.   A single r/m8 operand, e.g.
@@ -87,17 +87,17 @@ mnemonics:
 #   2) the op-code byte (FE), and 
 #   3) the three-bit reg field for the ModR/M byte (0 here).
 
-.hex_bytes  49 4E 43 42  00 00 00 00  00 00 00 00    03 01 FE 00    # INCB
-.hex_bytes  44 45 43 42  00 00 00 00  00 00 00 00    03 01 FE 01    # DECB
-.hex_bytes  4E 45 47 42  00 00 00 00  00 00 00 00    03 01 F6 03    # NEGB
-.hex_bytes  53 41 4C 42  00 00 00 00  00 00 00 00    03 01 D2 04    # SALB
-.hex_bytes  53 48 4C 42  00 00 00 00  00 00 00 00    03 01 D2 04    # SHLB
-.hex_bytes  53 41 52 42  00 00 00 00  00 00 00 00    03 01 D2 07    # SARB
-.hex_bytes  53 48 52 42  00 00 00 00  00 00 00 00    03 01 D2 05    # SHRB
-.hex_bytes  4D 55 4C 42  00 00 00 00  00 00 00 00    03 01 F6 04    # MULB
-.hex_bytes  49 4D 55 4C  42 00 00 00  00 00 00 00    03 01 F6 05    # IMULB
-.hex_bytes  44 49 56 42  00 00 00 00  00 00 00 00    03 01 F6 06    # DIVB
-.hex_bytes  49 44 49 56  42 00 00 00  00 00 00 00    03 01 F6 07    # IDIVB
+.hex	49 4E 43 42  00 00 00 00  00 00 00 00    03 01 FE 00    # INCB
+.hex	44 45 43 42  00 00 00 00  00 00 00 00    03 01 FE 01    # DECB
+.hex	4E 45 47 42  00 00 00 00  00 00 00 00    03 01 F6 03    # NEGB
+.hex	53 41 4C 42  00 00 00 00  00 00 00 00    03 01 D2 04    # SALB
+.hex	53 48 4C 42  00 00 00 00  00 00 00 00    03 01 D2 04    # SHLB
+.hex	53 41 52 42  00 00 00 00  00 00 00 00    03 01 D2 07    # SARB
+.hex	53 48 52 42  00 00 00 00  00 00 00 00    03 01 D2 05    # SHRB
+.hex	4D 55 4C 42  00 00 00 00  00 00 00 00    03 01 F6 04    # MULB
+.hex	49 4D 55 4C  42 00 00 00  00 00 00 00    03 01 F6 05    # IMULB
+.hex	44 49 56 42  00 00 00 00  00 00 00 00    03 01 F6 06    # DIVB
+.hex	49 44 49 56  42 00 00 00  00 00 00 00    03 01 F6 07    # IDIVB
 
 
 # Type 04 instructions.   A single r/m32 operand, e.g.
@@ -109,19 +109,19 @@ mnemonics:
 #   2) the op-code byte (FF), and 
 #   3) the three-bit reg field for the ModR/M byte (0 here).
 
-.hex_bytes  49 4E 43 4C  00 00 00 00  00 00 00 00    04 01 FF 00    # INCL
-.hex_bytes  44 45 43 4C  00 00 00 00  00 00 00 00    04 01 FF 01    # DECL
-.hex_bytes  4E 45 47 4C  00 00 00 00  00 00 00 00    04 01 F7 03    # NEGL
-.hex_bytes  50 55 53 48  00 00 00 00  00 00 00 00    04 01 FF 06    # PUSH
-.hex_bytes  50 4F 50 00  00 00 00 00  00 00 00 00    04 01 8F 00    # POP
-.hex_bytes  53 41 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SALL
-.hex_bytes  53 48 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SHLL
-.hex_bytes  53 41 52 4C  00 00 00 00  00 00 00 00    04 01 D3 07    # SARL
-.hex_bytes  53 48 52 4C  00 00 00 00  00 00 00 00    04 01 D3 05    # SHRL
-.hex_bytes  4D 55 4C 4C  00 00 00 00  00 00 00 00    04 01 F7 04    # MULL
-.hex_bytes  49 4D 55 4C  4C 00 00 00  00 00 00 00    04 01 F7 05    # IMULL
-.hex_bytes  44 49 56 4C  00 00 00 00  00 00 00 00    04 01 F7 06    # DIVL
-.hex_bytes  49 44 49 56  4C 00 00 00  00 00 00 00    04 01 F7 07    # IDIVL
+.hex	49 4E 43 4C  00 00 00 00  00 00 00 00    04 01 FF 00    # INCL
+.hex	44 45 43 4C  00 00 00 00  00 00 00 00    04 01 FF 01    # DECL
+.hex	4E 45 47 4C  00 00 00 00  00 00 00 00    04 01 F7 03    # NEGL
+.hex	50 55 53 48  00 00 00 00  00 00 00 00    04 01 FF 06    # PUSH
+.hex	50 4F 50 00  00 00 00 00  00 00 00 00    04 01 8F 00    # POP
+.hex	53 41 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SALL
+.hex	53 48 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SHLL
+.hex	53 41 52 4C  00 00 00 00  00 00 00 00    04 01 D3 07    # SARL
+.hex	53 48 52 4C  00 00 00 00  00 00 00 00    04 01 D3 05    # SHRL
+.hex	4D 55 4C 4C  00 00 00 00  00 00 00 00    04 01 F7 04    # MULL
+.hex	49 4D 55 4C  4C 00 00 00  00 00 00 00    04 01 F7 05    # IMULL
+.hex	44 49 56 4C  00 00 00 00  00 00 00 00    04 01 F7 06    # DIVL
+.hex	49 44 49 56  4C 00 00 00  00 00 00 00    04 01 F7 07    # IDIVL
 
 
 # Type 05 instructions.   An r/m32 operand followed by a r32 operand:
@@ -133,7 +133,7 @@ mnemonics:
 #   2) the first op-code byte (8D), and 
 #   3) the second op-code byte (n/a here).
 
-.hex_bytes  4C 45 41 00  00 00 00 00  00 00 00 00    05 01 8D 00    # LEA
+.hex	4C 45 41 00  00 00 00 00  00 00 00 00    05 01 8D 00    # LEA
 
 
 # Type 06 instructions.   These represent a large family of op-codes, e.g.
@@ -147,13 +147,13 @@ mnemonics:
 # immediate op code (C6 here), and the three op-code extension bits
 # that are in the reg part of the mod-r/m byte (0 here).
 
-.hex_bytes  4D 4F 56 42  00 00 00 00  00 00 00 00    06 88 C6 00    # MOVB
-.hex_bytes  41 44 44 42  00 00 00 00  00 00 00 00    06 00 80 00    # ADDB
-.hex_bytes  53 55 42 42  00 00 00 00  00 00 00 00    06 28 80 05    # SUBB
-.hex_bytes  43 4D 50 42  00 00 00 00  00 00 00 00    06 38 80 07    # CMPB
-.hex_bytes  41 4E 44 42  00 00 00 00  00 00 00 00    06 20 80 04    # ANDB
-.hex_bytes  4F 52 42 00  00 00 00 00  00 00 00 00    06 08 80 01    # ORB
-.hex_bytes  58 4F 52 42  00 00 00 00  00 00 00 00    06 30 80 06    # XORB
+.hex	4D 4F 56 42  00 00 00 00  00 00 00 00    06 88 C6 00    # MOVB
+.hex	41 44 44 42  00 00 00 00  00 00 00 00    06 00 80 00    # ADDB
+.hex	53 55 42 42  00 00 00 00  00 00 00 00    06 28 80 05    # SUBB
+.hex	43 4D 50 42  00 00 00 00  00 00 00 00    06 38 80 07    # CMPB
+.hex	41 4E 44 42  00 00 00 00  00 00 00 00    06 20 80 04    # ANDB
+.hex	4F 52 42 00  00 00 00 00  00 00 00 00    06 08 80 01    # ORB
+.hex	58 4F 52 42  00 00 00 00  00 00 00 00    06 30 80 06    # XORB
 
 
 # Type 07 instructions.   These represent a large family of op-codes, e.g.
@@ -166,28 +166,28 @@ mnemonics:
 # immediate op code (C6 here), and the three op-code extension bits
 # that are in the reg part of the mod-r/m byte (0 here).
 
-.hex_bytes  4D 4F 56 4C  00 00 00 00  00 00 00 00    07 89 C7 00    # MOVL
-.hex_bytes  41 44 44 4C  00 00 00 00  00 00 00 00    07 01 81 00    # ADDL
-.hex_bytes  53 55 42 4C  00 00 00 00  00 00 00 00    07 29 81 05    # SUBL
-.hex_bytes  43 4D 50 4C  00 00 00 00  00 00 00 00    07 39 81 07    # CMPL
-.hex_bytes  41 4E 44 4C  00 00 00 00  00 00 00 00    07 21 81 04    # ANDL
-.hex_bytes  4F 52 4C 00  00 00 00 00  00 00 00 00    07 09 81 01    # ORL
-.hex_bytes  58 4F 52 4C  00 00 00 00  00 00 00 00    07 31 81 06    # XORL
+.hex	4D 4F 56 4C  00 00 00 00  00 00 00 00    07 89 C7 00    # MOVL
+.hex	41 44 44 4C  00 00 00 00  00 00 00 00    07 01 81 00    # ADDL
+.hex	53 55 42 4C  00 00 00 00  00 00 00 00    07 29 81 05    # SUBL
+.hex	43 4D 50 4C  00 00 00 00  00 00 00 00    07 39 81 07    # CMPL
+.hex	41 4E 44 4C  00 00 00 00  00 00 00 00    07 21 81 04    # ANDL
+.hex	4F 52 4C 00  00 00 00 00  00 00 00 00    07 09 81 01    # ORL
+.hex	58 4F 52 4C  00 00 00 00  00 00 00 00    07 31 81 06    # XORL
 
 
 # Type FF 'instructions'.  These are actually directives.    
 #
-#   .hex_bytes
+#   .hex
 #
 # The sole parameter is an unique code used internally to represent the 
 # directive.  Each directive is special-cased in the code.
 
-.hex_bytes  2E 68 65 78  5F 62 79 74  65 73 00 00    FF 00 00 00    # .hex_bytes
+.hex	2E 68 65 78  00 00 00 00  00 00 00 00    FF 00 00 00    # .hex
 
 
 
 # End of table marker -- first byte of name is NULL.
-.hex_bytes  00 00 00 00  00 00 00 00  00 00 00 00    00 00 00 00 
+.hex	00 00 00 00  00 00 00 00  00 00 00 00    00 00 00 00 
 # ########################################################################
 
 
@@ -1654,7 +1654,7 @@ tl_ident:
 	JNE	.L14a
 
 	#  Found the mnemonic or directive.  Get it's type (and parameters)
-	#  and see whether it's a directive (which must be a .hex_bytes)
+	#  and see whether it's a directive (which must be a .hex)
 	MOVL	12(%edi), %edx
 	CMPB	$0xFF, %dl
 	JE	hex_bytes

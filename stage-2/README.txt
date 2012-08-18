@@ -27,9 +27,10 @@ Labels are restricted to 11 characters, and a maximum of 256 labels are
 allowed.  When a label appears as an argument to a mnemonic, it is 
 always treated as a 32-bit pcrel offset.  This is correct for JMP, Jcc
 and CALL, but wrong when trying to locate data complied into the 
-program.  There is a .hex_bytes directive that takes a stream of 
-hexadecimal octets; it is useful for including data into the object 
-file, or manually assembling an unsupported instruction.
+program.  There is a .hex directive that takes a stream of 
+hexadecimal octets (without their '0x' prefix); it is useful for 
+including data into the object file, or manually assembling an 
+unsupported instruction.
 
 The assembler uses AT&T syntax, as that is the de facto standard in the
 Unix environment.  This introduces some complications into the 
@@ -68,7 +69,7 @@ instructions, not one with a prefix.  The full grammar is:
   arguments    := argument HWS* ',' arguments | argument
   instruction  := mnemonic arguments endline?
   octet        := HWS* XDIGIT XDIGIT
-  hexbytes     := '.hex_bytes' octet* endline
+  hexbytes     := '.hex' octet* endline
   file         := labeldef | instruction | hexbytes | endline
 
 The list of supported mnemonics is:

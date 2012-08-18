@@ -177,12 +177,12 @@ mnemonics:
 
 # Type FF 'instructions'.  These are actually directives.    
 #
-#   .hex_bytes
+#   .hex
 #
 # The sole parameter is an unique code used internally to represent the 
 # directive.  Each directive is special-cased in the code.
 
-2E 68 65 78  5F 62 79 74  65 73 00 00    FF 00 00 00    # .hex_bytes
+2E 68 65 78  00 00 00 00  00 00 00 00    FF 00 00 00    # .hex
 
 
 
@@ -1687,7 +1687,7 @@ tl_ident:
 	0F 85 .L14a		#	JNE	.L14a
 
 	#  Found the mnemonic or directive.  Get it's type (and parameters)
-	#  and see whether it's a directive (which must be a .hex_bytes)
+	#  and see whether it's a directive (which must be a .hex)
 	8B 57 0C 		#	MOVL	$12(%edi), %edx
 	80 FA FF 		#	CMPB	$FF, %dl
 	0F 84 hex_bytes 	#	JE	hex_bytes

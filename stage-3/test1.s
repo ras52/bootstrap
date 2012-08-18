@@ -18,7 +18,7 @@ _start:
 
 # It should be safe to embed this literal in the middle of this function
 .data
-.hex_bytes  48 65 6C 6C 6F 2C 20 77 6F 72 6C 64 21 00
+	.hex	48 65 6C 6C 6F 2C 20 77 6F 72 6C 64 21 00
 
 .text
 	NOP NOP
