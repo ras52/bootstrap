@@ -1,6 +1,10 @@
 .data
+bar:
+.hex_bytes	2A 00 00 00
+
 foo:
-.hex_bytes 01 00 00 00
+.hex_bytes	01 00 00 00
+
 .text
 _start:
 	MOVL	%esp, %ebp

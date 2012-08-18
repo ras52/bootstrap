@@ -1,9 +1,3 @@
-.data
-t1:
-.hex_bytes	00 01 02 03
-t2:
-	JMP fish
-
 .text
 exit:
 	PUSH	%ebp
