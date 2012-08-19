@@ -44,3 +44,8 @@ check-unhexl:	unhexl elfify unhexl.ts.xl
 
 clean:
 	$(RM) -f unhex unhexl elfify unhexl.ts unhexl2.ts unhexl2 unhexl3
+
+world:
+	$(MAKE) clean
+	$(MAKE) all
+	$(MAKE) check

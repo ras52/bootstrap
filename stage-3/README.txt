@@ -24,10 +24,39 @@ To allow code reuse this stage introduces separate assembly and linking
 steps allowing each executable to be formed from multiple object files.
 This means that some object files (for instance, those containing the
 malloc implementation) can linked into several different executables.
-To support this, the assembler now includes ELF .rel.text, .symtab and
-.strtab sections in its output, removing the need for the stage 1 elfify
-program.  The R_386_PC32 relocation type is used for relocations between
-symbols in the .text section.
+To support this, the assembler (which now writes ELF directly, removing
+the need for the stage 1 elfify progrma) includes .rel.text, .symtab and
+.strtab sections in its output.  The R_386_PC32 relocation type is used
+for relocations between symbols in the .text section.
+
+Another difficulty with the stage 2 assembler was that the only place to
+store data was the stack (or one of the registers).  Variables like the
+input read buffer had to be placed on the stack and pointers to it
+passed around to all functions, with the result that the code was rarely
+refactored into separate functions.  This is addressed by the stage-3
+assembler which supports a writable .data section.  References in the
+.text section to objects in the .data section are handled by way of
+R_386_32 relocations.
+
+The .int and .byte directives allow 32-bit and 8-bit integers to be
+included directly into the output.  Unlike the existing .hex directive
+which only accepts hexadecimal octets without prefixes, these support
+any form of literal.
+
+The use of symbols as address immediates (e.g. ADDL foo, %eax) is
+deprecated.  In the stage-2 assembler, this stored the address of foo in
+%eax.  The versions of the MOV instruction that transfer a symbol value
+to or from the accumulator are now added, so that MOVL foo, %eax copies
+the symbol value (as is standard practice for that notation) and not the
+symbol address (as in stage 2).  The following instructions are also
+added:
+
+  HLT, LEAVE, MOVSX, MOVZX, SETcc
+
+And support for the following AT&T aliases for Intel mnemonics has also
+been added:
+
+  CBTW, CLTD, CWTL, MOVZBL, MOBSBL
 
 The assembler requires its source file to be suffixed .s and
 automatically assigns the output file name by replacing the .s with a .o

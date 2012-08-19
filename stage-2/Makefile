@@ -39,3 +39,8 @@ check-as:	as as.s
 
 clean:
 	$(RM) -f unhexl elfify as as.ts as2.ts as3.ts as2
+
+world:
+	$(MAKE) clean
+	$(MAKE) all
+	$(MAKE) check

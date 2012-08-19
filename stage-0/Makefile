@@ -9,6 +9,7 @@ PATH  = .
 CHMOD = /bin/chmod
 RM    = /bin/rm
 CMP   = /usr/bin/cmp
+MAKE  = /usr/bin/make
 
 all:
 
@@ -24,3 +25,8 @@ check-unhex:
 
 clean:
 	$(RM) -f unhex2
+
+world:
+	$(MAKE) clean
+	$(MAKE) all
+	$(MAKE) check

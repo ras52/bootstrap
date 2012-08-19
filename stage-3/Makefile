@@ -71,3 +71,8 @@ check-sep:	testprog
 clean:
 	$(RM) -f as0 elfify as ld as.ts ld.ts as.o ld.o as2 ld2 as3 ld3
 	$(RM) -f test1.o test2.o testprog
+
+world:
+	$(MAKE) clean
+	$(MAKE) all
+	$(MAKE) check

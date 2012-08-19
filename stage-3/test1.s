@@ -16,8 +16,7 @@ _start:
 	MOVZBL	%al, %eax
 	MOVL	%eax, foo
 
-#	MOVL	foo, %eax
-	MOVL	$0xFF00, %eax
+	MOVL	foo, %eax
 	PUSH	%eax
 
 # It should be safe to embed this literal in the middle of this function
