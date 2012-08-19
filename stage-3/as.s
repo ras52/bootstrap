@@ -38,6 +38,9 @@ mnemonics:
 .hex	43 42 57 00  00 00 00 00  00 00 00 00    00 02 66 98    # CBW
 .hex	43 57 44 45  00 00 00 00  00 00 00 00    00 01 98 00    # CWDE
 .hex	43 44 51 00  00 00 00 00  00 00 00 00    00 01 99 00    # CDQ
+.hex	43 42 54 57  00 00 00 00  00 00 00 00    00 02 66 98    # CBTW == CBW
+.hex	43 57 54 4C  00 00 00 00  00 00 00 00    00 01 98 00    # CWTL == CWDE
+.hex	43 4C 54 44  00 00 00 00  00 00 00 00    00 01 99 00    # CLTD == CDQ
 .hex	52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
 .hex	48 4C 54 00  00 00 00 00  00 00 00 00    00 01 F4 00    # HLT
 .hex	4C 45 41 56  45 00 00 00  00 00 00 00    00 01 C9 00    # LEAVE
@@ -85,9 +88,10 @@ mnemonics:
 #   INCB    r/m8            FE /0
 #
 # The three parameters are:
-#   1) the number 1 (to allow it to be treated as the opcode length)
-#   2) the op-code byte (FE), and 
-#   3) the three-bit reg field for the ModR/M byte (0 here).
+#   1) the number of bytes in the op-code (01 here),
+#   2) the first op-code byte (FE), and 
+#   3) a) the second op-code byte *OR* 
+#      b) the three-bit reg field for the ModR/M byte (0 here).
 
 .hex	49 4E 43 42  00 00 00 00  00 00 00 00    03 01 FE 00    # INCB
 .hex	44 45 43 42  00 00 00 00  00 00 00 00    03 01 FE 01    # DECB
@@ -100,6 +104,19 @@ mnemonics:
 .hex	49 4D 55 4C  42 00 00 00  00 00 00 00    03 01 F6 05    # IMULB
 .hex	44 49 56 42  00 00 00 00  00 00 00 00    03 01 F6 06    # DIVB
 .hex	49 44 49 56  42 00 00 00  00 00 00 00    03 01 F6 07    # IDIVB
+
+.hex	53 45 54 45  00 00 00 00  00 00 00 00    03 02 0F 94    # SETE
+.hex	53 45 54 47  00 00 00 00  00 00 00 00    03 02 0F 9F    # SETG
+.hex	53 45 54 47  45 00 00 00  00 00 00 00    03 02 0F 9D    # SETGE
+.hex	53 45 54 41  00 00 00 00  00 00 00 00    03 02 0F 97    # SETA
+.hex	53 45 54 41  45 00 00 00  00 00 00 00    03 02 0F 93    # SETAE
+.hex	53 45 54 4C  00 00 00 00  00 00 00 00    03 02 0F 9C    # SETL
+.hex	53 45 54 4C  45 00 00 00  00 00 00 00    03 02 0F 9E    # SETLE
+.hex	53 45 54 42  00 00 00 00  00 00 00 00    03 02 0F 92    # SETB
+.hex	53 45 54 42  45 00 00 00  00 00 00 00    03 02 0F 96    # SETBE
+.hex	53 45 54 4E  45 00 00 00  00 00 00 00    03 02 0F 95    # SETNE
+.hex	53 45 54 43  00 00 00 00  00 00 00 00    03 02 0F 92    # SETC == SETB
+.hex	53 45 54 4F  00 00 00 00  00 00 00 00    03 02 0F 90    # SETO
 
 
 # Type 04 instructions.   A single r/m32 operand, e.g.
@@ -117,7 +134,7 @@ mnemonics:
 .hex	50 55 53 48  00 00 00 00  00 00 00 00    04 01 FF 06    # PUSH
 .hex	50 4F 50 00  00 00 00 00  00 00 00 00    04 01 8F 00    # POP
 .hex	53 41 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SALL
-.hex	53 48 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SHLL
+.hex	53 48 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SHLL == SALL
 .hex	53 41 52 4C  00 00 00 00  00 00 00 00    04 01 D3 07    # SARL
 .hex	53 48 52 4C  00 00 00 00  00 00 00 00    04 01 D3 05    # SHRL
 .hex	4D 55 4C 4C  00 00 00 00  00 00 00 00    04 01 F7 04    # MULL
@@ -175,6 +192,7 @@ mnemonics:
 .hex	4F 52 4C 00  00 00 00 00  00 00 00 00    07 09 81 01    # ORL
 .hex	58 4F 52 4C  00 00 00 00  00 00 00 00    07 31 81 06    # XORL
 
+
 # Type 08 and 09 instructions.  These are like types 06 and 07, respectively,
 # but with the following additional op-codes:
 #
@@ -183,6 +201,22 @@ mnemonics:
 
 .hex	4D 4F 56 42  00 00 00 00  00 00 00 00    08 88 C6 00    # MOVB
 .hex	4D 4F 56 4C  00 00 00 00  00 00 00 00    09 89 C7 00    # MOVL
+
+
+# Type 10 instructions.  
+#
+#   MOVZBL  r/m8, r32       0F B6
+#
+# The three parameters are: 
+#   1) the number of bytes in the op-code (2 here),
+#   2) the first op-code byte (0F), and 
+#   3) the second op-code byte (B6 here).
+
+.hex    4D 4F 56 5A  42 4C 00 00  00 00 00 00    0A 02 0F B6    # MOVZBL
+.hex    4D 4F 56 5A  58 00 00 00  00 00 00 00    0A 02 0F B6    # MOVZX == "
+.hex    4D 4F 56 53  42 4C 00 00  00 00 00 00    0A 02 0F BE    # MOVSBL
+.hex    4D 4F 56 53  58 00 00 00  00 00 00 00    0A 02 0F BE    # MOVSX == "
+
 
 # Type FF 'instructions'.  These are actually directives.    
 #
@@ -1849,20 +1883,49 @@ type_03:
 	PUSH	%ebx			# bits
 	CALL	read_rm
 	ADDL	$12, %esp
-	POP	%edx
+	POP	%edx			# restore opcode info
+
+	MOVB	$0, %dl			# if %dh == 2, then we use 0 as reg
+	CMPB	$2, %dh
+	JE	.L21
+	MOVB	$24, %cl
+	SHRL	%edx			# by %cl; %dl is now reg bits
 
 .L21:
 	#  Write the ModR/M byte and (if present) displacement.
 	LEA	-112(%ebp), %ecx	# ofile
 	PUSH	%ecx
-	PUSH	-96(%ebp)	# disp
-	MOVB	$24, %cl
-	SHRL	%edx		# by %cl
-	PUSH	%edx		# reg bits
-	PUSH	%eax		# modrm
+	PUSH	-96(%ebp)		# disp
+	PUSH	%edx			# reg bits (only care about %dl)
+	PUSH	%eax			# modrm
 	CALL	write_mrm
 	ADDL	$16, %esp
 	JMP	insn_end
+
+type_10:
+	#  Write the opcode byte(s).
+	PUSH	%ebp		# main_frame
+	PUSH	%edx		# opcode info
+	CALL	write_oc12
+	POP	%edx
+	POP	%ecx
+
+	#  We have:  r/m8, reg32
+	#  Read the r/m
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	LEA	-96(%ebp), %ecx		# disp
+	PUSH	%ecx
+	MOVL	$8, %ebx
+	PUSH	%ebx			# bits
+	CALL	read_rm
+	POP	%ebx			# bits
+	POP	%ecx
+	POP	%ecx
+
+	#  Continue as for a type 05 instruction
+	MOVL	$16, %ebx
+	JMP	.L22b
 
 type_05:
 	#  Write the opcode byte(s).
@@ -1885,6 +1948,7 @@ type_05:
 	POP	%ecx
 	POP	%ecx
 
+.L22b:
 	# Skip ws, read a comma, then skip more ws and read the '%' and reg
 	PUSH	%eax	# store r/m
 	LEA	-104(%ebp), %ecx	# ifile
@@ -2521,6 +2585,8 @@ tl_ident:
 	JE	type_06		# 6, 7, 8 & 9 same
 	CMPB	$9, %dl
 	JE	type_06
+	CMPB	$10, %dl
+	JE	type_10
 
 	JMP	error
 	RET	# to main loop

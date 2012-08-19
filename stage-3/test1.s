@@ -3,7 +3,7 @@ bar:
 	.int	0x2A
 
 foo:
-	.int	1
+	.int	0xFFFF	
 
 .text
 _start:
@@ -11,10 +11,13 @@ _start:
 
 	#  Call exit(foo)
 	MOVL	foo, %eax
-	DECL	%eax
+	CMPL	$0, %eax
+	SETE	%al
+	MOVZBL	%al, %eax
 	MOVL	%eax, foo
 
-	MOVL	foo, %eax
+#	MOVL	foo, %eax
+	MOVL	$0xFF00, %eax
 	PUSH	%eax
 
 # It should be safe to embed this literal in the middle of this function
