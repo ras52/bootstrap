@@ -21,7 +21,8 @@ _start:
 
 # It should be safe to embed this literal in the middle of this function
 .data
-	.hex	48 65 6C 6C 6F 2C 20 77 6F 72 6C 64 21 00
+	.string	"\"Hello,\tworld\!\""
+	.byte	0xFF
 
 .text
 	CALL	exit

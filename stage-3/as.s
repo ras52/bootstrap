@@ -223,6 +223,7 @@ mnemonics:
 #   Sub-type 0:  .hex            -- no parameters
 #   Sub-type 1:  .text  .data    -- one parameter: section id
 #   Sub-type 2:  .int   .bytes   -- one parameter: bits
+#   Sub-type 3:  .string         -- no parameters
 #
 # The first parameter is an unique code used internally to represent the 
 # sub-type of directive.  Each directive type is special-cased in the code.
@@ -232,6 +233,7 @@ mnemonics:
 .hex	2E 64 61 74  61 00 00 00  00 00 00 00    FF 01 01 00    # .data
 .hex	2E 69 6E 74  00 00 00 00  00 00 00 00    FF 02 20 00    # .int
 .hex	2E 62 79 74  65 00 00 00  00 00 00 00    FF 02 08 00    # .byte
+.hex	2E 73 74 72  69 6E 67 00  00 00 00 00    FF 03 00 00	# .string
 
 zeros:
 # End of table marker -- first byte of name is NULL.
@@ -2405,6 +2407,70 @@ type_06:
 	#  the lack of .data relocations in the stage-2 as.
 	JMP	type_06_im
 
+str_direct:
+	#  Skip horizontal whitespace and the opening quote
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	CALL	getone
+	CMPB	$0x22, %al		# '"'
+	JNE	error
+
+	LEA	-96(%ebp), %ecx		# the buffer
+	#  Loop over the string reading it into the buffer
+.L29:
+	#  Check for buffer overrun
+	LEA     -96(%ebp), %eax		# start of buffer
+	SUBL	%ecx, %eax
+	NEGL	%eax
+	CMPL	$78, %eax
+	JGE	error
+
+	PUSH	%ecx
+	CALL	readonex
+	POP	%ecx			# restore bufp
+	CMPB	$0x22, (%ecx)		# '"'
+	JE	.L30
+
+	CMPB	$0x5C, (%ecx)		# '\'
+	JNE	.L31
+
+	#  We have an escape character.  Overwrite the '\':
+	PUSH	%ecx
+	CALL	readonex
+	POP	%ecx			# restore bufp
+	MOVB	$0x0A, %dl		# '\n'
+	CMPB	$0x6E, (%ecx)		# 'n'
+	JE	.L32
+	MOVB	$0x09, %dl		# '\t'
+	CMPB	$0x74, (%ecx)		# 't'
+	JE	.L32
+	JMP	.L31			# passthrough for \" etc.
+.L32:	
+	MOVB	%dl, (%ecx)		# Replace with value of escape
+
+.L31:	#  Continue loop
+	INCL	%ecx
+	JMP	.L29
+.L30:
+	POP	%edx			# ifile
+	MOVB	$0, (%ecx)
+	INCL	%ecx
+
+	# Now write the string out
+	LEA	-112(%ebp), %eax
+	PUSH	%eax			# ofile
+	LEA     -96(%ebp), %eax		# start of buffer
+	PUSH	%eax
+	SUBL	%eax, %ecx		# %ecx is now strlen
+	PUSH	%ecx
+	CALL	writedptr
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+	
+	JMP	insn_end
+
 int_direct:
 	#  We're reached with %edx containing the directive data
 	MOVB	$16, %cl
@@ -2574,6 +2640,8 @@ tl_ident:
 	JE	hex_bytes
 	CMPB	$0x02, %dh
 	JE	int_direct
+	CMPB	$0x03, %dh
+	JE	str_direct
 	MOVB	$0x10, %cl
 	SHRL	%edx
 	JMP	set_sect

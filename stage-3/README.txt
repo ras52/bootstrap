@@ -41,7 +41,11 @@ R_386_32 relocations.
 The .int and .byte directives allow 32-bit and 8-bit integers to be
 included directly into the output.  Unlike the existing .hex directive
 which only accepts hexadecimal octets without prefixes, these support
-any form of literal.
+any form of literal.  The .string directive allows for strings in
+double quotes with a maximum length of 78 characters.  They are 
+automatically null terminated, and the following escapes understood:
+
+  \n \t \" \\
 
 The use of symbols as address immediates (e.g. ADDL foo, %eax) is
 deprecated.  In the stage-2 assembler, this stored the address of foo in
