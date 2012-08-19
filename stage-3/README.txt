@@ -47,13 +47,14 @@ automatically null terminated, and the following escapes understood:
 
   \n \t \" \\
 
-The use of symbols as address immediates (e.g. ADDL foo, %eax) is
-deprecated.  In the stage-2 assembler, this stored the address of foo in
-%eax.  The versions of the MOV instruction that transfer a symbol value
-to or from the accumulator are now added, so that MOVL foo, %eax copies
-the symbol value (as is standard practice for that notation) and not the
-symbol address (as in stage 2).  The following instructions are also
-added:
+The use of symbols as address immediates with a $ prefix (e.g. ADDL foo,
+%eax) is deprecated.  In the stage-2 assembler, this stores the address 
+of foo in %eax.  To get this behaviour in the stage-3 assembler, add the
+$ prefix.  We also now support the versions of the MOV instruction that 
+transfer a symbol value (rather than the address) to or from the 
+accumulator.  Thus MOVL foo, %eax copies the symbol value (as is 
+standard practice for that notation) and not the symbol address (as in 
+stage 2).  The following instructions are also added:
 
   HLT, LEAVE, MOVSX, MOVZX, SETcc
 

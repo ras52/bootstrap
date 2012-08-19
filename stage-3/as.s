@@ -345,7 +345,7 @@ elf_hdr:
 
 # ########################################################################
 
-####	#  Function: void* malloc(size_t sz)
+####	#  Function:	void* malloc(size_t sz)
 	#  Crude dynamic memory allocation, by punting directly to kernel 
 malloc:
 	PUSH	%ebp
@@ -386,7 +386,7 @@ malloc:
 	RET
 
 
-####	#  Function: void* realloc(void* ptr, size_t sz)
+####	#  Function:	void* realloc(void* ptr, size_t sz)
 	#  Grows memory allocated by malloc, above
 realloc:
 	PUSH	%ebp
@@ -421,7 +421,7 @@ realloc:
 	RET
 	
 
-####	#  Function: size_t strlen(char const* str)
+####	#  Function:	size_t strlen(char const* str)
 	#  Finds the length of str
 strlen:
 	PUSH	%ebp
@@ -440,7 +440,7 @@ strlen:
 	RET
 
 
-####    #  Function: bool ishws(char)
+####	#  Function:	bool ishws(char)
 	#  Tests whether its argument is in [ \t]
 ishws:
 	PUSH	%ebp
@@ -457,7 +457,7 @@ ishws:
 	RET
 
 
-####    #  Function: bool isws(char)
+####	#  Function:	bool isws(char)
 	#  Tests whether its argument is in [ \t\r\n]
 isws:
 	PUSH	%ebp
@@ -470,7 +470,7 @@ isws:
 	JMP	.L1a
 
 
-####	#  Function: bool isidchr(char)
+####	#  Function:	bool isidchr(char)
 	#  Tests whether its argument is in [0-9A-Za-z_]
 isidchr:
 	PUSH	%ebp
@@ -498,7 +498,7 @@ isidchr:
 	RET
 
 
-####	#  Function: bool isid1chr(char)
+####	#  Function:	bool isid1chr(char)
 	#  Tests whether its argument is in [.A-Za-z_]
 isid1chr:
 	PUSH	%ebp
@@ -509,7 +509,7 @@ isid1chr:
 	JMP	.L3a
 
 
-####	#  Function: int xchr(int c)
+####	#  Function:	int xchr(int c)
 	#  Tests whether its argument, c, is a character in [0-9A-F], and if 
 	#  so, coverts it to an integer; otherwise returns -1.
 xchr:
@@ -536,7 +536,7 @@ xchr:
 	RET
 
 
-####	#  Function: int dchr(int c)
+####	#  Function:	int dchr(int c)
 	#  Tests whether its argument, c, is a character in [0-9], and if 
 	#  so, coverts it to an integer; otherwise returns -1.
 dchr:
@@ -559,7 +559,7 @@ success:
 	INT	$0x80
 
 
-####	#  Function:    void writedptr( int bytes, void* data, ofile* of )
+####	#  Function:	void writedptr( int bytes, void* data, ofile* of )
 	#  A thin wrapper around write(2)
 writedptr:
 	PUSH	%ebp
@@ -1621,22 +1621,39 @@ read_imm:
 	PUSH	%ecx		# int val = 0;
 	PUSH	%ecx		# int count = 0;
 
-	#  Skip horizontal whitespace
+	#  Put ifile on stack for duration of function.
 	MOVL	12(%ebp), %ecx
 	LEA	-104(%ecx), %ecx
 	PUSH	%ecx		# ifile
-	CALL	skiphws
 
-	#  Check it is a '$' marking the start of an immediate;
-	#  if not, it must be an identifier
+	#  Skip horizontal whitespace, and look for '$' as start of immediate
+	CALL	skiphws
 	LEA	-4(%ebp), %ecx
 	PUSH	%ecx		# char* bufp
 	CALL	readonex
+	POP	%edx		# bufp
 	CMPB	$0x24, -4(%ebp)	# '$'
 	JNE	.L16a
 
-	#  It's an integer
-	POP	%edx		# bufp
+	#  Peek ahead one byte to see if it's an integer starting '-' or 0-9
+	CALL	getone
+	MOVL	%eax, %ecx
+	CMPB	$0x2D, %cl
+	JE	.L16d
+	PUSH	%ecx
+	CALL	dchr
+	POP	%ecx
+	CMPB	$-1, %al
+	JNE	.L16d
+	MOVB	%cl, -4(%ebp)
+	JMP	.L16a
+
+.L16d:
+	PUSH	%ecx
+	CALL	unread
+	POP	%ecx
+
+	#  It's an integer; ifile is head of stack
 	PUSH	8(%ebp)		# bits
 	CALL	read_int
 	JMP	.L16c
@@ -1670,14 +1687,14 @@ read_imm:
 	MOVL	%eax, -8(%ebp)
 
 	#  Unread the last character read
-	POP	%ecx		# Overwrite 
 	PUSH	-4(%ebp)	#   bufp
 	CALL	unread
+	POP	%eax
 
 	MOVL	-8(%ebp), %eax	# return val
 .L16c:
 	#  Stack clean-up and exit
-	ADDL	$20, %esp
+	MOVL	%ebp, %esp
 	POP	%ebp
 	RET
 
@@ -2184,7 +2201,15 @@ type_06_rg:
 	JMP	.L22a
 
 .L23b:
-	#  This is the easy case: the immediate is a literal
+	#  We're reading the immediate in a type 06 instruction.
+	#  This is complicated by the AT&T operand order, because we
+	#  read the immediate before the registers needed to write 
+	#  the ModR/M byte, however the immediate data is written
+	#  out after the ModR/M byte.  In case the immediate contains 
+	#  a relocation, we need to temporarily increment the output 
+	#  byte counter around the call to read_imm.
+
+	INCL	-108(%ebp)	# ofile->count
 	PUSH	%edx		# store op info
 	PUSH	%ebp
 	PUSH	%ebx		
@@ -2192,6 +2217,7 @@ type_06_rg:
 	POP	%ecx
 	POP	%ecx
 	POP	%edx		# opinfo
+	DECL	-108(%ebp)	# ofile->count
 
 	LEA	-112(%ebp), %ecx
 	PUSH	%ecx		# ofile
