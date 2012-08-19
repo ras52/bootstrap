@@ -9,8 +9,7 @@ exit:
 	INT	$0x80
 
 	POP	%ebx
-	POP	%ebp
-	RET
+	LEAVE
 
 .data
 	.byte	0x21

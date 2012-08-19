@@ -601,7 +601,11 @@ writebyte:
 	MOVL	$1, %eax	# Write one byte
 	PUSH	%eax
 	CALL	writedptr
-	LEAVE
+	POP	%eax
+	POP	%eax
+	POP	%eax
+
+	POP	%ebp
 	RET
 
 
@@ -617,8 +621,11 @@ writedword:
 	MOVL	$4, %eax	# Write one byte
 	PUSH	%eax
 	CALL	writedptr
+	POP	%eax
+	POP	%eax
+	POP	%eax
 
-	LEAVE
+	POP	%ebp
 	RET
 
 
@@ -637,7 +644,9 @@ writedata:
 .L5b:
 	CALL	writebyte
 .L5c:
-	LEAVE
+	POP	%edx
+	POP	%edx
+	POP	%ebp
 	RET
 
 
@@ -809,7 +818,8 @@ getone:
 	CALL	readonex
 	MOVB	-4(%ebp), %al
 
-	LEAVE
+	ADDL	$12, %esp
+	POP	%ebp
 	RET
 
 
@@ -889,7 +899,9 @@ read_r32:
 
 .L9h:
 	MOVL	%ecx, %eax
-	LEAVE
+	POP	%edx		# value
+	POP	%edx		# ifile
+	POP	%ebp
 	RET
 
 
@@ -934,7 +946,9 @@ read_r8:
 
 .L9c:
 	MOVL	%ecx, %eax
-	LEAVE
+	POP	%edx		# value
+	POP	%edx		# ifile
+	POP	%ebp
 	RET
 
 
@@ -953,7 +967,8 @@ read_reg:
 .L13:
 	CALL	read_r8
 .L13a:
-	LEAVE
+	POP	%ecx
+	POP	%ebp
 	RET
 
 
@@ -983,7 +998,8 @@ skiphws:
 	POP	%eax
 
 	#  Stack cleanup and exit
-	LEAVE
+	POP	%edx
+	POP	%ebp
 	RET
 	
 
@@ -1658,7 +1674,9 @@ read_imm:
 
 	MOVL	-8(%ebp), %eax	# return val
 .L16c:
-	LEAVE
+	#  Stack clean-up and exit
+	ADDL	$20, %esp
+	POP	%ebp
 	RET
 
 
@@ -1730,7 +1748,8 @@ write_mrm:
 	CALL	writedword
 	POP	%ebx
 .L20:
-	LEAVE
+	POP	%edx		# ofile
+	POP	%ebp
 	RET
 
 	
