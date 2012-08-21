@@ -70,6 +70,9 @@ mnemonics:
 .hex	43 41 4C 4C  00 00 00 00  00 00 00 00    02 01 E8 00    # CALL
 .hex	4A 4D 50 00  00 00 00 00  00 00 00 00    02 01 E9 00    # JMP
 .hex	4A 45 00 00  00 00 00 00  00 00 00 00    02 02 0F 84    # JE
+.hex	4A 4E 45 00  00 00 00 00  00 00 00 00    02 02 0F 85    # JNE
+.hex	4A 5A 00 00  00 00 00 00  00 00 00 00    02 02 0F 84    # JZ == JE
+.hex	4A 4E 5A 00  00 00 00 00  00 00 00 00    02 02 0F 85    # JNZ == JNZ
 .hex	4A 47 00 00  00 00 00 00  00 00 00 00    02 02 0F 8F    # JG
 .hex	4A 47 45 00  00 00 00 00  00 00 00 00    02 02 0F 8D    # JGE
 .hex	4A 41 00 00  00 00 00 00  00 00 00 00    02 02 0F 87    # JA
@@ -78,7 +81,6 @@ mnemonics:
 .hex	4A 4C 45 00  00 00 00 00  00 00 00 00    02 02 0F 8E    # JLE
 .hex	4A 42 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JB
 .hex	4A 42 45 00  00 00 00 00  00 00 00 00    02 02 0F 86    # JBE
-.hex	4A 4E 45 00  00 00 00 00  00 00 00 00    02 02 0F 85    # JNE
 .hex	4A 43 00 00  00 00 00 00  00 00 00 00    02 02 0F 82    # JC == JB
 .hex	4A 4F 00 00  00 00 00 00  00 00 00 00    02 02 0F 80    # JO
 
@@ -153,6 +155,8 @@ mnemonics:
 #   3) the second op-code byte (n/a here).
 
 .hex	4C 45 41 00  00 00 00 00  00 00 00 00    05 01 8D 00    # LEA
+.hex	58 43 48 47  4C 00 00 00  00 00 00 00    05 01 87 00	# XCHGL
+.hex	54 45 53 54  4C 00 00 00  00 00 00 00    05 01 85 00	# TESTL
 
 
 # Type 06 instructions.   These represent a large family of op-codes, e.g.
@@ -224,6 +228,7 @@ mnemonics:
 #   Sub-type 1:  .text  .data    -- one parameter: section id
 #   Sub-type 2:  .int   .bytes   -- one parameter: bits
 #   Sub-type 3:  .string         -- no parameters
+#   Sub-type 4:  .zero           -- no parameters
 #
 # The first parameter is an unique code used internally to represent the 
 # sub-type of directive.  Each directive type is special-cased in the code.
@@ -234,6 +239,7 @@ mnemonics:
 .hex	2E 69 6E 74  00 00 00 00  00 00 00 00    FF 02 20 00    # .int
 .hex	2E 62 79 74  65 00 00 00  00 00 00 00    FF 02 08 00    # .byte
 .hex	2E 73 74 72  69 6E 67 00  00 00 00 00    FF 03 00 00	# .string
+.hex	2E 7A 65 72  6F 00 00 00  00 00 00 00    FF 04 00 00	# .zero
 
 zeros:
 # End of table marker -- first byte of name is NULL.
@@ -693,8 +699,68 @@ writedwat:
 	RET
 
 
-####	#  Function:	void writepad( int align, ofile* o )
-	#  Pad to an ALIGN byte boundary
+####	#  Function:	size_t writezeros1( size_t count, ofile* o );
+	#  Write COUNT bytes of zeros, where COUNT <= 16, and return COUNT.
+writezeros1:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	XORL	%eax, %eax
+	CMPL	$0, 8(%ebp)		# do we have any bytes to write?
+	JE	.L8b2
+
+	#  Generate 16 bytes of zeros on the stack
+	PUSH	%eax
+	PUSH	%eax
+	PUSH	%eax
+	PUSH	%eax
+
+	#  Write padding
+	MOVL	%esp, %edx		# pointer to padding
+	PUSH	12(%ebp)		# ofile
+	PUSH	%edx			# data
+	PUSH	8(%ebp)			# count
+	CALL	writedptr
+	POP	%eax			# Return count
+
+.L8b2:
+	LEAVE
+	RET
+
+
+####	#  Function:	void writezeros( size_t count, ofile* o );
+	#  Write COUNT bytes of zeros
+writezeros:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	8(%ebp)
+
+	#  Calculate odd bytes, leaving a multiple of 16.
+	XORL	%edx, %edx
+	MOVL	-4(%ebp), %eax
+	MOVL	$16, %ecx
+	DIVL	%ecx
+	SUBL	%edx, -4(%ebp)
+
+	PUSH	12(%ebp)		# ofile
+
+.L8b3:
+	PUSH	%edx			# count
+	CALL	writezeros1
+	POP	%edx
+
+	CMPL	$0, -4(%ebp)
+	JE	.L8b4
+	MOVL	$16, %edx
+	SUBL	%edx, -4(%ebp)
+	JMP	.L8b3
+.L8b4:
+	LEAVE
+	RET
+
+
+####	#  Function:	size_t writepad( int align, ofile* o );
+	#  Pad to an ALIGN byte boundary and return bytes written.
 writepad:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -706,27 +772,18 @@ writepad:
 	MOVL	8(%ebp), %ecx
 	DIVL	%ecx			# acts on %edx:%eax
 	SUBL	%edx, %ecx
-	CMPL	8(%ebp), %ecx		# Are we already aligned?
-	JE	.L8b2
 
-	#  Generate 16 bytes of zeros on the stack
 	XORL	%eax, %eax
-	PUSH	%eax
-	PUSH	%eax
-	PUSH	%eax
-	PUSH	%eax
+	CMPL	8(%ebp), %ecx		# Are we already aligned?
+	JE	.L8b5
 
 	#  Write padding
-	MOVL	%esp, %edx		# pointer to padding
 	PUSH	12(%ebp)		# ofile
-	PUSH	%edx			# data
 	PUSH	%ecx			# count
-	CALL	writedptr
-	POP	%eax			# Return count
-	ADDL	$0x18, %esp
+	CALL	writezeros1
 
-.L8b2:
-	POP	%ebp
+.L8b5:
+	LEAVE
 	RET
 
 
@@ -990,9 +1047,9 @@ skiphws:
 	#  Is the byte horizontal white space?  If so, loop back
 	PUSH	%eax
 	CALL	ishws
-	CMPL	$0, %eax
+	TESTL	%eax, %eax
 	POP	%eax
-	JNE	.L15
+	JNZ	.L15
 
 	#  Unread the last character read
 	PUSH	%eax
@@ -1277,8 +1334,8 @@ getlabel:
 	POP	%edi
 	POP	%esi
 	JNE	.L11
-	CMPL	$0, %ecx
-	JNE	.L11
+	TESTL	%ecx, %ecx
+	JNZ	.L11
 	POP	%ecx
 
 	#  Found it: get it's value
@@ -1572,8 +1629,8 @@ read_id:
 	PUSH	-96(%ecx)
 	CALL	isid1chr
 	POP	%ecx
-	CMPL	$0, %eax
-	JE	error
+	TESTL	%eax, %eax
+	JZ	error
 
 	#  Continue to read an identifier
 	MOVL	8(%ebp), %eax
@@ -1599,8 +1656,8 @@ read_id:
 	CALL	isidchr
 	POP	%edx
 	POP	%ecx		# restore %ecx
-	CMPL	$0, %eax
-	JNE	.L12		# Loop
+	TESTL	%eax, %eax
+	JNZ	.L12		# Loop
 	POP	%edx
 
 	#  (%ecx) is now something other than lchr.  Return it
@@ -2135,8 +2192,8 @@ type_06_rg:
 
 	#  Type 8/9 instructions only allow %eax or %al as their register
 	POP	%eax			# Retrieve register
-	CMPL	$0, %eax
-	JNE	error
+	TESTL	%eax, %eax
+	JNZ	error
 
 	#  Check we really are a type 8/9 instruction
 	POP	%edx			# Retrieve opcode data
@@ -2395,8 +2452,8 @@ type_08_r:
 	POP	%edx			# ifile
 
 	#  Type 8/9 instructions only allow %eax or %al as their register
-	CMPL	$0, %eax
-	JNE	error
+	TESTL	%eax, %eax
+	JNZ	error
 
 	JMP	insn_end
 
@@ -2495,6 +2552,24 @@ str_direct:
 	POP	%ecx
 	POP	%ecx
 	
+	JMP	insn_end
+
+zero_direct:
+	#  Skip horizontal whitespace and read an integer
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	PUSH	%ebx			# bits
+	CALL	read_int
+	POP	%ecx
+	POP	%ecx			# ifile
+
+	LEA	-112(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	PUSH	%eax
+	CALL	writezeros
+	POP	%eax
+	POP	%eax
 	JMP	insn_end
 
 int_direct:
@@ -2680,6 +2755,8 @@ tl_ident:
 	JE	int_direct
 	CMPB	$0x03, %dh
 	JE	str_direct
+	CMPB	$0x04, %dh
+	JE	zero_direct
 	MOVB	$0x10, %cl
 	SHRL	%edx
 	JMP	set_sect
@@ -2737,20 +2814,20 @@ tl_ident:
 	MOVB	-96(%ebp), %al
 	PUSH	%eax
 	CALL	isws
-	CMPL	$0, %eax
+	TESTL	%eax, %eax
 	POP	%edx
-	JNE	.L8
+	JNZ	.L8
 
 	#  We have a byte.  What is it?
 	CALL	comment
-	CMPL	$0, %eax
-	JNE	.L8
+	TESTL	%eax, %eax
+	JNZ	.L8
 
 	#  Or perhaps a top-level identifier (label / mnemonic / directive);
 	#  nothing else is permitted here.
 	CALL	tl_ident
-	CMPL	$0, %eax
-	JE	error
+	TESTL	%eax, %eax
+	JZ	error
 	CMPL	$1, %eax
 	JE	.L8
 

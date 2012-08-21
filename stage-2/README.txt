@@ -70,21 +70,22 @@ instructions, not one with a prefix.  The full grammar is:
   instruction  := mnemonic arguments endline?
   octet        := HWS* XDIGIT XDIGIT
   hexbytes     := '.hex' octet* endline
-  file         := labeldef | instruction | hexbytes | endline
+  directive    := hexbytes
+  file         := labeldef | instruction | directive | endline
 
 The list of supported mnemonics is:
 
-  ADDx, ANDx, CALL, CBW, CDQ, CMPx, CMPSB, CWDE, DECB, DECL, DIVx,
-  IDIVx, IMULx, INCx, INT, Jcc, LEA, MOVx, MOVSB, MULx, NEGx, NOP, ORx,
-  POP, POPF, PUSH, PUSHF, REP, REPE, REPNE, RET, SALx, SARx, SCASB,
-  SHLx, SHRx, SUBx, XORx.
+  ADDx, ANDx, CALL, CBW, CDQ, CMPx, CMPSB, CWDE, DECB, DECL, DIVx, HLT,
+  IDIVx, IMULx, INCx, INT, Jcc, LEA, LEAVE, MOVx, MOVSB, MULx, NEGx, 
+  NOP, ORx, POP, POPF, PUSH, PUSHF, REP, REPE, REPNE, RET, SALx, SARx, 
+  SCASB, SHLx, SHRx, SUBx, TEST, XCHG, XORx.
 
 In that list, 'x' represents a size suffix L or B, and 'cc' is a
-condition (A, AE, B, BE, C, E, G, GE, L, LE, NE, O).  Some instructions 
-have implicit arguments, and they *must not* be specified in the 
-source.  The shift opcodes (SAL, SAR, SHL, SHR) always shift by %cl 
-bits, and the multiplication-like opcodes (MUL, IMUL, DIV, IDIV) always
-act of %edx:%eax (in 32-bit mode) or %ax (in 8-bit mode).
+condition (A, AE, B, BE, C, E, G, GE, L, LE, NE, NZ, O, Z).  Some 
+instructions have implicit arguments, and they *must not* be specified 
+in the source.  The shift opcodes (SAL, SAR, SHL, SHR) always shift by 
+%cl bits, and the multiplication-like opcodes (MUL, IMUL, DIV, IDIV) 
+always act of %edx:%eax (in 32-bit mode) or %ax (in 8-bit mode).
 
 Not all instructions canonically represented by these mnemonics are 
 supported.  INT only takes a 8-bit immediate; CALL, JMP and Jcc take a

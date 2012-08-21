@@ -36,14 +36,23 @@ passed around to all functions, with the result that the code was rarely
 refactored into separate functions.  This is addressed by the stage-3
 assembler which supports a writable .data section.  References in the
 .text section to objects in the .data section are handled by way of
-R_386_32 relocations.
+R_386_32 relocations.  
+
+The .text and .data directives are used to switch between sections, and
+several other new assembler directives are added.  The complete list is
+now as follows
+
+  .hex .int .byte .zero .string .text .data
 
 The .int and .byte directives allow 32-bit and 8-bit integers to be
-included directly into the output.  Unlike the existing .hex directive
-which only accepts hexadecimal octets without prefixes, these support
-any form of literal.  The .string directive allows for strings in
-double quotes with a maximum length of 78 characters.  They are 
-automatically null terminated, and the following escapes understood:
+included directly into the output.  Multiple integers, separated by 
+commas, can be included as arguments.  Unlike the existing .hex 
+directive which only accepts hexadecimal octets without prefixes, these 
+support any form of literal.  The .zero directive takes one argument
+and writes that number of zeros to the output.  The .string directive 
+allows for strings in double quotes with a maximum length of 78 
+characters.  They are automatically null terminated, and the following 
+escapes understood:
 
   \n \t \" \\
 
