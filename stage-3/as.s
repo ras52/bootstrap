@@ -1579,6 +1579,11 @@ labelref:
 	POP	%eax
 	POP	%eax
 	POP	%eax
+
+.L11h:
+	XORL	%eax, %eax
+	CMPL	$2, 12(%ebp)
+	JNE	.L11c
 	MOVL	$-4, %eax		# The relocation addend
 	JMP	.L11c
 
@@ -2420,7 +2425,8 @@ type_08_r:
 	LEA	-112(%ebp), %ecx
 	PUSH	%ecx
 	PUSH	%eax			# byte(s)
-	PUSH	%ebx			# bits
+	MOVL	$32, %eax
+	PUSH	%eax			# bits
 	CALL	writedata
 	POP	%ecx
 	POP	%ecx
