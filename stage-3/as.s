@@ -1470,20 +1470,20 @@ saverel:
 	RET
 
 	
-####	#  Function:	int labelref( int strlen, main_frame* p ):
+####	#  Function:	int labelref( int strlen, int reltype, main_frame* p );
+	#
 	#  Lookup the text in p->buffer (which has known length strlen),
 	#  Convert it to an offset relative to the current instruction
 	#  (we're assumed to have written the opcode and any ModR/M bytes,
-	#  so the end of instruction happens after writing the number of bits
-	#  in the BITS parameter).  Check the offset can be expressed as a
-	#  BITS-bit signed (2's-complement) integer.
+	#  so the end of instruction happens after 32 bits).  It a relocation 
+	#  is needed, use a RELTYPE relocation.
 labelref:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	PUSH	%ebx
 
 	#  If we're in pass #1, do nothing
-	MOVL	12(%ebp), %ebx
+	MOVL	16(%ebp), %ebx
 	CMPL	$0, -112(%ebx)
 	JLE	.L11e
 
@@ -1492,7 +1492,7 @@ labelref:
 	DECL	%eax
 	PUSH	%eax
 
-	PUSH	12(%ebp)
+	PUSH	16(%ebp)
 	PUSH	8(%ebp)
 	LEA	-8(%ebp), %eax		# the symbol table slot, above
 	PUSH	%eax
@@ -1520,11 +1520,10 @@ labelref:
 	CMPL	$-1, %edx
 	JE	error			# Shouldn't be possible
 
-	#  Save the relocation.  TODO:  Should be R_386_32, not PC32
-	PUSH	12(%ebp)		# main frame bp
+	#  Save the relocation.
+	PUSH	16(%ebp)		# main frame bp
 	PUSH	%edx			# symbol
-	MOVL	$1, %eax		# 1 == R_386_32
-	PUSH	%eax
+	PUSH	12(%ebp)
 	CALL	saverel
 	POP	%eax
 	POP	%eax
@@ -1537,21 +1536,23 @@ labelref:
 	POP	%eax			# symbol slot
 
 	#  Found it.  Compute the value.
-	MOVL	12(%ebp), %ecx
+	MOVL	16(%ebp), %ecx
 	MOVL	-108(%ecx), %eax	# Add ofile->count
 	ADDL	$4, %eax		# bytes in symbol
 	SUBL	%edx, %eax		# Subtract position
 	NEGL	%eax
 	JMP	.L11c
 	
-.L11d:
+.L11d:	#  We're referencing an undefined symbol, though possibly one 
+	#  already in the symbol table.
+
 	#  Head of stack now has symbol table slot
 	POP	%edx
 	CMPL	$-1, %edx
 	JNE	.L11f
 
 	#  Create a symbol table entry for it
-	PUSH	12(%ebp)		# main frame bp
+	PUSH	16(%ebp)		# main frame bp
 	PUSH	8(%ebp)			# strlen
 	PUSH	%edx			# %edx == -1 
 	CALL	savelabel
@@ -1560,7 +1561,7 @@ labelref:
 	POP	%ecx
 
 	#  Find the number of the new symbol
-	MOVL	12(%ebp), %edx		# main frame
+	MOVL	16(%ebp), %edx		# main frame
 	MOVL	-8(%edx), %eax		# label_end
 	SUBL	-4(%edx), %eax		# - label_start
 	XORL	%edx, %edx
@@ -1571,10 +1572,9 @@ labelref:
 
 .L11f:
 	#  Save the relocation
-	PUSH	12(%ebp)		# main frame bp
+	PUSH	16(%ebp)		# main frame bp
 	PUSH	%edx			# symbol
-	MOVL	$2, %eax		# 1 == R_386_PC32
-	PUSH	%eax
+	PUSH	12(%ebp)		# relocation type
 	CALL	saverel
 	POP	%eax
 	POP	%eax
@@ -1643,8 +1643,10 @@ read_id:
 	RET
 
 
-####	#  Function:	int read_imm( int bits, main_frame* p );
-	#  Skip whitespace and then read an immediate value ($0xXX or $NNN)
+####	#  Function:	int read_imm( int bits, int reltype, main_frame* p );
+	#
+	#  Skip whitespace and then read an immediate value ($0xXX or $NNN).
+	#  If a relocation is necessary, make it one of type RELTYPE.
 	#  Returns the value read or exits if unable to read.
 read_imm:
 	#  The function entry point
@@ -1656,7 +1658,7 @@ read_imm:
 	PUSH	%ecx		# int count = 0;
 
 	#  Put ifile on stack for duration of function.
-	MOVL	12(%ebp), %ecx
+	MOVL	16(%ebp), %ecx
 	LEA	-104(%ecx), %ecx
 	PUSH	%ecx		# ifile
 
@@ -1695,10 +1697,10 @@ read_imm:
 .L16a:
 	#  Put the byte into the main buffer and read a label
 	MOVB	-4(%ebp), %al
-	MOVL	12(%ebp), %ecx
+	MOVL	16(%ebp), %ecx
 	MOVB	%al, -96(%ecx)
 
-	PUSH	12(%ebp)	# main_frame
+	PUSH	16(%ebp)	# main_frame
 	CALL	read_id
 	POP	%ecx
 
@@ -1707,13 +1709,15 @@ read_imm:
 	MOVL	%ecx, -4(%ebp)
 
 	#  Calculate the string length
-	MOVL	12(%ebp), %ecx
+	MOVL	16(%ebp), %ecx
 	LEA	-96(%ecx), %edx
 	SUBL	%edx, %eax
 
-	PUSH	12(%ebp)	# main_frame
+	PUSH	16(%ebp)	# main_frame
+	PUSH	12(%ebp)	# reltype
 	PUSH	%eax		# strlen
 	CALL	labelref
+	POP	%ecx
 	POP	%ecx
 	POP	%ecx
 	MOVL	%eax, -8(%ebp)
@@ -1920,8 +1924,11 @@ type_01:
 	POP	%edx
 
 	#  Skip ws and read immediate.
+	MOVL	$2, %eax	# 2 == R_386_32
+	PUSH	%eax
 	PUSH	%ebx		# bits
 	CALL	read_imm
+	POP	%ecx
 	POP	%ecx
 	POP	%ecx
 
@@ -2103,8 +2110,11 @@ type_08_w:
 	LEA	-96(%ebp), %edx
 	SUBL	%edx, %eax
 	PUSH	%ebp			# main_frame
+	MOVL	$1, %ecx		# 1 == R_386_32
+	PUSH	%ecx
 	PUSH	%eax			# strlen
-	CALL	labelref		# TODO:  Should always be R_386_32 here
+	CALL	labelref
+	POP	%ecx
 	POP	%ecx
 	POP	%ecx
 
@@ -2243,8 +2253,11 @@ type_06_rg:
 	INCL	-108(%ebp)	# ofile->count
 	PUSH	%edx		# store op info
 	PUSH	%ebp
+	MOVL	$1, %eax	# 1 == R_386_32
+	PUSH	%eax
 	PUSH	%ebx		
 	CALL	read_imm
+	POP	%ecx
 	POP	%ecx
 	POP	%ecx
 	POP	%edx		# opinfo
@@ -2297,7 +2310,7 @@ type_06_im:
 	CMPB	$0x24, %al		# '$'
 	JE	.L23b
 	
-	#  We've got an immediate label.  Get first char into buffer,
+	#  We've got a deprecated immediate label.  Get first char into buffer,
 	#  and then read the label.
 	PUSH	%edx			# store op info
 	LEA	-104(%ebp), %ecx	# ifile
@@ -2322,19 +2335,24 @@ type_06_im:
 	LEA	-96(%ebp), %edx
 	SUBL	%edx, %eax
 	POP	%ecx			# retrieve op info
+
+	#  Set up frame to call labelref()
 	PUSH	%ebp			# main_frame
+	MOVL	$2, %edx		# 2 == R_386_PC32
+	PUSH	%edx
 	PUSH	%eax			# strlen
-	PUSH	(%edx)			# first dword
 
 	#  Now call into the {.L23a, .L22a, insn_end, ret1} block to handle
 	#  the ModR/M (incl. disp32).   Urgh.
+	PUSH	-96(%ebp)		# store first dword across .L23a
 	MOVB	%ch, %al
 	CALL	.L23a
+	POP	-96(%ebp)
 
 	#  Restore first dword of the label, and then look up the immediate
 	#  label now that ModR/M is written
-	POP	-96(%ebp)
 	CALL	labelref
+	POP	%ecx
 	POP	%ecx
 	POP	%ecx
 
@@ -2390,8 +2408,11 @@ type_08_r:
 	LEA	-96(%ebp), %edx
 	SUBL	%edx, %eax
 	PUSH	%ebp			# main_frame
+	MOVL	$1, %ecx		# 1 == R_386_32
+	PUSH	%ecx
 	PUSH	%eax			# strlen
-	CALL	labelref		# TODO:  Should always be R_386_32 here
+	CALL	labelref
+	POP	%ecx
 	POP	%ecx
 	POP	%ecx
 
