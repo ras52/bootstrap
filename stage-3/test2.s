@@ -12,4 +12,4 @@ exit:
 	LEAVE
 
 .data
-	.byte	0x21
+	.byte	0x21, 0x22

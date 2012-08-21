@@ -2503,6 +2503,7 @@ int_direct:
 	SHRL	%edx
 	MOVL	%edx, %ebx		# bits
 
+.L33:
 	#  Skip horizontal whitespace and read an integer
 	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
@@ -2522,7 +2523,18 @@ int_direct:
 	POP	%edx
 	POP	%edx
 
-	JMP	insn_end
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	POP	%ecx
+	CMPB	$0x2C, %al		# ','
+	JNE	insn_end
+	
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	getone
+	POP	%ecx
+	JMP	.L33	
 
 set_sect:
 	#  When we jumped here, %edx is the new section number
