@@ -26,6 +26,8 @@ _error:
 
 
 ####	#  Function:	void _exit(int status)
+	#
+	#  Terminate program execution with given status.
 _exit:
 	PUSH	%ebp
 	MOVL	%esp, %ebp

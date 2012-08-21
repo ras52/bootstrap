@@ -3,7 +3,11 @@
 # Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
-####	#  Function: void putstr(char* s)
+####	#  Function:	void putstr(char* str)
+	#
+	#  The B library putstr() function.  Writes STR to standard output.
+	#  Unlike the C library puts(), no terminating '\n' is added 
+	#  automatically.
 putstr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -26,7 +30,12 @@ putstr:
 	RET
 
 
-####	#  Function: void putchar(char c)
+####	#  Function:	void putchar(int chr)
+	#
+	#  The C standard library putchar() function.  Writes the one
+	#  characters in CHR to standard output.  The B library version
+	#  should write multiple characters from CHR (up to four): this
+	#  is prohibited by the C standard, and we do not currently do it.
 putchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -44,8 +53,12 @@ putchar:
 	POP	%ebp
 	RET
 
-####	#  Function: void printf(char* fmt, ...);
-	#  This is a *very* light-weight printf, handling just %%, %c, %d, %s
+####	#  Function:	void printf(char* fmt, ...);
+	#
+	#  A very light-weight version of printf, handling just the 
+	#  %%, %c, %d and %s format specifiers, with no widths or 
+	#  precisions.  The B library version also support %o which we
+	#  don't do yet.
 printf:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -148,3 +161,84 @@ printf:
 	POP	%ebx
 	POP	%ebp
 	RET
+
+.data
+
+unget_slot:
+	.int	0		# %al -- bool: is slot in use?
+				# %ah -- char: slot content
+
+.text
+
+####	#  Function:	int ungetchar(int c);
+	#
+	#  A version of the C standard library ungetc() that acts
+	#  on standard input.
+ungetchar:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  If c == EOF, we should do nothing and return EOF.
+	MOVL	8(%ebp), %eax	
+	CMPL	$-1, %eax
+	JE	.L15
+
+	#  Write the character to the unget slot.
+	MOVL	unget_slot, %eax
+	CMPB	$0, %al
+	JNE	_error
+	MOVB	8(%ebp), %ah
+	INCB	%al
+	MOVL	%eax, unget_slot
+
+	#  And return the character
+	XORL	%eax, %eax
+	MOVB	8(%ebp), %al
+.L15:
+	POP	%ebp
+	RET
+
+
+####	#  Function:	int getchar(void);
+	#
+	#  The C standard library getchar() function.  Reads one character
+	#  from standard input and returns it.  If end-of-file occurs, we
+	#  return -1: in this respect it differs from the B library 
+	#  version which returns the ASCII EOT character (0x04, ^D).
+getchar:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  Has a character been ungetc'd?
+	MOVL	unget_slot, %eax
+	CMPB	$0, %al
+	JE	.L14
+
+	XORL	%ecx, %ecx
+	MOVB	%ah, %cl
+	XORB	%al, %al
+	MOVL	%eax, unget_slot
+	MOVL	%ecx, %eax
+	JMP	.L13
+
+.L14:	#  Read from OS
+	PUSH	%ebx
+	XORL	%eax, %eax
+	PUSH	%eax			# A 4-byte buffer: %esp points here
+	MOVL	$1, %edx
+	MOVL	%esp, %ecx
+	MOVL	$0, %ebx		# 0 == STDOUT_FILENO
+	MOVL	$3, %eax		# 3 == __NR_read
+	INT	$0x80
+	MOVL	%eax, %ecx
+	POP	%eax
+	POP	%ebx
+	CMPL	$1, %ecx		# Successfully read one byte
+	JE	.L13
+	CMPL	$0, %ecx		# Necessarily indicates end of file
+	JNE	_error
+	MOVL	$-1, %eax		# -1 == EOF
+.L13:
+	POP	%ebp
+	RET
+
