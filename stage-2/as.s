@@ -41,6 +41,7 @@ mnemonics:
 .hex	52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
 .hex	48 4C 54 00  00 00 00 00  00 00 00 00    00 01 F4 00    # HLT
 .hex	4C 45 41 56  45 00 00 00  00 00 00 00    00 01 C9 00    # LEAVE
+.hex	43 4C 44 00  00 00 00 00  00 00 00 00    00 01 FC 00	# CLD
 
 
 # Type 01 instructions.   A single immediate 8-bit argument, e.g.

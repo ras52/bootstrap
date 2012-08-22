@@ -44,6 +44,7 @@ mnemonics:
 .hex	52 45 54 00  00 00 00 00  00 00 00 00    00 01 C3 00    # RET
 .hex	48 4C 54 00  00 00 00 00  00 00 00 00    00 01 F4 00    # HLT
 .hex	4C 45 41 56  45 00 00 00  00 00 00 00    00 01 C9 00    # LEAVE
+.hex	43 4C 44 00  00 00 00 00  00 00 00 00    00 01 FC 00    # CLD
 
 
 # Type 01 instructions.   A single immediate 8-bit argument, e.g.
@@ -229,6 +230,7 @@ mnemonics:
 #   Sub-type 2:  .int   .bytes   -- one parameter: bits
 #   Sub-type 3:  .string         -- no parameters
 #   Sub-type 4:  .zero           -- no parameters
+#   Sub-type 5:  .align          -- no parameters
 #
 # The first parameter is an unique code used internally to represent the 
 # sub-type of directive.  Each directive type is special-cased in the code.
@@ -240,6 +242,7 @@ mnemonics:
 .hex	2E 62 79 74  65 00 00 00  00 00 00 00    FF 02 08 00    # .byte
 .hex	2E 73 74 72  69 6E 67 00  00 00 00 00    FF 03 00 00	# .string
 .hex	2E 7A 65 72  6F 00 00 00  00 00 00 00    FF 04 00 00	# .zero
+.hex	2E 61 6C 69  67 6E 00 00  00 00 00 00    FF 05 00 00	# .align
 
 zeros:
 # End of table marker -- first byte of name is NULL.
@@ -1966,6 +1969,37 @@ int_direct:
 	RET	
 
 
+####	#  Function:	void algn_direct( int opinf, main_frame* p );
+	#
+	#  Process an .align directive.
+algn_direct:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  Skip horizontal whitespace and read an integer
+	MOVL	12(%ebp), %ecx
+	LEA	-104(%ecx), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	MOVL	$32, %eax
+	PUSH	%eax			# allow up to 2^32 zeros
+	CALL	read_int
+	POP	%ecx
+	POP	%ecx			# ifile
+
+	#  And write the zeros
+	MOVL	12(%ebp), %ecx
+	LEA	-112(%ecx), %ecx	# ifile
+	PUSH	%ecx
+	PUSH	%eax
+	CALL	writepad
+	POP	%eax
+	POP	%eax
+
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	void zero_direct( int opinf, main_frame* p );
 	#
 	#  Process a .zero directive.
@@ -2924,6 +2958,8 @@ tl_ident:
 	JE	.L40d
 	CMPB	$0x04, %dh
 	JE	.L40e
+	CMPB	$0x05, %dh
+	JE	.L40f
 	HLT				# There should be no other directives
 
 .L40a:	CALL	hex_direct
@@ -2935,6 +2971,8 @@ tl_ident:
 .L40d:	CALL	str_direct
 	JMP	.L40
 .L40e:	CALL	zero_direct
+	JMP	.L40
+.L40f:	CALL	algn_direct
 .L40:
 	POP	%ecx
 	POP	%ecx

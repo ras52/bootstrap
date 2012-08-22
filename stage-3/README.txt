@@ -65,7 +65,7 @@ accumulator.  Thus MOVL foo, %eax copies the symbol value (as is
 standard practice for that notation) and not the symbol address (as in 
 stage 2).  The following instructions are also added:
 
-  HLT, LEAVE, MOVSX, MOVZX, SETcc
+  MOVSX, MOVZX, SETcc
 
 Support for the following AT&T aliases for Intel mnemonics has also
 been added:
