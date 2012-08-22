@@ -1637,9 +1637,9 @@ read_id:
 	PUSH	(%ecx)
 	CALL	isidchr
 	POP	%edx
-	POP	%ecx		# restore %ecx
+	POP	%ecx			# restore %ecx
 	TESTL	%eax, %eax
-	JNZ	.L12		# Loop
+	JNZ	.L12			# Loop
 	POP	%edx
 
 	#  (%ecx) is now something other than lchr.  Return it
@@ -1648,9 +1648,362 @@ read_id:
 	RET
 
 
+####	#  Function:	char read_esc( ifile* in )
+	#
+	#  We assume '\\' has already been read.  Read the rest of the
+	#  escaped character (e.g. an 'n') from IN, convert it to the 
+	#  character it represents (e.g. '\n'), and return that.
+read_esc:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	PUSH	8(%ebp)
+	CALL	getone
+	MOVB	%al, %cl
+
+	MOVB	$0x0A, %al		# '\n'
+	CMPB	$0x6E, %cl		# 'n'
+	JE	.L37
+	MOVB	$0x09, %al		# '\t'
+	CMPB	$0x74, %cl		# 't'
+	JE	.L37
+
+	#  Default '\?' to '?', e.g. for '\'', '\\' and '\"'.
+	XORL	%eax, %eax
+	MOVB	%cl, %al	
+.L37:
+	LEAVE
+	RET
+
+
+####	#  Function:	int read_char( int bits, ifile* in );
+	#
+	#  We assume '\'' has already been read.  Read the rest of the 
+	#  character literal, up to an including the closing '\''.
+read_char:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	XORL	%ecx, %ecx
+	PUSH	%ecx			# int val = 0;      -4(%ebp)
+	PUSH	%ecx			# int count = 0;    -8(%ebp)
+	PUSH	12(%ebp)		# ifile
+
+.L35:
+	CALL	getone
+	CMPB	$0x27, %al		# '\''
+	JE	.L36
+	CMPB	$0x5C, %al		# '\\'
+	JNE	.L34
+	CALL	read_esc
+
+.L34:
+	#  val <<= (count++ << 3)
+	MOVL	-8(%ebp), %edx
+	MOVB	$3, %cl
+	SALL	%edx
+	CMPL	8(%ebp), %edx		# check for overflow
+	JE	error
+	MOVL	%edx, %ecx
+	SALL	%eax
+	ADDL	%eax, -4(%ebp)		# value so far
+	INCL	-8(%ebp)		# inc counter
+	JMP	.L35
+
+.L36:
+	#  Check we read some bytes
+	CMPL	$0, -8(%ebp)
+	JE	error
+	MOVL	-4(%ebp), %eax
+
+	LEAVE	
+	RET
+
+
+####	#  Function:	void sect_direct( int opinf, main_frame* p );
+	#
+	#  Process a section directive (.text or .data).
+sect_direct:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+
+	MOVL	12(%ebp), %esi
+
+	#  Get the current section id, and make a shifted %ebp in %eax
+	MOVL	-132(%esi), %eax	# current parse_sect
+	MOVL	$4, %ecx
+	MULL	%ecx
+	ADDL	%esi, %eax
+
+	MOVL	-108(%esi), %ecx	# current offset
+	MOVL	%ecx, -140(%eax)	# and store it
+
+	#  Get the new section id, and make a shifted %ebp in %eax
+	MOVL	8(%ebp), %eax
+	MOVB	$16, %cl
+	SHRL	%eax			# %eax is now section id
+	MOVL	%eax, -132(%esi)	# set parse_sect
+	MOVL	$4, %ecx
+	MULL	%ecx
+	ADDL	%esi, %eax		# eax = ebp + sectid*4
+
+	MOVL	-140(%eax), %ecx	# current offset
+	MOVL	%ecx, -108(%esi)	# and load it
+	MOVL	-148(%eax), %ecx	# current fd
+	MOVL	%ecx, -112(%esi)	# and load it
+
+	POP	%esi	
+	POP	%ebp
+	RET	
+
+
+####	#  Function:	void str_direct( int opinf, main_frame* p );
+	#
+	#  Process a .string directive.
+str_direct:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%edi
+	PUSH	%esi
+
+	MOVL	12(%ebp), %esi
+
+	#  Skip horizontal whitespace and the opening quote
+	LEA	-104(%esi), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	CALL	getone
+	CMPB	$0x22, %al		# '"'
+	JNE	error
+
+	LEA	-96(%esi), %edi		# the buffer
+	#  Loop over the string reading it into the buffer
+.L29:
+	#  Check for buffer overrun
+	LEA     -96(%esi), %eax		# start of buffer
+	SUBL	%edi, %eax
+	NEGL	%eax
+	CMPL	$78, %eax
+	JGE	error
+
+	PUSH	%edi
+	CALL	readonex
+	POP	%ecx			# restore bufp
+	CMPB	$0x22, (%edi)		# '"'
+	JE	.L30
+
+	CMPB	$0x5C, (%edi)		# '\'
+	JNE	.L31
+
+	#  We have an escape character.  Overwrite the '\':
+	CALL	read_esc
+	MOVB	%al, (%edi)
+
+.L31:	#  Continue loop
+	INCL	%edi
+	JMP	.L29
+.L30:
+	POP	%edx			# ifile
+	MOVB	$0, (%edi)
+	INCL	%edi
+
+	# Now write the string out
+	LEA	-112(%esi), %eax
+	PUSH	%eax			# ofile
+	LEA     -96(%esi), %eax		# start of buffer
+	PUSH	%eax
+	SUBL	%eax, %ecx		# %ecx is now strlen
+	PUSH	%ecx
+	CALL	writedptr
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+
+	POP	%esi	
+	POP	%edi
+	POP	%ebp
+	RET	
+
+
+####	#  Function:	void hex_direct( int opinf, main_frame* p );
+	#
+	#  Process a .hex directive
+hex_direct:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+
+	MOVL	12(%ebp), %esi
+
+.L39:
+	#  Skip horizontal whitespace and read a byte
+	LEA	-104(%esi), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	POP	%ecx
+
+	#  Is it a line ending?  If so, end parsing the directive.
+	CMPB	$0x0A, %al	# '\n'
+	JE	.L38
+	CMPB	$0x3B, %al	# ';'
+	JE	.L38
+	CMPB	$0x23, %al	# '#'
+	JE	.L38
+
+	PUSH	%ecx
+	LEA	-96(%esi), %ecx
+	PUSH	%ecx
+	CALL	readonex
+	POP	%edx
+	POP	%edx
+
+	#  Start parsing an octet
+	PUSH	-96(%esi)
+	CALL	xchr
+	POP	%ebx
+	CMPB	$-1, %al
+	JE	error
+
+	#  Read the next byte
+	PUSH	%eax
+	LEA	-104(%esi), %ecx	# ifile
+	PUSH	%ecx
+	LEA	-95(%esi), %ecx
+	PUSH	%ecx
+	CALL	readonex
+	POP	%edx
+	POP	%edx
+	POP	%ebx	# The first byte
+
+	#  Process it
+	PUSH	-95(%esi)
+	CALL	xchr
+	POP	%edx
+	CMPL	$-1, %eax
+	JE	error
+	MOVB	$4, %cl
+	SALB	%bl		# by %cl
+	ADDB	%bl, %al
+
+	#  Byte is in %al; let's write it, and increment the address counter
+	LEA	-112(%esi), %ecx	# ofile
+	PUSH	%ecx
+	PUSH	%eax
+	CALL	writebyte
+	POP	%ebx
+	POP	%ebx
+	JMP	.L39
+
+.L38:
+	POP	%esi
+	POP	%ebp
+	RET
+
+
+####	#  Function:	void int_direct( int opinf, main_frame* p );
+	#
+	#  Process a .int or .byte directive.
+int_direct:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+	PUSH	%esi
+
+	MOVL	12(%ebp), %esi
+	MOVL	8(%ebp), %edx		# opcode info
+	MOVB	$16, %cl
+	SHRL	%edx
+	MOVL	%edx, %ebx		# bits
+
+	#  Begin loop over comma-separated ints
+.L33:
+	#  Skip horizontal whitespace and read an integer
+	LEA	-104(%esi), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	CMPB	$0x27, %al		# '\''
+	JE	.L33a
+
+	PUSH	%ebx
+	CALL	read_int
+	POP	%ecx
+	JMP	.L33b
+.L33a:
+	CALL	getone			# skip the '\''
+	PUSH	%ebx
+	CALL	read_char
+	POP	%ecx
+.L33b:
+	POP	%ecx			# ifile
+	
+	#  Now write the integer
+	LEA	-112(%esi), %ecx	# ofile
+	PUSH	%ecx
+	PUSH	%eax
+	PUSH	%ebx
+	CALL	writedata
+	POP	%edx
+	POP	%edx
+	POP	%edx
+
+	LEA	-104(%esi), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	POP	%ecx
+	CMPB	$0x2C, %al		# ','
+	JNE	.L33c
+	
+	LEA	-104(%esi), %ecx	# ifile
+	PUSH	%ecx
+	CALL	getone
+	POP	%ecx
+	JMP	.L33	
+
+.L33c:
+	POP	%esi
+	POP	%ebx
+	POP	%ebp
+	RET	
+
+
+####	#  Function:	void zero_direct( int opinf, main_frame* p );
+	#
+	#  Process a .zero directive.
+zero_direct:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  Skip horizontal whitespace and read an integer
+	MOVL	12(%ebp), %ecx
+	LEA	-104(%ecx), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	MOVL	$32, %eax
+	PUSH	%eax			# allow up to 2^32 zeros
+	CALL	read_int
+	POP	%ecx
+	POP	%ecx			# ifile
+
+	#  And write the zeros
+	MOVL	12(%ebp), %ecx
+	LEA	-112(%ecx), %ecx	# ifile
+	PUSH	%ecx
+	PUSH	%eax
+	CALL	writezeros
+	POP	%eax
+	POP	%eax
+
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	int read_imm( int bits, int reltype, main_frame* p );
 	#
-	#  Skip whitespace and then read an immediate value ($0xXX or $NNN).
+	#  Skip whitespace and then read an immediate value, or similar.
+	#  This might be a actual immediate ($0xXX or $NNN), or a symbol
+	#  reference (which may be $foo or foo, and we don't distinguish
+	#  these: that's the caller's job), or a character literal 'C'
+	#  (which can have an optional $ prefix).
 	#  If a relocation is necessary, make it one of type RELTYPE.
 	#  Returns the value read or exits if unable to read.
 read_imm:
@@ -1658,28 +2011,32 @@ read_imm:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	XORL	%ecx, %ecx
-	PUSH	%ecx		# char buf[4];
-	PUSH	%ecx		# int val = 0;
-	PUSH	%ecx		# int count = 0;
+	PUSH	%ecx			# char buf[4];
+	PUSH	%ecx			# int val = 0;
+	PUSH	%ecx			# int count = 0;
 
 	#  Put ifile on stack for duration of function.
 	MOVL	16(%ebp), %ecx
 	LEA	-104(%ecx), %ecx
-	PUSH	%ecx		# ifile
+	PUSH	%ecx			# ifile
 
 	#  Skip horizontal whitespace, and look for '$' as start of immediate
 	CALL	skiphws
 	LEA	-4(%ebp), %ecx
-	PUSH	%ecx		# char* bufp
+	PUSH	%ecx			# char* bufp
 	CALL	readonex
-	POP	%edx		# bufp
-	CMPB	$0x24, -4(%ebp)	# '$'
+	POP	%edx			# bufp
+	CMPB	$0x27, -4(%ebp) 	# '\''
+	JE	.L16e
+	CMPB	$0x24, -4(%ebp)		# '$'
 	JNE	.L16a
 
 	#  Peek ahead one byte to see if it's an integer starting '-' or 0-9
 	CALL	getone
 	MOVL	%eax, %ecx
-	CMPB	$0x2D, %cl
+	CMPB	$0x27, %cl		# '\'
+	JE	.L16e
+	CMPB	$0x2D, %cl		# '-'
 	JE	.L16d
 	PUSH	%ecx
 	CALL	dchr
@@ -1689,23 +2046,28 @@ read_imm:
 	MOVB	%cl, -4(%ebp)
 	JMP	.L16a
 
-.L16d:
+.L16d:	#  We have an integer literal
 	PUSH	%ecx
 	CALL	unread
 	POP	%ecx
 
 	#  It's an integer; ifile is head of stack
-	PUSH	8(%ebp)		# bits
+	PUSH	8(%ebp)			# bits
 	CALL	read_int
 	JMP	.L16c
 
-.L16a:
+.L16e:	#  We have a character literal
+	PUSH	8(%ebp)			# bits
+	CALL	read_char
+	JMP	.L16c
+
+.L16a:	#  We have a label reference.
 	#  Put the byte into the main buffer and read a label
 	MOVB	-4(%ebp), %al
 	MOVL	16(%ebp), %ecx
 	MOVB	%al, -96(%ecx)
 
-	PUSH	16(%ebp)	# main_frame
+	PUSH	16(%ebp)		# main_frame
 	CALL	read_id
 	POP	%ecx
 
@@ -1718,9 +2080,9 @@ read_imm:
 	LEA	-96(%ecx), %edx
 	SUBL	%edx, %eax
 
-	PUSH	16(%ebp)	# main_frame
-	PUSH	12(%ebp)	# reltype
-	PUSH	%eax		# strlen
+	PUSH	16(%ebp)		# main_frame
+	PUSH	12(%ebp)		# reltype
+	PUSH	%eax			# strlen
 	CALL	labelref
 	POP	%ecx
 	POP	%ecx
@@ -1728,19 +2090,19 @@ read_imm:
 	MOVL	%eax, -8(%ebp)
 
 	#  Unread the last character read
-	PUSH	-4(%ebp)	#   bufp
+	PUSH	-4(%ebp)		#   bufp
 	CALL	unread
 	POP	%eax
 
-	MOVL	-8(%ebp), %eax	# return val
+	MOVL	-8(%ebp), %eax		# return val
 .L16c:
 	#  Stack clean-up and exit
-	MOVL	%ebp, %esp
-	POP	%ebp
+	LEAVE
 	RET
 
 
 ####	#  Function:	void write_oc12( int opcode_info, main_frame* )
+	#
 	#  Uses the second byte in opcode_info to determine how many
 	#  bytes to write (1 or 2) and then writes the third and perhaps
 	#  fourth byte out.
@@ -1779,7 +2141,11 @@ write_oc12:
 	RET
 
 
-####	#  Function:	void write_mrm( int rm, int reg, int disp, ofile* )
+####	#  Function:	void write_mrm( int rm, int reg, int disp, ofile* out )
+	#
+	#  Compose RM and REG into a ModR/M byte and write it to OUT.  
+	#  If RM indicates that a displacement is needed, then write  
+	#  DISP as a 32-bit displacement.
 write_mrm:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -1836,20 +2202,14 @@ write_mrm:
 	#  ifile is a { int fd; bool has_pback :8; char pback_char; int:16; }.
 	#  and ofile is a { int fd; int count; }.
 
-ret:
-	#  This ret is labelled to allow various bits of main to
-	#  jump up to it in order to effect a forwards jump.
-	XORL	%eax, %eax
-ret1:
-	RET
-
 	#  --- Test for a comment.
 	#  If found, skip over comment line until we've read a LF
 	#  At end of section, %eax=1 iff we read a comment.
 	#  If %eax=0, all other registers are unaltered.
 comment:
+	XORL	%eax, %eax
 	CMPB    $0x23, -96(%ebp)        # '#'
-	JNE	ret
+	JNE	.L10d
 	LEA	-104(%ebp), %ecx	# ifile
 	PUSH	%ecx
 	LEA	-96(%ebp), %ecx
@@ -1861,6 +2221,7 @@ comment:
 	POP	%edx
 	POP	%edx
 	MOVL	$1, %eax
+.L10d:
 	RET	# to main loop
 
 	#  Parts of the label section
@@ -1909,7 +2270,7 @@ labeldef:
 
 insn_end:
 	MOVL	$2, %eax
-	JMP	ret1
+	RET
 
 type_00:
 	#  Write out a type 00 instruction.  These are easiest as they
@@ -2246,44 +2607,6 @@ type_06_rg:
 	#  Write the ModR/M byte.
 	JMP	.L22a
 
-.L23b:
-	#  We're reading the immediate in a type 06 instruction.
-	#  This is complicated by the AT&T operand order, because we
-	#  read the immediate before the registers needed to write 
-	#  the ModR/M byte, however the immediate data is written
-	#  out after the ModR/M byte.  In case the immediate contains 
-	#  a relocation, we need to temporarily increment the output 
-	#  byte counter around the call to read_imm.
-
-	INCL	-108(%ebp)	# ofile->count
-	PUSH	%edx		# store op info
-	PUSH	%ebp
-	MOVL	$1, %eax	# 1 == R_386_32
-	PUSH	%eax
-	PUSH	%ebx		
-	CALL	read_imm
-	POP	%ecx
-	POP	%ecx
-	POP	%ecx
-	POP	%edx		# opinfo
-	DECL	-108(%ebp)	# ofile->count
-
-	LEA	-112(%ebp), %ecx
-	PUSH	%ecx		# ofile
-	PUSH	%eax		# data
-	PUSH	%ebx		# bits
-
-	#  Messy.  Call into the {.L23a, .L22a, insn_end, ret1} block.
-	#  That isn't a real function.   It expects %al to contain reg bits
-	MOVB	%dh, %al
-	CALL	.L23a
-
-	#  Now write the immediate.  The stack is already set up.
-	CALL	writedata
-	POP	%ebx
-	POP	%ecx
-	POP	%ecx
-	JMP	insn_end
 	
 
 type_06_im:
@@ -2313,6 +2636,8 @@ type_06_im:
 	POP	%ecx
 	POP	%edx			# retrieve op info
 	CMPB	$0x24, %al		# '$'
+	JE	.L23b
+	CMPB	$0x27, %al		# '\''
 	JE	.L23b
 	
 	#  We've got a deprecated immediate label.  Get first char into buffer,
@@ -2372,6 +2697,46 @@ type_06_im:
 	POP	%ecx
 
 	JMP	insn_end
+.L23b:
+	#  We're reading the immediate in a type 06 instruction.
+	#  This is complicated by the AT&T operand order, because we
+	#  read the immediate before the registers needed to write 
+	#  the ModR/M byte, however the immediate data is written
+	#  out after the ModR/M byte.  In case the immediate contains 
+	#  a relocation, we need to temporarily increment the output 
+	#  byte counter around the call to read_imm.
+
+	INCL	-108(%ebp)	# ofile->count
+	PUSH	%edx		# store op info
+	PUSH	%ebp
+	MOVL	$1, %eax	# 1 == R_386_32
+	PUSH	%eax
+	PUSH	%ebx		
+	CALL	read_imm
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+	POP	%edx		# opinfo
+	DECL	-108(%ebp)	# ofile->count
+
+	LEA	-112(%ebp), %ecx
+	PUSH	%ecx		# ofile
+	PUSH	%eax		# data
+	PUSH	%ebx		# bits
+
+	#  Messy.  Call into the {.L23a, .L22a, insn_end, ret1} block.
+	#  That isn't a real function.   It expects %al to contain reg bits
+	MOVB	%dh, %al
+	CALL	.L23a
+
+	#  Now write the immediate.  The stack is already set up.
+	CALL	writedata
+	POP	%ebx
+	POP	%ecx
+	POP	%ecx
+	JMP	insn_end
+
+
 
 type_08_r:
 	#  We're reading from a memory location.  MOVL symbol, %eax
@@ -2472,6 +2837,8 @@ type_06:
 	JE	type_06_rm
 	CMPB	$0x24, %al		# '$'
 	JE	type_06_im
+	CMPB	$0x27, %al		# '\''
+	JE	type_06_im
 	PUSH	%eax
 	CALL	dchr
 	POP	%ecx
@@ -2487,207 +2854,6 @@ type_06:
 	#  the lack of .data relocations in the stage-2 as.
 	JMP	type_06_im
 
-str_direct:
-	#  Skip horizontal whitespace and the opening quote
-	LEA	-104(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	CALL	skiphws
-	CALL	getone
-	CMPB	$0x22, %al		# '"'
-	JNE	error
-
-	LEA	-96(%ebp), %ecx		# the buffer
-	#  Loop over the string reading it into the buffer
-.L29:
-	#  Check for buffer overrun
-	LEA     -96(%ebp), %eax		# start of buffer
-	SUBL	%ecx, %eax
-	NEGL	%eax
-	CMPL	$78, %eax
-	JGE	error
-
-	PUSH	%ecx
-	CALL	readonex
-	POP	%ecx			# restore bufp
-	CMPB	$0x22, (%ecx)		# '"'
-	JE	.L30
-
-	CMPB	$0x5C, (%ecx)		# '\'
-	JNE	.L31
-
-	#  We have an escape character.  Overwrite the '\':
-	PUSH	%ecx
-	CALL	readonex
-	POP	%ecx			# restore bufp
-	MOVB	$0x0A, %dl		# '\n'
-	CMPB	$0x6E, (%ecx)		# 'n'
-	JE	.L32
-	MOVB	$0x09, %dl		# '\t'
-	CMPB	$0x74, (%ecx)		# 't'
-	JE	.L32
-	JMP	.L31			# passthrough for \" etc.
-.L32:	
-	MOVB	%dl, (%ecx)		# Replace with value of escape
-
-.L31:	#  Continue loop
-	INCL	%ecx
-	JMP	.L29
-.L30:
-	POP	%edx			# ifile
-	MOVB	$0, (%ecx)
-	INCL	%ecx
-
-	# Now write the string out
-	LEA	-112(%ebp), %eax
-	PUSH	%eax			# ofile
-	LEA     -96(%ebp), %eax		# start of buffer
-	PUSH	%eax
-	SUBL	%eax, %ecx		# %ecx is now strlen
-	PUSH	%ecx
-	CALL	writedptr
-	POP	%ecx
-	POP	%ecx
-	POP	%ecx
-	
-	JMP	insn_end
-
-zero_direct:
-	#  Skip horizontal whitespace and read an integer
-	LEA	-104(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	CALL	skiphws
-	PUSH	%ebx			# bits
-	CALL	read_int
-	POP	%ecx
-	POP	%ecx			# ifile
-
-	LEA	-112(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	PUSH	%eax
-	CALL	writezeros
-	POP	%eax
-	POP	%eax
-	JMP	insn_end
-
-int_direct:
-	#  We're reached with %edx containing the directive data
-	MOVB	$16, %cl
-	SHRL	%edx
-	MOVL	%edx, %ebx		# bits
-
-.L33:
-	#  Skip horizontal whitespace and read an integer
-	LEA	-104(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	CALL	skiphws
-	PUSH	%ebx			# bits
-	CALL	read_int
-	POP	%ecx
-	POP	%ecx			# ifile
-	
-	#  Now write the integer
-	LEA	-112(%ebp), %ecx	# ofile
-	PUSH	%ecx
-	PUSH	%eax
-	PUSH	%ebx
-	CALL	writedata
-	POP	%edx
-	POP	%edx
-	POP	%edx
-
-	LEA	-104(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	CALL	skiphws
-	POP	%ecx
-	CMPB	$0x2C, %al		# ','
-	JNE	insn_end
-	
-	LEA	-104(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	CALL	getone
-	POP	%ecx
-	JMP	.L33	
-
-set_sect:
-	#  When we jumped here, %edx is the new section number
-	PUSH	%edx			# Store across MUL
-	MOVL	-132(%ebp), %eax	# current parse_sect
-	MOVL	$4, %ecx
-	MULL	%ecx
-	ADDL	%ebp, %eax
-	MOVL	-108(%ebp), %ecx	# current offset
-	MOVL	%ecx, -140(%eax)	# and store it
-
-	POP	%eax
-	MOVL	%eax, -132(%ebp)	# set parse_sect
-	MOVL	$4, %ecx
-	MULL	%ecx
-	ADDL	%ebp, %eax
-	MOVL	-140(%eax), %ecx	# current offset
-	MOVL	%ecx, -108(%ebp)	# and load it
-	MOVL	-148(%eax), %ecx	# current fd
-	MOVL	%ecx, -112(%ebp)	# and load it
-
-	JMP	insn_end
-
-hex_bytes:
-	#  Skip horizontal whitespace and read a byte
-	LEA	-104(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	CALL	skiphws
-	POP	%ecx
-
-	#  Is it a line ending?  If so, end parsing the directive.
-	CMPB	$0x0A, %al	# '\n'
-	JE	insn_end
-	CMPB	$0x3B, %al	# ';'
-	JE	insn_end
-	CMPB	$0x23, %al	# '#'
-	JE	insn_end
-
-	PUSH	%ecx
-	LEA	-96(%ebp), %ecx
-	PUSH	%ecx
-	CALL	readonex
-	POP	%edx
-	POP	%edx
-
-	#  Start parsing an octet
-	PUSH	-96(%ebp)
-	CALL	xchr
-	POP	%ebx
-	CMPB	$-1, %al
-	JE	error
-
-	#  Read the next byte
-	PUSH	%eax
-	LEA	-104(%ebp), %ecx	# ifile
-	PUSH	%ecx
-	LEA	-95(%ebp), %ecx
-	PUSH	%ecx
-	CALL	readonex
-	POP	%edx
-	POP	%edx
-	POP	%ebx	# The first byte
-
-	#  Process it
-	PUSH	-95(%ebp)
-	CALL	xchr
-	POP	%edx
-	CMPL	$-1, %eax
-	JE	error
-	MOVB	$4, %cl
-	SALB	%bl		# by %cl
-	ADDB	%bl, %al
-
-	#  Byte is in %al; let's write it, and increment the address counter
-	LEA	-112(%ebp), %ecx	# ofile
-	PUSH	%ecx
-	PUSH	%eax
-	CALL	writebyte
-	POP	%ebx
-	POP	%ebx
-	JMP	hex_bytes
 
 	#  --- Test for an identifier at top level in the source file.
 	#  This might be a label, a mnemonic or a directive.
@@ -2746,17 +2912,34 @@ tl_ident:
 	JNE	.L14b
 	
 	#  Directives
+	PUSH	%ebp
+	PUSH	%edx
 	CMPB	$0x00, %dh
-	JE	hex_bytes
+	JE	.L40a
+	CMPB	$0x01, %dh
+	JE	.L40b
 	CMPB	$0x02, %dh
-	JE	int_direct
+	JE	.L40c
 	CMPB	$0x03, %dh
-	JE	str_direct
+	JE	.L40d
 	CMPB	$0x04, %dh
-	JE	zero_direct
-	MOVB	$0x10, %cl
-	SHRL	%edx
-	JMP	set_sect
+	JE	.L40e
+	HLT				# There should be no other directives
+
+.L40a:	CALL	hex_direct
+	JMP	.L40
+.L40b:	CALL	sect_direct
+	JMP	.L40
+.L40c:	CALL	int_direct
+	JMP	.L40
+.L40d:	CALL	str_direct
+	JMP	.L40
+.L40e:	CALL	zero_direct
+.L40:
+	POP	%ecx
+	POP	%ecx
+	JMP	insn_end
+
 
 .L14b:
 	#  Instructions with 8-bit operands
@@ -2805,8 +2988,9 @@ tl_ident:
 	CMPL	$0, %eax
 	JL	error
 	MOVL	%eax, %ebx  	# zero exit status
-	JE	ret1
-
+	JNE	.L8g
+	RET
+.L8g:
 	#  Is the byte white space?  If so, loop back
 	MOVB	-96(%ebp), %al
 	PUSH	%eax
@@ -2915,8 +3099,12 @@ _start:
 	CALL	.L8
 
 	#  Change back to the .text section
-	XORL	%edx, %edx
-	CALL	set_sect
+	PUSH	%ebp
+	MOVL	$0x000002FF, %edx	# Op info for .text
+	PUSH	%edx
+	CALL	sect_direct
+	POP	%edx
+	POP	%ecx
 
 	#  Determine the output filename
 	PUSH	8(%ebp)
@@ -2996,8 +3184,12 @@ _start:
 	CALL	.L8
 
 	#  Change back to the .text section
-	XORL	%edx, %edx
-	CALL	set_sect
+	PUSH	%ebp
+	MOVL	$0x000002FF, %edx	# Op info for .text
+	PUSH	%edx
+	CALL	sect_direct
+	POP	%edx
+	POP	%ecx
 
 	#  Pad to a 4-byte boundary
 	LEA	-112(%ebp), %eax
@@ -3044,9 +3236,12 @@ _start:
 	CALL	.L8
 
 	#  Change back to the .data section
-	XORL	%edx, %edx
-	INCL	%edx
-	CALL	set_sect
+	PUSH	%ebp
+	MOVL	$0x000102FF, %edx	# Op info for .data
+	PUSH	%edx
+	CALL	sect_direct
+	POP	%edx
+	POP	%ecx
 
 	#  Add .text and .data sizes together
 	POP	%eax			# pop .text + padding

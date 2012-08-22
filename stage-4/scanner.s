@@ -7,7 +7,7 @@
 
 #  We use TOKEN as an enum for the different token types.
 #
-#    { IDENTIFIER = 'I' }
+#    { IDENTIFIER = 'I', NUMBER = '0' }
 #
 token:
 	.byte	0
@@ -55,9 +55,9 @@ isidchar1:
 	MOVL	%esp, %ebp
 
 	MOVL	$1, %eax
-	CMPB	$0x5F, 8(%ebp)		# '_'
+	CMPB	'_', 8(%ebp)
 	JE	.L2
-	CMPB	$0x2E, 8(%ebp)		# '.'
+	CMPB	'.', 8(%ebp)
 	JE	.L2
 	PUSH	8(%ebp)
 	CALL	isalpha
@@ -75,9 +75,9 @@ isidchar:
 	MOVL	%esp, %ebp
 
 	MOVL	$1, %eax
-	CMPB	$0x5F, 8(%ebp)		# '_'
+	CMPB	'_', 8(%ebp)
 	JE	.L3
-	CMPB	$0x2E, 8(%ebp)		# '.'
+	CMPB	'.', 8(%ebp)
 	JE	.L3
 	PUSH	8(%ebp)
 	CALL	isalnum
@@ -103,7 +103,7 @@ get_ident:
 	TESTL	%eax, %eax
 	JZ	_error
 
-	MOVB	$0x49,	%al		# 'I' for identifier
+	MOVB	'I',	%al		# 'I' for identifier
 	MOVB	%al, token
 	MOVL	$value, %eax
 	MOVL	%eax, %edi		# string pointer
@@ -155,7 +155,7 @@ get_number:
 	TESTL	%eax, %eax
 	JZ	_error
 
-	MOVB	$0x30,	%al		# '0' for identifier
+	MOVB	'0', %al		# '0' for identifier
 	MOVB	%al, token
 	MOVL	$value, %eax
 	MOVL	%eax, %edi		# string pointer

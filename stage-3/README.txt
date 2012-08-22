@@ -67,14 +67,24 @@ stage 2).  The following instructions are also added:
 
   HLT, LEAVE, MOVSX, MOVZX, SETcc
 
-And support for the following AT&T aliases for Intel mnemonics has also
+Support for the following AT&T aliases for Intel mnemonics has also
 been added:
 
   CBTW, CLTD, CWTL, MOVZBL, MOBSBL
 
+Character literals are now allowed as immediates, enclosed in single 
+quotes.  (Note this is unlike the GNU assembler, where character 
+literals begin with a single quote, but do not have a closing quote.)  
+They can be preceded by a $ which is optional (on the basis that no-one
+would choose to write an address in terms of its ASCII representation).
+The same escape characters are accepted as for strings.  Multicharacter 
+literals are allowed where a 32-bit immediate is expected, and may 
+contain upto four characters.  Their layout is such as to make them 
+useful for short text fragments: 'xyz' the same layout as "xyz".
+
 The assembler requires its source file to be suffixed .s and
-automatically assigns the output file name by replacing the .s with a .o
-suffix.
+automatically assigns the output file name by replacing the .s with a 
+.o suffix.
 
   Usage: as test.s
 

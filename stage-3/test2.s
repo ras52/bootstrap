@@ -12,6 +12,7 @@ exit:
 	LEAVE
 
 .data
-	.byte	0x21
+	.byte	'!', '_'
 	.zero	35	
 	.byte	0x22
+	.int	'Fish'

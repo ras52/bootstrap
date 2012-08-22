@@ -73,7 +73,7 @@ printf:
 	CMPB	$0, (%esi)
 	JE	.L3
 	MOVB	(%esi), %al
-	CMPB	$0x25, %al		# '%'
+	CMPB	'%', %al
 	JE	.L4
 
 .L6:	#  Write a raw character
@@ -90,7 +90,7 @@ printf:
 	CMPB	$0, (%esi)
 	JE	_error
 	MOVB	(%esi), %al
-	CMPB	$0x25, %al		# '%'
+	CMPB	'%', %al
 	JE	.L6			# write a literal '%'
 
 	#  Read the next vararg into %eax, putting the format char in %cl
@@ -99,11 +99,11 @@ printf:
 	MOVL	(%edi), %eax
 
 	#  Test for 'c', 's' and 'd' format specifiers, otherwise fail  
-	CMPB	$0x63, %cl		# 'c'
+	CMPB	'c', %cl
 	JE	.L6			# write the va_arg character
-	CMPB	$0x73, %cl		# 's'
+	CMPB	's', %cl
 	JE	.L7
-	CMPB	$0x64, %cl		# 'd'
+	CMPB	'd', %cl
 	JE	.L8
 	JMP	_error
 
@@ -116,14 +116,14 @@ printf:
 .L8:	#  Handle the %d format specifier.  Special case 0
 	TESTL	%eax, %eax
 	JNZ	.L9
-	MOVB	$0x30, %al		# '0'
+	MOVB	'0', %al
 	JMP	.L6
 
 .L9:	#  Do we need a -ve sign?
 	CMPL	$0, %eax
 	JG	.L10
 	PUSH	%eax
-	MOVB	$0x2D, %cl		# '-'
+	MOVB	'-', %cl
 	PUSH	%ecx
 	CALL	putchar
 	POP	%ecx
@@ -141,7 +141,7 @@ printf:
 .L11:
 	XORL	%edx, %edx
 	IDIVL	%ecx			# acts on %edx:%eax
-	ADDB	$0x30, %dl		# remainder is in %dl, conv. to char
+	ADDB	'0', %dl		# remainder is in %dl, conv. to char
 	MOVB	%dl, (%ebx)
 	TESTL	%eax, %eax
 	JZ	.L12
