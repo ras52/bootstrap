@@ -114,8 +114,8 @@ printf:
 	JMP	.L5
 
 .L8:	#  Handle the %d format specifier.  Special case 0
-	CMPL	$0, %eax
-	JNE	.L9
+	TESTL	%eax, %eax
+	JNZ	.L9
 	MOVB	$0x30, %al		# '0'
 	JMP	.L6
 
@@ -143,8 +143,8 @@ printf:
 	IDIVL	%ecx			# acts on %edx:%eax
 	ADDB	$0x30, %dl		# remainder is in %dl, conv. to char
 	MOVB	%dl, (%ebx)
-	CMPL	$0, %eax
-	JE	.L12
+	TESTL	%eax, %eax
+	JZ	.L12
 	DECL	%ebx
 	JMP	.L11
 

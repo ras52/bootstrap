@@ -22,15 +22,18 @@ as ld:
 %.o:	%.s as
 	as $<
 
-LIB_OBJS = memory.o stdio.o string.o crt0.o
+#LIB_OBJS = memory.o stdio.o string.o ctype.o crt0.o
+LIB_OBJS = stdio.o string.o ctype.o crt0.o
+BJ_OBJS  = scanner.o main.o
 
-bj:	ld $(LIB_OBJS)
-	ld -o bj $(LIB_OBJS)
+bj:	ld $(LIB_OBJS) $(BJ_OBJS)
+	ld -o bj $(LIB_OBJS) $(BJ_OBJS)
+	$(RM) $(LIB_OBJS) $(BJ_OBJS)
 
 check:	all
 
 clean:
-	$(RM) -f as ld $(LIB_OBJS) bj
+	$(RM) -f as ld $(LIB_OBJS) $(BJ_OBJS) bj
 
 world:
 	$(MAKE) clean
