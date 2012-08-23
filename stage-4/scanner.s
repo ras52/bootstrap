@@ -19,6 +19,31 @@ value:
 
 .text
 
+####	#  Function:	void skip_ccomm();
+	#
+	#  Skips over a C-style comment (the opening /* having been read
+	#  already).
+skip_ccomm:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+.L20:
+	CALL	getchar
+	CMPL	$-1, %eax
+	JE	_error
+	CMPB	'*', %al
+	JNE	.L20
+
+	CALL	getchar
+	CMPL	$-1, %eax
+	JE	_error
+	CMPB	'/', %al
+	JNE	.L20
+
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	int skip_white();
 	#
 	#  Skips over any white space characters, and returns the next
@@ -35,6 +60,24 @@ skip_white:
 	POP	%eax
 	JNZ	.L1
 
+	#  Handle comments
+	CMPB	'/', %al
+	JNE	.L18
+	PUSH	%eax
+	CALL	getchar
+	CMPB	'*', %al
+	JNE	.L19
+	POP	%eax
+	CALL	skip_ccomm
+	JMP	.L1
+
+.L19:
+	PUSH	%eax
+	CALL	ungetchar
+	POP	%eax
+	POP	%eax
+
+.L18:
 	PUSH	%eax
 	CALL	ungetchar
 	POP	%eax
