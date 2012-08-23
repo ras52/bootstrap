@@ -162,19 +162,16 @@ printf:
 	POP	%ebp
 	RET
 
-.data
-
-unget_slot:
-	.int	0		# %al -- bool: is slot in use?
-				# %ah -- char: slot content
-
-.text
-
 ####	#  Function:	int ungetchar(int c);
 	#
 	#  A version of the C standard library ungetc() that acts
 	#  on standard input.
-ungetchar:
+.data unget_count:
+	.byte	0		# How many characters are in the unget slot?
+.data unget_data:
+	.int	0		# %al -- bool: is slot in use?
+				# %ah -- char: slot content
+.text ungetchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
@@ -183,13 +180,19 @@ ungetchar:
 	CMPL	$-1, %eax
 	JE	.L15
 
-	#  Write the character to the unget slot.
-	MOVL	unget_slot, %eax
-	CMPB	$0, %al
-	JNE	_error
-	MOVB	8(%ebp), %ah
+	#  Have we space to write another character?
+	MOVB	unget_count, %al
+	CMPB	$4, %al
+	JAE	_error
 	INCB	%al
-	MOVL	%eax, unget_slot
+	MOVB	%al, unget_count
+
+	#  Write the character to the unget slot.
+	MOVL	unget_data, %eax
+	MOVB	$8, %cl
+	SHLL	%eax
+	MOVB	8(%ebp), %al
+	MOVL	%eax, unget_data
 
 	#  And return the character
 	XORL	%eax, %eax
@@ -210,15 +213,20 @@ getchar:
 	MOVL	%esp, %ebp
 
 	#  Has a character been ungetc'd?
-	MOVL	unget_slot, %eax
+	MOVB	unget_count, %al
 	CMPB	$0, %al
 	JE	.L14
+	DECB	%al
+	MOVB	%al, unget_count
 
-	XORL	%ecx, %ecx
-	MOVB	%ah, %cl
-	XORB	%al, %al
-	MOVL	%eax, unget_slot
-	MOVL	%ecx, %eax
+	#  Read the character from the unget slot.
+	MOVL	unget_data, %eax
+	XORL	%edx, %edx
+	MOVB	%al, %dl
+	MOVB	$8, %cl
+	SHRL	%eax
+	MOVL	%eax, unget_data
+	MOVL	%edx, %eax
 	JMP	.L13
 
 .L14:	#  Read from OS
