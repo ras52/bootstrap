@@ -1,6 +1,6 @@
 .data 
 fmt:	
-	.string "%c: '%s'\n"
+	.string "%c (%d): '%s'\n"
 
 
 .text 
@@ -17,9 +17,11 @@ main:
 	PUSH	%eax
 	MOVL	token, %eax
 	PUSH	%eax
+	PUSH	%eax
 	MOVL	$fmt, %eax
 	PUSH	%eax
 	CALL	printf
+	POP	%eax
 	POP	%eax
 	POP	%eax
 	POP	%eax

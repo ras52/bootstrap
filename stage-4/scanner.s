@@ -10,27 +10,12 @@
 #    { IDENTIFIER = 'I', NUMBER = '0' }
 #
 token:
-	.byte	0
+	.int	0
 
 #  The VALUE buffer contains tokens as they are being read.
 value:
 	.zero	80
 
-
-	.align 8 	
-keywords:
-	.string "auto"		.align 8	.byte 'a'	.align 8
-	.string "break"		.align 8	.byte 'b'	.align 8
-	.string "case"		.align 8	.byte 'c'	.align 8
-	.string "default"	.align 8	.byte 'd'	.align 8
-	.string "else"		.align 8	.byte 'e'	.align 8
-	.string "extrn"		.align 8	.byte 'x'	.align 8
-	.string "goto"		.align 8	.byte 'g'	.align 8
-	.string "if"		.align 8	.byte 'i'	.align 8
-	.string "return"	.align 8	.byte 'r'	.align 8
-	.string "switch"	.align 8	.byte 's'	.align 8
-	.string "while"		.align 8	.byte 'w'	.align 8
-	.byte  0	# <-- the end of table marker
 
 .text
 
@@ -65,12 +50,13 @@ isidchar1:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
+	MOVL	8(%ebp), %ecx
 	MOVL	$1, %eax
-	CMPB	'_', 8(%ebp)
+	CMPB	'_', %cl
 	JE	.L2
-	CMPB	'.', 8(%ebp)
+	CMPB	'.', %cl
 	JE	.L2
-	PUSH	8(%ebp)
+	PUSH	%ecx
 	CALL	isalpha
 .L2:
 	LEAVE
@@ -85,17 +71,102 @@ isidchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
+	MOVL	8(%ebp), %ecx
 	MOVL	$1, %eax
-	CMPB	'_', 8(%ebp)
+	CMPB	'_', %cl
 	JE	.L3
-	CMPB	'.', 8(%ebp)
+	CMPB	'.', %cl
 	JE	.L3
-	PUSH	8(%ebp)
+	PUSH	%ecx
 	CALL	isalnum
 .L3:
 	LEAVE
 	RET
 
+
+####	#  Function:	int ismopchar(int chr);
+	#
+	#  Is CHR a character than can occur at the start of a multi-character
+	#  operator?
+.data mopchars:
+	.string	"+-*/<>&|!=%^"
+.text ismopchar:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	PUSH	8(%ebp)
+	MOVL	$mopchars, %eax
+	PUSH	%eax
+	CALL	strchr
+
+	LEAVE
+	RET
+
+####	#  Function:	void get_multiop();
+	#
+	#  Reads a multi-character operator.
+.data mops2:
+	.int	'++', '--', '<<', '>>', '<=', '>=', '==', '!='
+	.int	'*=', '%=', '/=', '+=', '-=', '&=', '|=', '^='
+	.int	0 	# <-- end of table
+	
+.text get_multiop:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	CALL	getchar
+	MOVL	%eax, token
+
+	CALL	getchar
+	CMPL	$-1, %eax
+	JE	.L13
+	PUSH	%eax
+	MOVL	token, %eax
+	MOVL	%eax, %ecx
+	MOVB	-4(%ebp), %ch		# %ecx is now the two-char token
+
+	MOVL	$mops2, %eax
+	MOVL	%eax, %edx
+.L14:
+	#  Loop testing tokens
+	CMPL	%ecx, (%edx)
+	JE	.L15
+	INCL	%edx
+	CMPL	$0, (%edx)
+	JNE	.L14
+	JMP	.L17
+
+.L15:
+	#  Definitely got a two-character token.  What about a third?
+	POP	%eax
+	MOVL	%ecx, %eax
+	MOVL	%eax, token
+	CMPL	'<<', %ecx
+	JE	.L16
+	CMPL	'>>', %ecx
+	JE	.L16
+	JMP	.L13
+.L16:
+	# Handle <<= and >>=
+	CALL	getchar
+	CMPL	$-1, %eax
+	JE	.L13
+	PUSH	%eax
+	CMPB	'=', %al
+	JNE	.L17
+	POP	%edx
+	MOVB	$16, %cl
+	SALL	%edx
+	MOVL	token, %eax
+	ORL	%edx, %eax
+	MOVL	%eax, token
+	JMP	.L13
+.L17:
+	CALL	ungetchar
+	POP	%eax
+.L13:
+	POP	%ebp
+	RET
 
 ####	#  Function:	int get_word();
 	#
@@ -114,8 +185,8 @@ get_word:
 	TESTL	%eax, %eax
 	JZ	_error
 
-	MOVB	'I',	%al		# 'I' for identifier
-	MOVB	%al, token
+	MOVL	'I', %eax		# 'I' for identifier
+	MOVL	%eax, token
 	MOVL	$value, %eax
 	MOVL	%eax, %edi		# string pointer
 	DECL	%edi
@@ -155,7 +226,22 @@ get_word:
 	#
 	#  Check whether VALUE contains a keyword, and if so, sets TOKEN
 	#  accordingly.
-chk_keyword:
+	#
+.data .align 8 keywords:
+	.string "auto"		.align 8
+	.string "break"		.align 8
+	.string "case"		.align 8
+	.string "default"	.align 8
+	.string "else"		.align 8
+	.string "extrn"		.align 8
+	.string "goto"		.align 8
+	.string "if"		.align 8
+	.string "return"	.align 8
+	.string "switch"	.align 8
+	.string "while"		.align 8
+	.byte  0	# <-- the end of table marker
+
+.text chk_keyword:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	PUSH	%edi
@@ -174,12 +260,12 @@ chk_keyword:
 	TESTL	%eax, %eax
 	JZ	.L11
 	
-	ADDL	$16, %esi
+	ADDL	$8, %esi
 	JMP	.L10
 .L11:
-	#  Found it
-	MOVB	8(%esi), %al
-	MOVB	%al, token
+	#  Found it.  Use the first dword of the name to put in TOKEN.
+	MOVL	(%esi), %eax
+	MOVL	%eax, token
 
 .L12:
 	POP	%esi
@@ -205,8 +291,8 @@ get_number:
 	TESTL	%eax, %eax
 	JZ	_error
 
-	MOVB	'0', %al		# '0' for identifier
-	MOVB	%al, token
+	MOVL	'0', %eax		# '0' for identifier
+	MOVL	%eax, token
 	MOVL	$value, %eax
 	MOVL	%eax, %edi		# string pointer
 	DECL	%edi
@@ -260,18 +346,29 @@ next:
 	PUSH	%ecx
 	CALL	isdigit
 	POP	%ecx
+	TESTL	%eax, %eax
 	JNZ	.L8
-	JMP	_error
+
+	PUSH	%ecx
+	CALL	ismopchar
+	POP	%ecx
+	TESTL	%eax, %eax
+	JNZ	.L8a
+
+	CALL	getchar
+	MOVL	%eax, token
+	JMP	.L6
 	
 .L7:
 	CALL	get_word
 	JMP	.L9
 .L8:
 	CALL	get_number
+	JMP	.L9
+.L8a:
+	CALL	get_multiop
 .L9:
-	XORL	%eax, %eax
-	MOVB	token, %al
-
+	MOVL	token, %eax
 .L6:
 	POP	%ebp
 	RET	

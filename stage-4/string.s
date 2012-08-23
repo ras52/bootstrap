@@ -54,3 +54,33 @@ strcmp:
 	POP	%esi
 	POP	%ebp
 	RET
+
+
+####	#  Function:	int strchr(char const* a, int c);
+	#
+strchr:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+
+	MOVL	12(%ebp), %ecx
+	MOVL	8(%ebp), %esi
+	CLD
+.L4:
+	LODSB
+	CMPB	%cl, %al
+	JE	.L5
+	CMPB	$0, %al
+	JNE	.L4
+
+	#  Not found	
+	XORL	%eax, %eax
+	JMP	.L6
+	
+.L5:	# Found it.  Note LODSB will have incremented %esi
+	LEA	-1(%esi), %eax		# DEC %esi; MOVL %esi, %eax
+.L6:
+	POP	%esi
+	POP	%ebp
+	RET
+
