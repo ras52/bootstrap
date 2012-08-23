@@ -1853,14 +1853,14 @@ str_direct:
 	POP	%edx			# ifile
 	MOVB	$0, (%edi)
 	INCL	%edi
-
+	
 	# Now write the string out
 	LEA	-112(%esi), %eax
 	PUSH	%eax			# ofile
 	LEA     -96(%esi), %eax		# start of buffer
 	PUSH	%eax
-	SUBL	%eax, %ecx		# %ecx is now strlen
-	PUSH	%ecx
+	SUBL	%eax, %edi		# %ecx is now strlen
+	PUSH	%edi
 	CALL	writedptr
 	POP	%ecx
 	POP	%ecx
