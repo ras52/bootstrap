@@ -2,6 +2,7 @@
 fmt:	
 	.string "%c: '%s'\n"
 
+
 .text 
 main:
 	PUSH	%ebp
@@ -11,11 +12,11 @@ main:
 	CALL	next
 	CMPL	$-1, %eax
 	JE	.L2
-
-	MOVL	%eax, %ecx
+	
 	MOVL	$value, %eax
 	PUSH	%eax
-	PUSH	%ecx
+	MOVL	token, %eax
+	PUSH	%eax
 	MOVL	$fmt, %eax
 	PUSH	%eax
 	CALL	printf

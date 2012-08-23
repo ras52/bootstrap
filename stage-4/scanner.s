@@ -16,10 +16,21 @@ token:
 value:
 	.zero	80
 
-lineno:
-	.int	1
 
-
+	.align 8 	
+keywords:
+	.string "auto"		.align 8	.byte 'a'	.align 8
+	.string "break"		.align 8	.byte 'b'	.align 8
+	.string "case"		.align 8	.byte 'c'	.align 8
+	.string "default"	.align 8	.byte 'd'	.align 8
+	.string "else"		.align 8	.byte 'e'	.align 8
+	.string "extrn"		.align 8	.byte 'x'	.align 8
+	.string "goto"		.align 8	.byte 'g'	.align 8
+	.string "if"		.align 8	.byte 'i'	.align 8
+	.string "return"	.align 8	.byte 'r'	.align 8
+	.string "switch"	.align 8	.byte 's'	.align 8
+	.string "while"		.align 8	.byte 'w'	.align 8
+	.byte  0	# <-- the end of table marker
 
 .text
 
@@ -86,11 +97,11 @@ isidchar:
 	RET
 
 
-####	#  Function:	int get_ident();
+####	#  Function:	int get_word();
 	#
 	#  Reads an identifier or keyword (without distinguishing them)
 	#  into VALUE, and returns the next byte (having ungot it).
-get_ident:
+get_word:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	PUSH	%edi
@@ -133,6 +144,45 @@ get_ident:
 	XORB	%cl, %cl
 	MOVB	%cl, (%edi)
 
+	CALL	chk_keyword
+
+	POP	%edi
+	POP	%ebp
+	RET
+
+
+####	#  Function:	void chk_keyword();
+	#
+	#  Check whether VALUE contains a keyword, and if so, sets TOKEN
+	#  accordingly.
+chk_keyword:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%edi
+	PUSH	%esi
+
+	MOVL	$value, %edi
+	MOVL	$keywords, %esi
+.L10:
+	CMPB	$0, (%esi)
+	JE	.L12
+	PUSH	%edi
+	PUSH	%esi
+	CALL	strcmp
+	POP	%ecx
+	POP	%ecx
+	TESTL	%eax, %eax
+	JZ	.L11
+	
+	ADDL	$16, %esi
+	JMP	.L10
+.L11:
+	#  Found it
+	MOVB	8(%esi), %al
+	MOVB	%al, token
+
+.L12:
+	POP	%esi
 	POP	%edi
 	POP	%ebp
 	RET
@@ -214,7 +264,7 @@ next:
 	JMP	_error
 	
 .L7:
-	CALL	get_ident
+	CALL	get_word
 	JMP	.L9
 .L8:
 	CALL	get_number

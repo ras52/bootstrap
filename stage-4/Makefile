@@ -28,7 +28,6 @@ BJ_OBJS  = scanner.o main.o
 
 bj:	ld $(LIB_OBJS) $(BJ_OBJS)
 	ld -o bj $(LIB_OBJS) $(BJ_OBJS)
-	$(RM) $(LIB_OBJS) $(BJ_OBJS)
 
 check:	all
 
