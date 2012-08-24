@@ -1,28 +1,32 @@
-.data 
-f_declname:
-	.string "%s:\n"
-fmt:	
-	.string "%c (%d): '%s'\n"
+# main.s  --  entry point 
 
+# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# All rights reserved.
 
 ####	#  Function:	void int_decl(char* name);
 	#
-	#  Process an integer declaration for NAME.  The initialiser has
-	#  been read.
+	#  Process an integer declaration for NAME.  The name has been read, 
+	#  and TOKEN advanced to the next token: either '=' or ';'
 .data f_int_decl:
-	.string ".data\n%s:\n\t.int %s\n"
+	.string "\n.data\n%s:\n\t.int %s\n"
 .text int_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
 	MOVL	'0', %eax
 	PUSH	%eax
-
 	MOVL	token, %eax
 	CMPL	'=', %eax
 	JNE	.L3
+
+	#  Read an initialiser
 	CALL	next
 	CMPL	'num', %eax
+	JNE	_error
+
+	#  Because the next token is punctuation, value is not set.
+	CALL	next
+	CMPL	';', %eax
 	JNE	_error
 
 	MOVL	$value, %eax
@@ -39,21 +43,61 @@ fmt:
 	POP	%eax
 	POP	%eax
 
-	CALL	next
-	CMPL	';', %eax
-	JNE	_error
 
 	LEAVE
 	RET
 
 
+####	#  Function:	void int_decl(char* name);
+	#
+	#  Process a function declaration.  Current token is '('.
+.data 
+f_fn_prolog:
+	.string "\n.text\n%s:\n\tPUSH\t%%ebp\n\tMOVL\t%%esp, %%ebp\n"
+f_fn_epilog:
+	.string "\tLEAVE\n\tRET\n"
+.text 
+func_decl:
+	PUSH	%ebp	
+	MOVL	%esp, %ebp
+
+	#  TODO: Handle parameters
+	CALL	next
+	CMPL	')', %eax
+	JNE	_error
+	
+	PUSH	8(%ebp)
+	MOVL	$f_fn_prolog, %eax
+	PUSH	%eax
+	CALL	printf
+	POP	%eax
+	POP	%eax
+
+	#  TODO: Handle block
+	CALL	next
+	CMPL	'{', %eax
+	JNE	_error
+
+	CALL	next
+	CMPL	'}', %eax
+	JNE	_error
+
+	MOVL	$f_fn_epilog, %eax
+	PUSH	%eax
+	CALL	putstr
+	POP	%eax
+
+	LEAVE
+	RET
+
 ####	#  Function:	void ext_decl();
 	#
-	#  Process an external declaration
+	#  Process an external declaration.
 	#
-	#    extern-decl ::=   name '=' ival? ';' 
-	#                    | name '[' constant ']' ival-list ';'
-	#                    | name '(' name-list ')' statement
+	#    extern-decl ::=   name ( '=' number )? ';' 
+	#                    | name '(' ')' '{' '}'
+	#  
+	#  When called, TOKEN should be the name.
 ext_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -81,13 +125,12 @@ ext_decl:
 	#  Get the next token and dispatch based on it.
 	CALL	next
 	CMPL	'(', %eax
-	JE	_error			# function are unimplemented
-	CMPL	'[', %eax
-	JE	_error			# arrays are unimplemented
-
-	
+	JE	.L6
 	CALL	int_decl
-
+	JMP	.L7
+.L6:	
+	CALL	func_decl
+.L7:
 	LEAVE
 	RET
 
@@ -104,20 +147,6 @@ main:
 	CMPL	'id', %eax
 	JNE	_error
 	CALL	ext_decl
-	JMP	.L1
-
-	MOVL	$value, %eax
-	PUSH	%eax
-	MOVL	token, %eax
-	PUSH	%eax
-	PUSH	%eax
-	MOVL	$fmt, %eax
-	PUSH	%eax
-	CALL	printf
-	POP	%eax
-	POP	%eax
-	POP	%eax
-	POP	%eax
 	JMP	.L1
 
 .L2:
