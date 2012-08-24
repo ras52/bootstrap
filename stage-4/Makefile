@@ -10,7 +10,7 @@ RM    = /bin/rm
 LN_S  = /bin/ln -sf
 MAKE  = /usr/bin/make
 
-all:	bj
+all:	cc
 
 init:	as ld
 
@@ -26,13 +26,13 @@ as ld:
 LIB_OBJS = stdio.o string.o ctype.o crt0.o
 BJ_OBJS  = scanner.o main.o
 
-bj:	ld $(LIB_OBJS) $(BJ_OBJS)
-	ld -o bj $(LIB_OBJS) $(BJ_OBJS)
+cc:	ld $(LIB_OBJS) $(BJ_OBJS)
+	ld -o cc $(LIB_OBJS) $(BJ_OBJS)
 
 check:	all
 
 clean:
-	$(RM) -f as ld $(LIB_OBJS) $(BJ_OBJS) bj
+	$(RM) -f as ld $(LIB_OBJS) $(BJ_OBJS) cc
 
 world:
 	$(MAKE) clean
