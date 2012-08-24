@@ -15,8 +15,7 @@ strlen:
 	DECL	%ecx
 	REPNE SCASB
 	SUBL	8(%ebp), %edi
-	DECL	%edi
-	MOVL	%edi, %eax
+	LEA	-1(%edi), %eax		# DEC %edi; MOVL %edi, %eax
 
 	POP	%edi
 	POP	%ebp
@@ -84,3 +83,27 @@ strchr:
 	POP	%ebp
 	RET
 
+
+####	#  Function:	int strcpy(char* dest, char const* str);
+	#
+strcpy:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+	PUSH	%edi
+
+	MOVL	12(%ebp), %esi
+	MOVL	8(%ebp), %edi
+	CLD
+.L7:
+	LODSB
+	STOSB
+	CMPB	$0, %al
+	JNE	.L7
+  
+	MOVL	8(%ebp), %eax
+
+	POP	%edi
+	POP	%esi
+	POP	%ebp
+	RET

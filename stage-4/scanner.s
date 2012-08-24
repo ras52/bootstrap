@@ -6,9 +6,6 @@
 .data 
 
 #  We use TOKEN as an enum for the different token types.
-#
-#    { IDENTIFIER = 'I', NUMBER = '0' }
-#
 token:
 	.int	0
 
@@ -228,7 +225,7 @@ get_word:
 	TESTL	%eax, %eax
 	JZ	_error
 
-	MOVL	'I', %eax		# 'I' for identifier
+	MOVL	'id', %eax		# 'id' for identifier
 	MOVL	%eax, token
 	MOVL	$value, %eax
 	MOVL	%eax, %edi		# string pointer
@@ -334,7 +331,7 @@ get_number:
 	TESTL	%eax, %eax
 	JZ	_error
 
-	MOVL	'0', %eax		# '0' for identifier
+	MOVL	'num', %eax		# 'num' for number
 	MOVL	%eax, token
 	MOVL	$value, %eax
 	MOVL	%eax, %edi		# string pointer
@@ -353,7 +350,13 @@ get_number:
 	CALL	isdigit
 	TESTL	%eax, %eax
 	POP	%eax
-	JNE	.L5
+	JNZ	.L5
+
+	PUSH	%eax
+	CALL	isalpha
+	TESTL	%eax, %eax
+	JNZ	_error
+	POP	%eax
 
 	#  Unget the last character
 	PUSH	%eax
