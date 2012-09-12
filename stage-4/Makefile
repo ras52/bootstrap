@@ -24,7 +24,7 @@ as ld:
 
 #LIB_OBJS = memory.o stdio.o string.o ctype.o crt0.o
 LIB_OBJS = stdio.o string.o ctype.o crt0.o
-BJ_OBJS  = scanner.o main.o
+BJ_OBJS  = i386.o scanner.o expr.o main.o
 
 cc:	ld $(LIB_OBJS) $(BJ_OBJS)
 	ld -o cc $(LIB_OBJS) $(BJ_OBJS)

@@ -36,7 +36,7 @@
 	PUSH	%esp
 .L4:
 	PUSH	8(%ebp)
-	MOVL	$f_int_dec, %eax
+	MOVL	$f_int_decl, %eax
 	PUSH	%eax
 	CALL	printf
 	POP	%eax
@@ -51,12 +51,6 @@
 ####	#  Function:	void int_decl(char* name);
 	#
 	#  Process a function declaration.  Current token is '('.
-.data 
-f_fn_prolog:
-	.string "\n.text\n%s:\n\tPUSH\t%%ebp\n\tMOVL\t%%esp, %%ebp\n"
-f_fn_epilog:
-	.string "\tLEAVE\n\tRET\n"
-.text 
 func_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -67,10 +61,7 @@ func_decl:
 	JNE	_error
 	
 	PUSH	8(%ebp)
-	MOVL	$f_fn_prolog, %eax
-	PUSH	%eax
-	CALL	printf
-	POP	%eax
+	CALL	prolog
 	POP	%eax
 
 	#  TODO: Handle block
@@ -79,13 +70,13 @@ func_decl:
 	JNE	_error
 
 	CALL	next
+	CALL	expr
+
+	MOVL	token, %eax
 	CMPL	'}', %eax
 	JNE	_error
 
-	MOVL	$f_fn_epilog, %eax
-	PUSH	%eax
-	CALL	putstr
-	POP	%eax
+	CALL	epilog
 
 	LEAVE
 	RET
