@@ -57,7 +57,7 @@ realloc:
 	MOVL	(%ebx), %ecx		# old size
 	MOVL	12(%ebp), %edx		# size
 	ADDL	$4, %edx
-	PUSH	%ecx
+	PUSH	%edx
 
 	#  Get kernel to mremap the block
 	MOVL	$1, %esi		# 1 == MREMAP_MAYMOVE
