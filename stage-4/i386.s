@@ -415,3 +415,69 @@ logic_not:
 	CALL	printf
 	LEAVE
 	RET
+
+####	#  Function:	void call(char const* name, int nargs);
+	#  We've just pushed NARGS arguments.  Now call NAME.
+.data s_copy_esp:
+.string "\tMOVL\t%esp, %eax\n"
+.data f_push_rev:
+.string "\tPUSH\t%d(%%eax)\n"
+.data f_call:
+.string "\tCALL\t%s\n"
+.data f_stk_clean:
+.string "\tADDL\t$%d, %%esp\n"
+.text call:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+	PUSH	%edi
+
+	XORL	%edi, %edi
+	MOVL	12(%ebp), %esi
+	TESTL	%esi, %esi
+	JZ	.L1
+
+	MOVL	$s_copy_esp, %eax
+	PUSH	%eax
+	CALL	putstr
+	POP	%eax
+
+.L2:
+	ADDL	$4, %edi
+	DECL	%esi
+	TESTL	%esi, %esi
+	JZ	.L1
+
+	PUSH	%edi
+	MOVL	$f_push_rev, %eax
+	PUSH	%eax
+	CALL	printf
+	POP	%eax
+	POP	%eax
+
+	JMP	.L2
+.L1:
+
+	PUSH	8(%ebp)
+	MOVL	$f_call, %eax
+	PUSH	%eax
+	CALL	printf
+	POP	%eax
+	POP	%eax
+	
+	MOVL	12(%ebp), %eax
+	MOVL	$8, %ecx
+	IMULL	%ecx			# on %edx:%eax
+	SUBL	$4, %eax
+	PUSH	%eax
+	MOVL	$f_stk_clean, %eax
+	PUSH	%eax
+	CALL	printf
+	POP	%eax
+	POP	%eax
+	
+
+	POP	%edi
+	POP	%esi
+	POP	%ebp
+	RET

@@ -5,35 +5,120 @@
 
 .text
 
+####	#  Function:	int arg_list();
+	#
+	#    expression ( ',' expression )*
+	#
+	#  Returns the number of arguments
+arg_list:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	XORL	%eax, %eax
+	PUSH	%eax		# -4(%ebp) is count
+
+	MOVL	token, %eax
+	CMPL	')', %eax
+	JE	.L41
+
+.L40:
+	CALL	expr
+	CALL	push
+	INCL	-4(%ebp)
+	MOVL	token, %eax
+	CMPL	',', %eax
+	JNE	.L41
+	CALL	next
+	JMP	.L40
+.L41:
+	POP	%eax
+	POP	%ebp
+	RET
+
+
+####	#  Function: 	void maybe_call();
+	#
+	#    maybe_call ::= identifier ( '(' params ')' )?
+	#
+maybe_call:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	SUBL	$16, %esp
+	
+	MOVL	$value, %eax
+	PUSH	%eax
+	LEA	-16(%ebp), %eax
+	PUSH	%eax
+	CALL	strcpy
+	POP	%eax
+	POP	%eax
+
+	CALL	next
+	MOVL	token, %eax
+	CMPL	'(', %eax
+	JNE	.L38
+	CALL	next
+	CALL	arg_list
+
+	PUSH	%eax
+	LEA	-16(%ebp), %eax
+	PUSH	%eax
+	CALL	call
+	POP	%eax
+	POP	%eax
+
+	MOVL	token, %eax
+	CMPL	')', %eax
+	JNE	_error
+
+	CALL	next
+	JMP	.L39
+.L38:
+	LEA	-16(%ebp), %eax
+	PUSH	%eax
+	CALL	load_var
+	POP	%eax
+	
+.L39:
+	LEAVE
+	RET
+
+
 ####	#  Function:	void primry_expr();
 	#
-	#    primry-expr ::= number | '(' expr ')'
+	#    primry-expr ::= number | identifier | '(' expr ')'
+	#
 primry_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 	
 	MOVL	token, %eax
-	CMPL	'(', %eax
-	JE	.L35
 	CMPL	'num', %eax
+	JE	.L35
+	CMPL	'id', %eax
+	JE	.L36
+	CMPL	'(', %eax
 	JNE	_error
 
-	MOVL	$value, %eax
-	PUSH	%eax
-	CALL	load_const
-	POP	%eax
-	CALL	next
-	JMP	.L36
-
-.L35:
 	CALL	next
 	CALL	expr
 	MOVL	token, %eax
 	CMPL	')', %eax
 	JNE	_error
 	CALL	next
+	JMP	.L37
+
+.L35:
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	load_const
+	POP	%eax
+	CALL	next
+	JMP	.L37
 
 .L36:
+	CALL	maybe_call
+	
+.L37:
 	POP	%ebp
 	RET
 
