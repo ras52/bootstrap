@@ -592,8 +592,33 @@ findsym:
 .L14:
 	MOVL	16(%ebp), %edx
 	CMPL	4(%edx), %edi		# sym->end
-	JGE	error			# Not found
+	JL	.L14a
 
+	#  Trivial error reporting
+	MOVL	$0x203A646C, %eax	# 'ld: '
+	PUSH	%eax
+	MOVL	$2, %ebx		# STDERR_FILENO
+	MOVL	%esp, %ecx
+	MOVL	$4, %edx
+	MOVL	$4, %eax   		# 4 == __NR_write
+	INT	$0x80
+	MOVL	$2, %ebx		# STDERR_FILENO
+	MOVL	12(%ebp), %ecx		# name
+	MOVL	8(%ebp), %edx		# strlen
+	MOVL	$4, %eax   		# 4 == __NR_write
+	INT	$0x80
+	POP	%eax
+	MOVL	$0x0A, %eax
+	PUSH	%eax
+	MOVL	$2, %ebx		# STDERR_FILENO
+	MOVL	%esp, %ecx
+	MOVL	$1, %edx
+	MOVL	$4, %eax   		# 4 == __NR_write
+	INT	$0x80
+	POP	%eax
+	JMP	error			# Not found
+
+.L14a:
 	PUSH	%edi
 	CALL	strneq
 	POP	%ecx
