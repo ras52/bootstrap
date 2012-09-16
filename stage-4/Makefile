@@ -22,17 +22,16 @@ as ld:
 %.o:	%.s as
 	as $<
 
-#LIB_OBJS = memory.o stdio.o string.o ctype.o crt0.o
-LIB_OBJS = stdio.o string.o ctype.o crt0.o
-BJ_OBJS  = i386.o scanner.o expr.o main.o
+LIB_OBJS = memory.o stdio.o string.o ctype.o crt0.o
+CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 
-cc:	ld $(LIB_OBJS) $(BJ_OBJS)
-	ld -o cc $(LIB_OBJS) $(BJ_OBJS)
+cc:	ld $(LIB_OBJS) $(CC_OBJS)
+	ld -o cc $(LIB_OBJS) $(CC_OBJS)
 
 check:	all
 
 clean:
-	$(RM) -f as ld $(LIB_OBJS) $(BJ_OBJS) cc
+	$(RM) -f as ld $(LIB_OBJS) $(CC_OBJS) cc
 
 world:
 	$(MAKE) clean

@@ -26,9 +26,6 @@
 
 	#  Because the next token is punctuation, value is not set.
 	CALL	next
-	CMPL	';', %eax
-	JNE	_error
-
 	MOVL	$value, %eax
 	PUSH	%eax
 	JMP	.L4
@@ -43,6 +40,10 @@
 	POP	%eax
 	POP	%eax
 
+	MOVL	token, %eax
+	CMPL	';', %eax
+	JNE	_error
+	CALL	next
 
 	LEAVE
 	RET
@@ -55,28 +56,52 @@ func_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
-	#  TODO: Handle parameters
 	CALL	next
 	CMPL	')', %eax
+	JE	.L5
+	MOVL	$8, %ecx
+	PUSH	%ecx
+
+.L5a:
+	CMPL	'id', %eax
 	JNE	_error
+
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	save_sym
+	POP	%eax
+	CALL	next
+
+	ADDL	$4, -4(%ebp)
+	CMPL	',', %eax
+	JNE	.L5b
+	CALL	next
+	JMP	.L5a
 	
+.L5b:
+	CMPL	')', %eax
+	JNE	_error
+	POP	%eax
+.L5:
 	PUSH	8(%ebp)
 	CALL	prolog
 	POP	%eax
 
-	#  TODO: Handle block
-	CALL	next
-	CMPL	'{', %eax
-	JNE	_error
+	CALL	new_label	# For return
+	PUSH	%eax
+	XORL	%eax, %eax
+	PUSH	%eax
+	PUSH	%eax
 
 	CALL	next
-	CALL	expr
-
-	MOVL	token, %eax
-	CMPL	'}', %eax
-	JNE	_error
+	CALL	block
+	POP	%eax
+	POP	%eax
+	CALL	local_label
+	POP	%eax
 
 	CALL	epilog
+	CALL	clr_symtab
 
 	LEAVE
 	RET
@@ -130,8 +155,11 @@ main:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
-.L1:
+	CALL	init_symtab
 	CALL	next
+
+.L1:
+	MOVL	token, %eax
 	CMPL	$-1, %eax
 	JE	.L2
 

@@ -31,6 +31,21 @@
 	LEAVE
 	RET
 
+
+####	#  Function:	void dereference();
+	#  Dereference the accumulator and store its value in the accumulator.
+.data s_deref:
+.string	"\tMOVL\t(%eax), %eax\n"
+.text dereference:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$s_deref, %eax
+	PUSH	%eax
+	CALL	putstr
+	LEAVE
+	RET
+
+
 ####	#  Function:	void load_const(char const* I);
 	#  Load accumulator with an (integer) constant I.
 .data s_l_const:
@@ -45,10 +60,24 @@
 	LEAVE
 	RET
 
+####	#  Function:	void load_local(int frame_offset);
+	#  Load accumulator from local variable at frame_offset.
+.data s_l_local:
+.string	"\tLEAL\t%d(%%ebp), %%eax\n"
+.text load_local:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	8(%ebp)
+	MOVL	$s_l_local, %eax
+	PUSH	%eax
+	CALL	printf
+	LEAVE
+	RET
+
 ####	#  Function:	void load_var(char const* name);
 	#  Load accumlator from symbol NAME.
 .data s_l_var:
-.string	"\tMOVL\t%s, %%eax\n"
+.string	"\tMOVL\t$%s, %%eax\n"
 .text load_var:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -120,6 +149,19 @@ logic_not:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	MOVL	$s_push, %eax
+	PUSH	%eax
+	CALL	putstr
+	LEAVE
+	RET
+
+####	#  Function:	void pop_assign();
+	#  Pop value from stack, and assign accumulator to the value
+.data s_pop_assgn:
+.string "\tPOP\t%ecx\n\tMOVL\t%eax,(%ecx)\n"
+.text pop_assign:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$s_pop_assgn, %eax
 	PUSH	%eax
 	CALL	putstr
 	LEAVE
@@ -348,6 +390,32 @@ logic_not:
 	LEAVE
 	RET
 
+####	#  Function:	void increment();
+	#  Increment the value pointed to by the accumulator.
+.data s_inc:
+.string	"\tINCL\t(%eax)\n"
+.text increment:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$s_inc, %eax
+	PUSH	%eax
+	CALL	putstr
+	LEAVE
+	RET
+
+####	#  Function:	void decrement();
+	#  Decrement the value pointed to by the accumulator.
+.data s_dec:
+.string	"\tDECL\t(%eax)\n"
+.text decrement:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$s_dec, %eax
+	PUSH	%eax
+	CALL	putstr
+	LEAVE
+	RET
+
 ####	#  Function:	void local_label(int id);
 .data f_loc_label:
 .string	".L%d:\n"
@@ -466,6 +534,8 @@ logic_not:
 	POP	%eax
 	
 	MOVL	12(%ebp), %eax
+	TESTL	%eax, %eax
+	JZ	.L3
 	MOVL	$8, %ecx
 	IMULL	%ecx			# on %edx:%eax
 	SUBL	$4, %eax
@@ -476,7 +546,7 @@ logic_not:
 	POP	%eax
 	POP	%eax
 	
-
+.L3:
 	POP	%edi
 	POP	%esi
 	POP	%ebp

@@ -3,6 +3,12 @@
 # Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
+# Many of the functions here return a typedef int type_t.
+# Currently this is simply a boolean recording whether the expression is
+# an lvalue (1) or not (0).  If the expression is an lvalue, then the
+# accumulator contains the address.
+
+
 .text
 
 ####	#  Function:	int arg_list();
@@ -35,7 +41,7 @@ arg_list:
 	RET
 
 
-####	#  Function: 	void maybe_call();
+####	#  Function: 	type_t maybe_call();
 	#
 	#    maybe_call ::= identifier ( '(' params ')' )?
 	#
@@ -71,19 +77,31 @@ maybe_call:
 	JNE	_error
 
 	CALL	next
+	XORL	%eax, %eax		# rvalue
 	JMP	.L39
 .L38:
 	LEA	-16(%ebp), %eax
 	PUSH	%eax
+	CALL	lookup_sym
+	TESTL	%eax, %eax
+	JZ	.L38a
+	POP	%ecx
+	PUSH	%eax
+	CALL	load_local
+	POP	%ecx
+	JMP	.L39
+.L38a:
 	CALL	load_var
 	POP	%eax
+	XORL	%eax, %eax
+	INCL	%eax			# lvalue
 	
 .L39:
 	LEAVE
 	RET
 
 
-####	#  Function:	void primry_expr();
+####	#  Function:	type_t primry_expr();
 	#
 	#    primry-expr ::= number | identifier | '(' expr ')'
 	#
@@ -101,18 +119,20 @@ primry_expr:
 
 	CALL	next
 	CALL	expr
+	PUSH	%eax			# store type_t
 	MOVL	token, %eax
 	CMPL	')', %eax
 	JNE	_error
 	CALL	next
+	POP	%eax			# type_t
 	JMP	.L37
-
 .L35:
 	MOVL	$value, %eax
 	PUSH	%eax
 	CALL	load_const
 	POP	%eax
 	CALL	next
+	XORL	%eax, %eax
 	JMP	.L37
 
 .L36:
@@ -123,9 +143,25 @@ primry_expr:
 	RET
 
 
-####	#  Function:	void unary_expr();
+####	#  Function:	void make_rvalue(type_t type);
 	#
-	#    unary-op   ::= '+' | '-' | '~' | '!'
+	#  Convert the accumulator (which is of type TYPE) into an rvalue
+make_rvalue:
+	PUSH	%ebp	
+	MOVL	%esp, %ebp
+
+	MOVL	8(%ebp), %eax
+	TESTL	%eax, %eax
+	JZ	.L42
+	CALL	dereference
+.L42:		
+	POP	%ebp
+	RET
+
+
+####	#  Function:	type_t unary_expr();
+	#
+	#    unary-op   ::= '+' | '-' | '~' | '!' | '*' | '&' | '++' | '--'
 	#    unary-expr ::= unary-op unary-expr | primry-expr
 	#
 unary_expr:
@@ -141,37 +177,91 @@ unary_expr:
 	JE	.L32
 	CMPL	'!', %eax
 	JE	.L33
+	CMPL	'*', %eax
+	JE	.L44
+	CMPL	'&', %eax
+	JE	.L45
+	CMPL	'++', %eax
+	JE	.L46
+	CMPL	'--', %eax
+	JE	.L47
+
 	CALL	primry_expr
 	JMP	.L34
 
-.L30:
+.L30:	# +
 	CALL	next
 	CALL	unary_expr
-	JMP	.L34
+	PUSH	%eax
+	CALL	make_rvalue
+	JMP	.L34a
 
-.L31:
+.L31:	# -
 	CALL	next
 	CALL	unary_expr
+	PUSH	%eax
+	CALL	make_rvalue
 	CALL	arith_neg
-	JMP	.L34
+	JMP	.L34a
 
-.L32:
+.L32:	# ~
 	CALL	next
 	CALL	unary_expr
+	PUSH	%eax
+	CALL	make_rvalue
 	CALL	bit_not
-	JMP	.L34
+	JMP	.L34a
 
-.L33:
+.L33:	# !
 	CALL	next
 	CALL	unary_expr
+	PUSH	%eax
+	CALL	make_rvalue
 	CALL	logic_not
+	JMP	.L34a
 
+.L44:	# *
+	CALL	next
+	CALL	unary_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	XORL	%eax, %eax
+	INCL	%eax		# an lvalue
+	JMP	.L34
+
+.L45:	# & -- check for lvalue flag, clear it, and return
+	CALL	next
+	CALL	unary_expr
+	TESTL	%eax, %eax
+	JZ	_error
+	JMP	.L34a
+
+.L46:	# ++
+	CALL	next
+	CALL	unary_expr
+	TESTL	%eax, %eax
+	JZ	_error
+	PUSH	%eax
+	CALL	increment
+	CALL	make_rvalue
+	JMP	.L34a
+
+.L47:	# --	
+	CALL	next
+	CALL	unary_expr
+	TESTL	%eax, %eax
+	JZ	_error
+	PUSH	%eax
+	CALL	decrement
+	CALL	make_rvalue
+.L34a:
+	XORL	%eax, %eax
 .L34:
-	POP	%ebp
+	LEAVE
 	RET
 
 
-####	#  Function:	void mult_expr();
+####	#  Function:	type_t mult_expr();
 	#
 	#    mult-op   ::= '*' | '/' | '%'
 	#    mult-expr ::= unary-expr ( mult-op unary-expr )*
@@ -181,6 +271,7 @@ mult_expr:
 	MOVL	%esp, %ebp
 
 	CALL	unary_expr
+	PUSH	%eax
 .L1:
 	MOVL	token, %eax
 	CMPL	'*', %eax
@@ -192,32 +283,48 @@ mult_expr:
 	JMP	.L4
 
 .L2:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	unary_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_mult
+	MOVL	$0, -4(%ebp)
 	JMP	.L1
 
 .L3:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	unary_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_div
+	MOVL	$0, -4(%ebp)
 	JMP	.L1
 
 .L3a:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	unary_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_mod
+	MOVL	$0, -4(%ebp)
 	JMP	.L1
 
 .L4:
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void add_expr();
+####	#  Function:	type_t add_expr();
 	#
 	#    add-op   ::= '+' | '-' 
 	#    add-expr ::= mult-expr ( add-op mult-expr )*
@@ -227,6 +334,7 @@ add_expr:
 	MOVL	%esp, %ebp
 
 	CALL	mult_expr
+	PUSH	%eax
 .L5:
 	MOVL	token, %eax
 	CMPL	'+', %eax
@@ -236,25 +344,36 @@ add_expr:
 	JMP	.L8
 
 .L6:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	mult_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_add
+	MOVL	$0, -4(%ebp)
 	JMP	.L5
 
 .L7:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	mult_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_sub
+	MOVL	$0, -4(%ebp)
 	JMP	.L5
 
 .L8:
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void shift_expr();
+####	#  Function:	type_t shift_expr();
 	#
 	#    shift-op   ::= '<<' | '>>' 
 	#    shift-expr ::= add-expr ( shift-op add-expr )*
@@ -264,6 +383,7 @@ shift_expr:
 	MOVL	%esp, %ebp
 
 	CALL	add_expr
+	PUSH	%eax
 .L5a:
 	MOVL	token, %eax
 	CMPL	'<<', %eax
@@ -273,25 +393,36 @@ shift_expr:
 	JMP	.L8a
 
 .L6a:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	add_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_lshift
+	MOVL	$0, -4(%ebp)
 	JMP	.L5a
 
 .L7a:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	add_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_rshift
+	MOVL	$0, -4(%ebp)
 	JMP	.L5a
 
 .L8a:
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void rel_expr();
+####	#  Function:	type_t rel_expr();
 	#
 	#    rel-op   ::= '<' | '<=' | '>' | '>='
 	#    rel-expr ::= shift_expr ( rel-op shift_expr )*
@@ -301,6 +432,7 @@ rel_expr:
 	MOVL	%esp, %ebp
 
 	CALL	shift_expr
+	PUSH	%eax
 .L9:
 	MOVL	token, %eax
 	CMPL	'<', %eax
@@ -314,39 +446,60 @@ rel_expr:
 	JMP	.L14
 
 .L10:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	shift_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_lt
+	MOVL	$0, -4(%ebp)
 	JMP	.L9
 
 .L11:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	shift_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_le
+	MOVL	$0, -4(%ebp)
 	JMP	.L9
 
 .L12:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	shift_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_gt
+	MOVL	$0, -4(%ebp)
 	JMP	.L9
 
 .L13:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	shift_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_ge
+	MOVL	$0, -4(%ebp)
 	JMP	.L9
 
 .L14:
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void eq_expr();
+####	#  Function:	type_t eq_expr();
 	#
 	#    eq-op   ::= '==' | '!=' 
 	#    eq-expr ::= rel-expr ( eq-op rel-expr )*
@@ -356,6 +509,7 @@ eq_expr:
 	MOVL	%esp, %ebp
 
 	CALL	rel_expr
+	PUSH	%eax
 .L15:
 	MOVL	token, %eax
 	CMPL	'==', %eax
@@ -365,25 +519,36 @@ eq_expr:
 	JMP	.L18
 
 .L16:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	rel_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_eq
+	MOVL	$0, -4(%ebp)
 	JMP	.L15
 
 .L17:
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	rel_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_ne
+	MOVL	$0, -4(%ebp)
 	JMP	.L15
 
 .L18:
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void bitand_expr();
+####	#  Function:	type_t bitand_expr();
 	#
 	#    bitand-expr ::= eq-expr ( '&' eq-expr )*
 	#
@@ -392,23 +557,29 @@ bitand_expr:
 	MOVL	%esp, %ebp
 
 	CALL	eq_expr
+	PUSH	%eax
 .L19:
 	MOVL	token, %eax
 	CMPL	'&', %eax
 	JNE	.L20
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	eq_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_bitand
+	MOVL	$0, -4(%ebp)
 	JMP	.L19
 
 .L20:
-
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void bitxor_expr();
+####	#  Function:	type_t bitxor_expr();
 	#
 	#    bitxor-expr ::= bitand-expr ( '^' bitand-expr )*
 	#
@@ -417,23 +588,29 @@ bitxor_expr:
 	MOVL	%esp, %ebp
 
 	CALL	bitand_expr
+	PUSH	%eax
 .L21:
 	MOVL	token, %eax
 	CMPL	'^', %eax
 	JNE	.L22
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	bitand_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_bitxor
+	MOVL	$0, -4(%ebp)
 	JMP	.L21
 
 .L22:
-
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void bitor_expr();
+####	#  Function:	type_t bitor_expr();
 	#
 	#    bitor-expr ::= bitxor-expr ( '|' bitxor-expr )*
 	#
@@ -442,23 +619,29 @@ bitor_expr:
 	MOVL	%esp, %ebp
 
 	CALL	bitxor_expr
+	PUSH	%eax
 .L23:
 	MOVL	token, %eax
 	CMPL	'|', %eax
 	JNE	.L24
+	CALL	make_rvalue
 	CALL	next
 	CALL	push
 	CALL	bitxor_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	pop_bitor
+	MOVL	$0, -4(%ebp)
 	JMP	.L23
 
 .L24:
-
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void logand_expr();
+####	#  Function:	type_t logand_expr();
 	#
 	#    logand-expr ::= bitor-expr ( '&&' bitor-expr )*
 	#
@@ -467,29 +650,35 @@ logand_expr:
 	MOVL	%esp, %ebp
 
 	CALL	bitor_expr
+	PUSH	%eax
 	MOVL	token, %eax
 	CMPL	'&&', %eax
 	JNE	.L26
 .L25:
+	CALL	make_rvalue
 	CALL	new_label
-	PUSH	%eax		# JMP -4(%ebp) if true
+	PUSH	%eax		# JMP -8(%ebp) if true
 	CALL	branch_ifz
 	CALL	next
 	CALL	bitor_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	local_label
 	POP	%eax
+	MOVL	$0, -4(%ebp)
 
 	MOVL	token, %eax
 	CMPL	'&&', %eax
 	JE	.L25
 	CALL	cast_bool
 .L26:
-
+	POP	%eax
 	POP	%ebp
 	RET
 
 
-####	#  Function:	void logor_expr();
+####	#  Function:	type_t logor_expr();
 	#
 	#    logor-expr ::= logand-expr ( '||' logand-expr )*
 	#
@@ -498,25 +687,31 @@ logor_expr:
 	MOVL	%esp, %ebp
 
 	CALL	logand_expr
+	PUSH	%eax
 	MOVL	token, %eax
 	CMPL	'||', %eax
 	JNE	.L28
 
 .L27:
+	CALL	make_rvalue
 	CALL	new_label
-	PUSH	%eax		# JMP -4(%ebp) if true
+	PUSH	%eax		# JMP -8(%ebp) if true
 	CALL	branch_ifnz
 	CALL	next
 	CALL	logand_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	local_label
 	POP	%eax
+	MOVL	$0, -4(%ebp)
 
 	MOVL	token, %eax
 	CMPL	'||', %eax
 	JE	.L27
 	CALL	cast_bool
 .L28:
-
+	POP	%eax
 	POP	%ebp
 	RET
 
@@ -535,7 +730,7 @@ logor_expr:
         RET	
 
 
-####	#  Function:	void cond_expr();
+####	#  Function:	type_t cond_expr();
 	#
 	#    cond-expr ::= logor-expr ( '?' expr ':' cond-expr )?
 	#
@@ -544,11 +739,13 @@ cond_expr:
 	MOVL	%esp, %ebp
 
 	CALL	logor_expr
+	PUSH	%eax
 
 	MOVL	token, %eax
 	CMPL	'?', %eax
 	JNE	.L29
 
+	CALL	make_rvalue
 	CALL	new_label
 	PUSH	%eax		# JMP -4(%ebp) if false
 	CALL	new_label
@@ -559,6 +756,9 @@ cond_expr:
 	POP	%eax
 	CALL	next
 	CALL	expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	PUSH	-8(%ebp)
 	CALL	branch
 	POP	%eax
@@ -572,23 +772,78 @@ cond_expr:
 	POP	%eax
 	CALL	next
 	CALL	cond_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	PUSH	-8(%ebp)
 	CALL	local_label
 	POP	%eax
+	MOVL	$0, -4(%ebp)
 
 .L29:
+	POP	%eax
 	LEAVE
 	RET
 
 
-####	#  Function:	void expr();
+####	#  Function:	type_t assign_expr();
+	#
+	#    assign-op   ::= '='
+	#    assign-expr ::= cond-expr ( assign-op assign-expr )?
+	#
+assign_expr:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	CALL	cond_expr
+	PUSH	%eax
+
+	MOVL	token, %eax
+	CMPL	'=', %eax
+	JNE	.L43
+
+	POP	%eax
+	TESTL	%eax, %eax
+	JZ	_error
+	CALL	next
+	CALL	push
+	CALL	assign_expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
+	CALL	pop_assign
+	XORL	%eax, %eax
+	PUSH	%eax
+.L43:
+	POP	%eax
+	POP	%ebp
+	RET
+
+
+####	#  Function:	type_t expr();
 	#
 	#  Process an expression.
 expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
-	CALL	cond_expr
+	CALL	assign_expr
+
+	POP	%ebp
+	RET
+
+
+####	#  Function:	type_t rvalue_expr();
+	#
+	#  Process an expression.
+rvalue_expr:
+	PUSH	%ebp	
+	MOVL	%esp, %ebp
+
+	CALL	expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 
 	POP	%ebp
 	RET

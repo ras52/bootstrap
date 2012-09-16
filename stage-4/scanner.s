@@ -267,18 +267,19 @@ get_word:
 	#  Check whether VALUE contains a keyword, and if so, sets TOKEN
 	#  accordingly.
 	#
-.data .align 8 keywords:
-	.string "auto"		.align 8
-	.string "break"		.align 8
-	.string "case"		.align 8
-	.string "default"	.align 8
-	.string "else"		.align 8
-	.string "extrn"		.align 8
-	.string "goto"		.align 8
-	.string "if"		.align 8
-	.string "return"	.align 8
-	.string "switch"	.align 8
-	.string "while"		.align 8
+.data .align 12 keywords:
+	.string "auto"		.align 12	# TODO
+	.string "break"		.align 12
+	.string "case"		.align 12	# TODO
+        .string "continue"      .align 12
+	.string "default"	.align 12	# TODO
+	.string "else"		.align 12
+	.string "extern"	.align 12	# TODO
+	.string "goto"		.align 12	# TODO
+	.string "if"		.align 12
+	.string "return"	.align 12
+	.string "switch"	.align 12	# TODO
+	.string "while"		.align 12
 	.byte  0	# <-- the end of table marker
 
 .text chk_keyword:
@@ -300,7 +301,7 @@ get_word:
 	TESTL	%eax, %eax
 	JZ	.L11
 	
-	ADDL	$8, %esi
+	ADDL	$12, %esi
 	JMP	.L10
 .L11:
 	#  Found it.  Use the first dword of the name to put in TOKEN.
@@ -381,7 +382,7 @@ next:
 
 	CALL	skip_white
 	CMPL	$-1, %eax
-	JE	.L6
+	JE	.L6a
 
 	PUSH	%eax
 	CALL	isidchar1
@@ -402,6 +403,7 @@ next:
 	JNZ	.L8a
 
 	CALL	getchar
+.L6a:
 	MOVL	%eax, token
 	JMP	.L6
 	
