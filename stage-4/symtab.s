@@ -11,8 +11,10 @@ st_end:
 	.int	0
 st_endstore:
 	.int	0
+st_scope_id:
+	.int	0
 
-#  struct entry { char sym[12]; int32_t frame_off; };
+#  struct entry { char sym[12]; int32_t frame_off; int32_t scope_id; };
 
 .text
 
@@ -22,7 +24,7 @@ st_endstore:
 init_symtab:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	MOVL	$1024, %ecx		# 64 * sizeof(entry)
+	MOVL	$1280, %ecx		# 64 * sizeof(entry)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
@@ -72,7 +74,7 @@ grow_symtab:
 
 ####	#  Function:	void save_sym( char const* name, int32_t frame_off );
 	#
-	#  Save a local symbol
+	#  Save a local symbol.
 save_sym:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -88,27 +90,76 @@ save_sym:
 	CALL	grow_symtab
 .L1:
 	CALL	strcpy
-	POP	%eax
+	POP	%edx
 	MOVL	12(%ebp), %ecx
-	MOVL	%ecx, 12(%eax)	# save value
-	ADDL	$16, %eax	# sizeof(entry)
+	MOVL	%ecx, 12(%edx)	# save value
+	MOVL	st_scope_id, %eax
+	MOVL	%eax, 16(%edx)
+	ADDL	$20, %edx	# sizeof(entry)
+	MOVL	%edx, %eax
 	MOVL	%eax, st_end
 
 	LEAVE
 	RET
 
-####	#  Function:	void clr_symtab();
+
+####	#  Function:	void new_scope();
 	#
-	#  Clear the symbol table at end of scope
-clr_symtab:
+	#  Called on parsing '{' or similar to start a new nested scope.
+new_scope:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
-	MOVL	st_start, %eax
-	MOVL	%eax, st_end
+	MOVL	st_scope_id, %eax
+	INCL	%eax
+	MOVL	%eax, st_scope_id
 
 	POP	%ebp
 	RET
+
+
+####	#  Function:	int end_scope();
+	#
+	#  Called on parsing '}' or similar to remove symbols from the table.
+	#  Returns number of bytes that need removing from the stack.
+end_scope:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	MOVL	st_scope_id, %eax
+	MOVL	%eax, %edx		# %edx  id
+	MOVL	st_end, %eax
+	MOVL	%eax, %ecx		# %ecx  end
+	MOVL	st_start, %eax		# %eax  ptr
+	SUBL	$20, %eax		# sizeof(entry)
+.L4:
+	ADDL	$20, %eax		# sizeof(entry)
+	CMPL	%ecx, %eax
+	JGE	.L5
+
+	CMPL	%edx, 16(%eax)
+	JL	.L4
+
+	MOVL	%eax, %ecx
+	MOVL	st_end, %eax
+	XCHGL	%eax, %ecx
+	MOVL	%eax, st_end
+.L5:
+	DECL	%edx
+	MOVL	%edx, %eax
+	MOVL	%eax, st_scope_id
+
+	#  Return number of variables removed
+	MOVL	st_end, %eax
+	SUBL	%ecx, %eax
+	NEGL	%eax
+	XORL	%edx, %edx
+	MOVL	$5, %ecx		# sizeof(entry)/4
+	IDIVL	%ecx
+
+	POP	%ebp
+	RET
+
 
 ####	#  Function:	int lookup_sym(char const* name);
 	#
@@ -126,9 +177,9 @@ lookup_sym:
 	MOVL	%eax, %edi
 	MOVL	st_end, %eax
 	MOVL	%eax, %esi
-	SUBL	$16, %edi	# sizeof(entry)
+	SUBL	$20, %edi	# sizeof(entry)
 .L2:
-	ADDL	$16, %edi	# sizeof(entry)
+	ADDL	$20, %edi	# sizeof(entry)
 	XORL	%eax, %eax
 	CMPL	%esi, %edi
 	JGE	.L3

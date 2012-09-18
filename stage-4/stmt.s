@@ -5,6 +5,22 @@
 
 .text
 
+####	#  Function:	void semicolon();
+	#
+	#  Require the current token to be ';' and call next()
+semicolon:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	MOVL	token, %eax
+	CMPL	';', %eax
+	JNE	_error
+	CALL	next
+	
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	void brack_expr();
 	#
 	#    brack-expr ::= '(' expr ')'
@@ -117,23 +133,18 @@ while_stmt:
 
 ####	#  Function:	void return_stmt(int brk, int cont, int ret);
 	#
-	#    return-stmt ::= 'return' expr ';'
+	#    return-stmt ::= 'return' expr? ';'
 return_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
 	CALL	next
-	MOVL	token, %eax
 	CMPL	';', %eax
 	JE	.L10
 
 	CALL	rvalue_expr
-
-	MOVL	token, %eax
-	CMPL	';', %eax
-	JNE	_error
 .L10:
-	CALL	next
+	CALL	semicolon
 	PUSH	16(%ebp)
 	CALL	branch
 
@@ -149,11 +160,7 @@ break_stmt:
 	MOVL	%esp, %ebp
 
 	CALL	next
-	MOVL	token, %eax
-	CMPL	';', %eax
-	JNE	_error
-	CALL	next
-
+	CALL	semicolon
 	PUSH	8(%ebp)
 	CALL	branch
 
@@ -169,16 +176,52 @@ cont_stmt:
 	MOVL	%esp, %ebp
 
 	CALL	next
-	MOVL	token, %eax
-	CMPL	';', %eax
-	JNE	_error
-	CALL	next
-
+	CALL	semicolon
 	PUSH	12(%ebp)
 	CALL	branch
 
 	LEAVE
 	RET
+
+
+####	#  Function:	void auto_stmt(int brk, int cont, int ret);
+	#
+	#    init-decl ::= name ( '=' assign-expr )?
+	#    auto-stmt ::= 'auto' init-decl ( ',' init-decl )* ';'
+	#
+	#  Current token is 'auto'
+auto_stmt:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+.L15:
+	CALL	next
+	CMPL	'id', %eax
+	JNE	_error
+
+	MOVL	$frame_size, %eax
+	SUBL	$4, (%eax)
+	PUSH	(%eax)
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	save_sym
+	POP	%ecx
+	POP	%ecx
+
+	CALL	next
+	CMPL	'=', %eax
+	JNE	.L14
+	CALL	next
+	CALL	assign_expr	
+.L14:
+	CALL	push
+	MOVL	token, %eax
+	CMPL	',', %eax
+	JE	.L15
+	CALL	semicolon
+
+	POP	%ebp
+	RET	
 
 
 ####	#  Function:	void expr_stmt(int brk, int cont, int ret);
@@ -222,6 +265,8 @@ stmt:
 	JE	.L11
 	CMPL	'cont', %eax
 	JE	.L12
+	CMPL	'auto', %eax
+	JE	.L13
 	CMPL	';', %eax
 	JE	.L4
 	CMPL	'{', %eax
@@ -243,6 +288,9 @@ stmt:
 .L12:
 	CALL	cont_stmt
 	JMP	.L6
+.L13:
+	CALL	auto_stmt
+	JMP	.L6
 
 .L4:	# The null statement
 	CALL	next
@@ -262,6 +310,7 @@ block:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
+	CALL	new_scope
 	MOVL	token, %eax
 	CMPL	'{', %eax
 	JNE	_error
@@ -277,6 +326,9 @@ block:
 	CALL	stmt	
 	JMP	.L1
 .L2:
+	CALL	end_scope
+	PUSH	%eax
+	CALL	clear_stack
 	CALL	next
 
 	LEAVE

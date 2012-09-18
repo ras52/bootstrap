@@ -63,7 +63,7 @@
 ####	#  Function:	void load_local(int frame_offset);
 	#  Load accumulator from local variable at frame_offset.
 .data s_l_local:
-.string	"\tLEAL\t%d(%%ebp), %%eax\n"
+.string	"\tLEA\t%d(%%ebp), %%eax\n"
 .text load_local:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -484,6 +484,25 @@ logic_not:
 	LEAVE
 	RET
 
+####	#  Function:	void clr_stack(int n_bytes);
+.data f_stk_clean:
+.string "\tADDL\t$%d, %%esp\n"
+.text clear_stack:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	8(%ebp), %eax
+	TESTL	%eax, %eax
+	JZ	.L4
+
+	PUSH	%eax
+	MOVL	$f_stk_clean, %eax
+	PUSH	%eax
+	CALL	printf
+.L4:
+	LEAVE
+	RET
+		
+
 ####	#  Function:	void call(char const* name, int nargs);
 	#  We've just pushed NARGS arguments.  Now call NAME.
 .data s_copy_esp:
@@ -492,8 +511,6 @@ logic_not:
 .string "\tPUSH\t%d(%%eax)\n"
 .data f_call:
 .string "\tCALL\t%s\n"
-.data f_stk_clean:
-.string "\tADDL\t$%d, %%esp\n"
 .text call:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -540,10 +557,7 @@ logic_not:
 	IMULL	%ecx			# on %edx:%eax
 	SUBL	$4, %eax
 	PUSH	%eax
-	MOVL	$f_stk_clean, %eax
-	PUSH	%eax
-	CALL	printf
-	POP	%eax
+	CALL	clear_stack
 	POP	%eax
 	
 .L3:

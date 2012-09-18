@@ -3,6 +3,9 @@
 # Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
+.data frame_size:
+	.int	0
+
 ####	#  Function:	void int_decl(char* name);
 	#
 	#  Process an integer declaration for NAME.  The name has been read, 
@@ -56,6 +59,10 @@ func_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
+	CALL	new_scope
+	XORL	%eax, %eax
+	MOVL	%eax, frame_size
+
 	CALL	next
 	CMPL	')', %eax
 	JE	.L5
@@ -101,7 +108,7 @@ func_decl:
 	POP	%eax
 
 	CALL	epilog
-	CALL	clr_symtab
+	CALL	end_scope
 
 	LEAVE
 	RET
