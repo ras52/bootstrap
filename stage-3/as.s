@@ -3404,7 +3404,7 @@ _start:
 	MOVL	16(%edi), %eax		# label->section
 	INCL	%eax			# .text is 1
 	MOVB	$16, %cl
-	SHLL	%eax
+	SHLL	%eax			# shift into st_shndx
 	ADDL	$0x00000010, %eax	# STB_GLOBAL, STT_NOTYPE, .text
 	MOVL	0xC(%edi), %ecx		# offset from start of .text
 	CMPL	$-1, %ecx

@@ -19,7 +19,7 @@ elf_hdr:
 #	**shdroff**  flags-----\    ehsz\
 .hex	00 00 00 00  00 00 00 00    34 00
 #	phsz\ phn-\  shsz\ shn-\    shstr\
-.hex	20 00 02 00  28 00 04 00    03 00 
+.hex	20 00 02 00  28 00 06 00    03 00 
 
 # Note that ELF requires the offset of a loadable segment to be
 # equal to its virtual address modulo its alignment.  
@@ -77,18 +77,41 @@ sect_hdr:
 #	name-str--\  STRTAB----\    no-flags--\  load-addr-\ 
 .hex	0D 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
 #	**offset**\  size------\    /-- Fig 4.12 in gABI --\
-.hex	00 00 00 00  16 00 00 00    00 00 00 00  00 00 00 00
+.hex	00 00 00 00  27 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
 .hex	01 00 00 00  00 00 00 00
 
-# The shared string table itself.  start +0xA0; length: 0x16
+# #4  Symbol table.          start: 0xA0; length: 0x28
+# (Offsets 0xB0, 0xB4 need setting) Y Y
+#
+#	name-str--\  SYMTAB----\    no-flags--\  load-addr-\ 
+.hex	17 00 00 00  02 00 00 00    00 00 00 00  00 00 00 00
+#	**offset**\  **size**--\    .strtab---\  **LOCAL**-\ 
+.hex	00 00 00 00  00 00 00 00    05 00 00 00  00 00 00 00
+#	align-----\  entry-sz--\
+.hex	04 00 00 00  10 00 00 00
+
+# #5  String table.          start: 0xC8; length: 0x28
+# (Offsets 0xD8, 0xDC need setting) Y Y
+#
+#	name-str--\  STRTAB----\    no-flags--\  load-addr-\
+.hex	1F 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
+#	**offset**\  **size**--\    /-- Fig 4.12 in gABI --\
+.hex	00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+#	align-----\  entry-sz--\
+.hex	01 00 00 00  00 00 00 00
+
+# The shared string table itself.  start +0xF0; length: 0x28
 #
 .hex	00                             # NULL.      Offset 0x00
 .hex	2E 74 65 78 74 00              # .text      Offset 0x01
 .hex	2E 64 61 74 61 00              # .data      Offset 0x07
 .hex	2E 73 68 73 74 72 74 61 62 00  # .shstrtab  Offset 0x0D
+.hex	2E 73 79 6D 74 61 62 00        # .symtab    Offset 0x17
+.hex	2E 73 74 72 74 61 62 00        # .strtab    Offset 0x1F
+.hex	00			       # padding to 4-bit boundary
 
-# End of end headers.   offset 0xB6
+# End of end headers.   offset 0x118
 
 
 # ########################################################################
@@ -432,7 +455,12 @@ readsyms:
 	MOVL	32(%ebp), %ecx
 	MOVL	%ecx, 16(%eax)
 
-	ADDL	$24, 4(%edx)		# ++vec->end;  sizeof(label)
+	#  Store st_info in label->type
+	XORL	%ecx, %ecx
+	MOVB	0xC(%edi), %cl		# st_info
+	MOVL	%ecx, 20(%eax)
+
+	ADDL	$28, 4(%edx)		# ++vec->end;  sizeof(label)
 .L12:
 	ADDL	0x24(%ebx), %edi	# Add sh_entsize
 	JMP	.L10
@@ -515,9 +543,6 @@ readsyms:
 	MOVL	-28(%ebp), %edx		# ptr to .symtab header
 	ADDL	16(%edx), %eax		# offset to .symtab section
 	ADDL	8(%ebp), %eax		# %eax is now a symbol 
-	#MOVL	12(%eax), %eax		# st_info, st_other, st_shndx
-	#MOVB	$16, %cl
-	#SHRL	%eax			# st_shndx
 
 	#  Do a strcpy
 	PUSH	%esi
@@ -558,7 +583,7 @@ readsyms:
 	MOVL	4(%edx), %eax		# dest = vec->end
 	MOVL	%ecx, 20(%eax)
 
-	ADDL	$24, 4(%edx)		# ++vec->end;  sizeof(label)
+	ADDL	$28, 4(%edx)		# ++vec->end;  sizeof(label)
 
 	ADDL	0x24(%ebx), %edi	# Add sh_entsize
 	JMP	.L18
@@ -568,6 +593,86 @@ readsyms:
 
 	POP	%esi
 	POP	%edi
+	POP	%ebx
+	POP	%ebp
+	RET
+
+####	#  Function:  void writepad4( int written, int pad_chars, int fd_out )
+	#  Write bytes from PAD_CHARS until WRITTEN is 4-byte aligned
+writepad4:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	#  Calculate padding required for 4-byte alignment
+	XORL	%edx, %edx
+	MOVL	8(%ebp), %eax		# bytes written
+	MOVL	$4, %ecx
+	DIVL	%ecx			# acts on %edx:%eax
+	XORL	%eax, %eax		# ready for return
+	SUBL	%edx, %ecx		# 4 - (bytes % 4)
+	CMPL	$4, %ecx
+	JE	.L23
+
+	#  And write the padding
+	PUSH	%ecx			# count
+	PUSH	12(%ebp)		# pad_chars
+	MOVL	%ecx, %edx
+	MOVL	%esp, %ecx
+	MOVL	16(%ebp), %ebx		# fd
+	MOVL	$4, %eax   		# 4 == __NR_write
+	INT	$0x80
+	POP	%ecx
+	POP	%ecx
+	CMPL	%ecx, %eax
+	JNE	error
+
+.L23:
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+####	#  Function:  void writestr( char* str, int fd_out )
+	#  Write out null-terminated string, STR
+writestr:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	PUSH	8(%ebp)
+	CALL	strlen
+	POP	%ecx
+	INCL	%eax
+	PUSH	%eax
+	MOVL	%eax, %edx		# len
+	MOVL	8(%ebp), %ecx
+	MOVL	12(%ebp), %ebx		# fd_out
+	MOVL	$4, %eax		# 4 == __NR_write
+	INT	$0x80
+	POP	%ecx
+	CMPL	%ecx, %eax
+	JNE	error
+
+	POP	%ebx
+	POP	%ebp
+	RET
+
+####	#  Function:  void writedword( int dw, int fd_out )
+	#  Write out dword, DW
+writedword:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	$4, %edx
+	LEA	8(%ebp), %ecx		# &dw
+	MOVL	12(%ebp), %ebx		# fd_out
+	MOVL	$4, %eax		# 4 == __NR_write
+	INT	$0x80
+	CMPL	$4, %eax
+	JNE	error
+
 	POP	%ebx
 	POP	%ebp
 	RET
@@ -625,7 +730,7 @@ findsym:
 	CMPL	$0, %eax
 	JNE	.L15			# Found it
 
-	ADDL	$24, %edi		# sizeof(label)
+	ADDL	$28, %edi		# sizeof(label)
 	JMP	.L14
 .L15:
 	MOVL	%edi, %eax
@@ -661,30 +766,6 @@ section:
 	PUSH	%ebx
 	PUSH	%edi
 
-	#  Calculate padding required for 4-byte alignment
-	XORL	%edx, %edx
-	MOVL	-12(%ebp), %eax		# bytes written
-	MOVL	$4, %ecx
-	DIVL	%ecx			# acts on %edx:%eax
-	SUBL	%edx, %ecx		# 4 - (bytes % 4)
-	CMPL	$4, %ecx
-	JE	.L23
-
-	#  And write the padding
-	PUSH	%ecx
-	PUSH	36(%ebp)
-	MOVL	%ecx, %edx
-	MOVL	%esp, %ecx
-	MOVL	8(%ebp), %ebx		# fd
-	MOVL	$4, %eax   		# 4 == __NR_write
-	INT	$0x80
-	POP	%ecx
-	POP	%ecx
-	CMPL	%ecx, %eax
-	JNE	error
-	ADDL	%ecx, -12(%ebp)
-
-.L23:
 	#  Open the input file
 	XORL	%ecx, %ecx		# 0 == O_RDONLY
 	MOVL	12(%ebp), %ebx		# filename
@@ -759,12 +840,16 @@ section:
 	MOVL	$6, %eax		# __NR_close == 6
 	INT	$0x80
 
-	MOVL	-12(%ebp), %eax		# return bytes written
-
 	POP	%edi
 	POP	%ebx
-	ADDL	$12, %esp	
-	POP	%ebp
+
+	PUSH	8(%ebp)
+	PUSH	36(%ebp)
+	PUSH	-12(%ebp)
+	CALL	writepad4
+	ADDL	-12(%ebp), %eax
+
+	LEAVE
 	RET
 
 
@@ -780,9 +865,9 @@ section:
 	#      -48(%ebp)	int32 sect_size[2]
 	# 
 	#  where vector<T> is a { T* start, end, end_store; },
-	#  and label is a { char name[12]; int32 val, sect, type; }.
-	#  In the SYMS vector, type is ignored; in the RELOCS vector, 
-	#  type is the relocation type.
+	#  and label is a { char name[12]; int32 val, sect, type, strno; }.
+	#  In the SYMS vector, type is the st_info (i.e. binding and type) of 
+	#  the symbol; in the RELOCS vector, type is the relocation type.
 
 	#  --- The main loop
 _start:
@@ -832,7 +917,7 @@ _start:
 	JL	error
 
 	#  Allocate the symbol vector
-	MOVL	$1536, %ecx		# 64 * sizeof(label)
+	MOVL	$1792, %ecx		# 64 * sizeof(label)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
@@ -842,7 +927,7 @@ _start:
 	MOVL	%eax, -20(%ebp)
 
 	#  Allocate the undef vector
-	MOVL	$1536, %ecx		# 64 * sizeof(label)
+	MOVL	$1792, %ecx		# 64 * sizeof(label)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
@@ -956,13 +1041,113 @@ _start:
 	ADDL	$8, %ecx	# len of prev two instr
 
 	#  Write the section headers & .shstrtab
-	MOVL	$0xB6, %edx		# Length of headers
+	MOVL	$0x118, %edx		# Length of headers
 	MOVL	-16(%ebp), %ebx		# fd
 	MOVL	$4, %eax		# 4 == __NR_write
 	INT	$0x80
-	CMPL	$0xB6, %eax
+	CMPL	$0x118, %eax
 	JL	error
 
+	#  Write the string table, starting with a null character
+	XORL	%eax, %eax
+	PUSH	%eax			# -52(%ebp), will be used as .strtab sz
+	MOVL	%esp, %eax		# ptr to '\0'
+	PUSH	-16(%ebp)		# fd_out  **
+	PUSH	%eax
+	CALL	writestr
+	POP	%ecx
+	ADDL	%eax, -52(%ebp)		# strtabsz += return of writestr()
+
+	MOVL	-28(%ebp), %edi		# syms.start
+	SUBL	$28, %edi		# start at labels - 1;  sizeof(label)
+.L28:
+	#  Loop: Generate the symbol table, initially without string pointers
+	ADDL	$28, %edi		# sizeof(label)
+	CMPL	-24(%ebp), %edi		# syms.end
+	JGE	.L29			# finished
+
+	#  Write string
+	MOVL	-52(%ebp), %ecx
+	MOVL	%ecx, 24(%edi)		# set label->strno
+	PUSH	%edi
+	CALL	writestr
+	POP	%ecx
+	ADDL	%eax, -52(%ebp)
+	JMP	.L28
+
+.L29:
+	#  And pad to the dword boundary
+	XORL	%eax, %eax
+	PUSH	%eax			# pad with '\0'
+	PUSH	-52(%ebp)
+	CALL	writepad4
+	POP	%ecx
+	POP	%ecx
+	ADDL	%eax, -52(%ebp)
+
+	#  Write Null symbol (per gABI-4.1, Fig 4-18)
+	XORL	%eax, %eax		# 0 -- placeholder for string
+	PUSH	%eax
+	CALL	writedword
+	CALL	writedword	
+	CALL	writedword	
+	CALL	writedword	
+	POP	%eax
+
+	#  Write .symtab section
+	MOVL	-28(%ebp), %edi		# syms.start
+	SUBL	$28, %edi		# start at labels - 1;  sizeof(label)
+.L24:
+	#  Loop: Generate the symbol table
+	ADDL	$28, %edi		# sizeof(label)
+	CMPL	-24(%ebp), %edi		# syms.end
+	JGE	.L25			# finished
+
+	MOVL	24(%edi), %eax		# label->strno
+	PUSH	%eax
+	CALL	writedword		# st_name
+	POP	%eax
+
+	#  Use 0 as the address of an undefined symbol
+	MOVL	12(%edi), %eax		# offset from start of .text
+	CMPL	$-1, %eax
+	JNE	.L26
+	XORL	%eax, %eax
+	JMP	.L26a
+.L26:
+	ADDL	$0x8048074, %eax
+	CMPL	$0, 16(%edi)		# Is the symbol in the .data section?
+	JE	.L26a
+	ADDL	-48(%ebp), %eax		# Yes... so add .text size
+	ADDL	$0x1000, %eax		# extra page for .data
+.L26a:
+	PUSH	%eax
+	CALL	writedword		# st_value
+	POP	%eax
+
+	XORL	%eax, %eax		# 0 -- symbol size is not known
+	PUSH	%eax
+	CALL	writedword		# st_size
+	POP	%eax
+
+	MOVL	16(%edi), %eax		# label->section
+	INCL	%eax			# .text is 1
+	MOVB	$16, %cl
+	SHLL	%eax			# shift into st_shndx
+	MOVB	20(%edi), %al		# add sh_info
+	MOVL	0xC(%edi), %ecx		# offset from start of .text
+	CMPL	$-1, %ecx
+	JNE	.L27
+	MOVL	20(%edi), %eax		# add sh_info
+.L27:
+	PUSH	%eax
+	CALL	writedword		# st_info, st_other, st_shndx
+	POP	%eax
+
+	JMP	.L24
+.L25:
+	POP	%eax			# fd_out **
+	
 	#  The output file is completely written. 
 	#  mmap it to fix up relocations
 	XORL	%eax, %eax
@@ -1023,13 +1208,55 @@ _start:
 	ADDL	%eax, (%ecx)		# Write .data size in section hdr
 
 	#  .shstrtab section header needs link to table
-	MOVL	-12(%ebp), %ecx		# .text sh_size
+	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
 	ADDL	$0x74, %ecx		# for ELF
-	ADDL	$0x88, %ecx		# offset field in third section header
 	MOVL	%ecx, %eax
+	ADDL	$0x88, %ecx		# offset field in third section header
 	ADDL	%ebx, %ecx
-	ADDL	$0x18, %eax		# .shstrtab data
-	MOVL	%eax, (%ecx)	
+	ADDL	$0xF0, %eax		# .shstrtab
+	MOVL	%eax, (%ecx)
+
+	#  .symtab section head needs link to table
+	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
+	ADDL	$0x74, %ecx		# for ELF
+	MOVL	%ecx, %eax
+	ADDL	$0xB0, %ecx		# offset field in third section header
+	ADDL	%ebx, %ecx
+	ADDL	$0x118, %eax		# sizeof of section headers etc
+	ADDL	-52(%ebp), %eax		# + .strtab length
+	MOVL	%eax, (%ecx)
+
+	#  .symtab section head needs size
+	MOVL	-24(%ebp), %eax
+	SUBL	-28(%ebp), %eax
+	XORL	%edx, %edx
+	MOVL	$28, %ecx		# sizeof(label)
+	DIVL	%ecx			# acts on %edx:%eax
+	INCL	%eax
+	MOVL	$16, %ecx		# sizeof ELF section 
+	MULL	%ecx			# %eax now contains .symtab size
+	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
+	ADDL	$0x74, %ecx		# for ELF
+	ADDL	$0xB4, %ecx		# offset field in third section header
+	ADDL	%ebx, %ecx
+	MOVL	%eax, (%ecx)
+
+	#  .strtab section head needs link to table
+	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
+	ADDL	$0x74, %ecx		# for ELF
+	MOVL	%ecx, %eax
+	ADDL	$0xD8, %ecx		# offset field in third section header
+	ADDL	%ebx, %ecx
+	ADDL	$0x118, %eax		# sizeof of section headers etc
+	MOVL	%eax, (%ecx)
+
+	#  .strtab section head needs size
+	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
+	ADDL	$0x74, %ecx		# for ELF
+	ADDL	$0xDC, %ecx		# offset field in third section header
+	ADDL	%ebx, %ecx
+	MOVL	-52(%ebp), %eax
+	MOVL	%eax, (%ecx)
 
 	#  The string literal "_start"
 	MOVL	$0x7472, %eax		# 'rt'
@@ -1088,7 +1315,7 @@ _start:
 	POP	%eax			# restore sym
 	CMPL	$0, 16(%eax)		# Is the symbol in the .data section?
 	JE	.L21c
-	MOVL	-48(%ebp), %eax		# + .text size
+	MOVL	-48(%ebp), %eax		# Yes... so add .text size
 	ADDL	%eax, (%ecx)
 	ADDL	$0x1000, (%ecx)		# extra page for .data (0x08049074)
 
@@ -1100,7 +1327,7 @@ _start:
 	SUBL	$0x08048074, (%ecx)	# .text load address
 
 .L21a:
-	ADDL	$24, %edi		# ++rel; sizeof(label)
+	ADDL	$28, %edi		# ++rel; sizeof(label)
 	JMP	.L21
 .L22:
 	POP	%ecx			# syms
