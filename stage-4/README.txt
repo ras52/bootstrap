@@ -16,19 +16,20 @@ shift.
 Nevertheless, B's lack of a type system significantly simplifies the 
 implementation, and this feature of B has been retained in the stage 4 
 compiler.  Our single type is a 32-bit integer which also serves as an
-address.  Incrementing the type increments the address by one, as with
-a char* in C.  This means, that unlike in B, incrementing an address 
-does not move to the next integer in an array: use ptr += 4 for that.
+address.  Incrementing the value increments the underlying address by 
+one, as with a char* in C.  This means, that unlike in B, incrementing 
+an address  does not move to the next integer in an array: use ptr += 4 
+for that.
 
 Summary of differences from B:
 
-  * We don't allow backspace (character 0x7F) in identifiers.
   * We use OP= instead of =OP for our assignment operators.
     * ... because of which, we don't allow relop-assignments.
   * External declarations require '=' (i.e. 'i = 42' not 'i 42').
-  * Function bodies must be enclosed in '{' ... '}'.
+  * The '{' ... '}' around single-statement functions are required.
   * We support logical && and || complete with short circuiting.
   * We support the 'continue' keyword.
+  * We don't allow backspace (character 0x7F) in identifiers.
 
 Differences to C.
 
@@ -38,5 +39,5 @@ TODO
   Operators [], =OP
   Switch statements
   Goto and labels
-  Automatic variables
   Function-scope static variables
+  String & character literals
