@@ -55,7 +55,7 @@ sect_hdr:
 # (Offset +0x3C requires text section size.)
 #
 #	name-str--\  PROGBITS--\    EXEC|ALLOC\  load-addr-\
-.hex	01 00 00 00  01 00 00 00    06 00 00 00  74 80 04 08
+.hex	05 00 00 00  01 00 00 00    06 00 00 00  74 80 04 08
 #	offset----\  **size**--\    /-- Fig 4.12 in gABI --\
 .hex	74 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
@@ -65,7 +65,7 @@ sect_hdr:
 # (Offset +0x60, +0x64 requires data section offset and size.)
 #
 #	name-str--\  PROGBITS--\    WRITE|ALLOC\ **load**--\
-.hex	07 00 00 00  01 00 00 00    03 00 00 00  74 90 04 08
+.hex	0F 00 00 00  01 00 00 00    03 00 00 00  74 90 04 08
 #	**offset**\  **size**--\    /-- Fig 4.12 in gABI --\
 .hex	74 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
@@ -75,9 +75,9 @@ sect_hdr:
 # (Offset +0x88 requires offset to shstrtab.)
 #
 #	name-str--\  STRTAB----\    no-flags--\  load-addr-\ 
-.hex	0D 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
+.hex	15 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
 #	**offset**\  size------\    /-- Fig 4.12 in gABI --\
-.hex	00 00 00 00  27 00 00 00    00 00 00 00  00 00 00 00
+.hex	00 00 00 00  2F 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
 .hex	01 00 00 00  00 00 00 00
 
@@ -85,7 +85,7 @@ sect_hdr:
 # (Offsets 0xB0, 0xB4 need setting) Y Y
 #
 #	name-str--\  SYMTAB----\    no-flags--\  load-addr-\ 
-.hex	17 00 00 00  02 00 00 00    00 00 00 00  00 00 00 00
+.hex	1F 00 00 00  02 00 00 00    00 00 00 00  00 00 00 00
 #	**offset**\  **size**--\    .strtab---\  **LOCAL**-\ 
 .hex	00 00 00 00  00 00 00 00    05 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
@@ -95,23 +95,38 @@ sect_hdr:
 # (Offsets 0xD8, 0xDC need setting) Y Y
 #
 #	name-str--\  STRTAB----\    no-flags--\  load-addr-\
-.hex	1F 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
+.hex	27 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
 #	**offset**\  **size**--\    /-- Fig 4.12 in gABI --\
 .hex	00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
 .hex	01 00 00 00  00 00 00 00
 
-# The shared string table itself.  start +0xF0; length: 0x28
+# end of sections (exc .rel sections) 0xF0
+
+# #6 Text relocations.      start: 0xF0; length: 0x28
+# (Offsets 0x100, 0x104 need setting)
+#
+#	name-str--\  SHT_REL---\    no-flags--\  load-addr-\
+.hex	01 00 00 00  09 00 00 00    00 00 00 00  00 00 00 00
+#	**offset**\  **size**--\    .symtab---\  .text-----\
+.hex	00 00 00 00  00 00 00 00    04 00 00 00  01 00 00 00
+#	align-----\  entry-sz--\
+.hex	04 00 00 00  08 00 00 00
+
+# end of sections (inc .rel section) 0x118
+
+shstrtab:
+# The shared string table itself.  start +0xF0; length: 0x30
 #
 .hex	00                             # NULL.      Offset 0x00
-.hex	2E 74 65 78 74 00              # .text      Offset 0x01
-.hex	2E 64 61 74 61 00              # .data      Offset 0x07
-.hex	2E 73 68 73 74 72 74 61 62 00  # .shstrtab  Offset 0x0D
-.hex	2E 73 79 6D 74 61 62 00        # .symtab    Offset 0x17
-.hex	2E 73 74 72 74 61 62 00        # .strtab    Offset 0x1F
+.hex	2E 72 65 6C 2E 74 65 78 74 00  # .rel.text  Offset 0x01 0x05
+.hex	2E 72 65 6C 2E 64 61 74 61 00  # .rel.data  Offset 0x0B 0x0F
+.hex	2E 73 68 73 74 72 74 61 62 00  # .shstrtab  Offset 0x15
+.hex	2E 73 79 6D 74 61 62 00        # .symtab    Offset 0x1F
+.hex	2E 73 74 72 74 61 62 00        # .strtab    Offset 0x27
 .hex	00			       # padding to 4-bit boundary
 
-# End of end headers.   offset 0x118
+# End of end headers.   offset 0x118 (0x148)
 
 
 # ########################################################################
@@ -279,7 +294,7 @@ findsect:
 	MOVL	-16(%ebp), %edi
 .L1:
 	CMPL	-24(%ebp), %edi
-	JGE	error
+	JGE	.L1a
 
 	#  The section name
 	MOVL	(%edi), %eax
@@ -294,9 +309,13 @@ findsect:
 	INCL	%esi
 	JMP	.L1
 
-.L2:
-	ADDL	$0x18, %esp		# POP x6
+.L1a:
+	#  Not found
+	XORL	%esi, %esi
+	DECL	%esi
+	JMP	.L2a
 
+.L2:
 	#  Write the pointer to PTR
 	MOVL	12(%ebp), %eax
 	CMPL	$0, %eax
@@ -306,6 +325,8 @@ findsect:
 .L2a:
 	#  Return the section number
 	MOVL	%esi, %eax
+
+	ADDL	$0x18, %esp		# POP x6
 
 	POP	%esi
 	POP	%edi
@@ -340,6 +361,8 @@ readsyms:
 	PUSH	8(%ebp)			# The elf file image
 	CALL	findsect
 	ADDL	$16, %esp		# POP x4
+	TESTL	%eax, %eax
+	JS	error			# error if not found
 	PUSH	%eax			# NAME header index -20(%ebp) **
 
 	#  The string literal ".symtab"
@@ -356,6 +379,8 @@ readsyms:
 	PUSH	8(%ebp)			# The elf file image
 	CALL	findsect
 	ADDL	$24, %esp		# POP x6
+	TESTL	%eax, %eax
+	JS	error			# error if not found
 	POP	%ebx			# Pointer to section header <= scratch
 
 	#  TODO: should use st_link from the symbol table to find this.
@@ -373,6 +398,8 @@ readsyms:
 	PUSH	8(%ebp)			# The elf file image
 	CALL	findsect
 	ADDL	$24, %esp		# POP x6
+	TESTL	%eax, %eax
+	JS	error			# error if not found
 	POP	%eax
 
 	#  Find pointer to .symtab section => %edi; .strtab section => %esi
@@ -490,6 +517,8 @@ readsyms:
 	CALL	findsect
 	ADDL	$32, %esp		# POP x8
 	POP	%ebx			# -32(%ebp): start of .relNAME section
+	TESTL	%eax, %eax
+	JS	.L19			# It's okay if .relNAME is missing
 
 	#  Find pointer to .relNAME section
 	MOVL	0x10(%ebx), %edi
@@ -863,6 +892,8 @@ section:
 	#      -28(%ebp)	vector<label> syms
 	#      -40(%ebp)	vector<label> relocs
 	#      -48(%ebp)	int32 sect_size[2]
+	#      -52(%ebp)	int32 shdr_size   # -r ? 0x118 : 0xF0
+	#      -56(%ebp)	int32 shdr_plus_shstr_size # -r ? 0x148 : 0x120
 	# 
 	#  where vector<T> is a { T* start, end, end_store; },
 	#  and label is a { char name[12]; int32 val, sect, type, strno; }.
@@ -872,28 +903,54 @@ section:
 	#  --- The main loop
 _start:
 	MOVL	%esp, %ebp
-	SUBL	$48, %esp	
+	SUBL	$56, %esp	
 
 	XORL	%eax, %eax
 	MOVL	%eax, -12(%ebp)
+
+	#  Non-partial linking
+	MOVL	$0xF0, -52(%ebp)	# sizeof shdr
+	MOVL	$0x120, -56(%ebp)	# sizeof shdr + shstrtab
 
 	#  Check we have at least three command line argument (-o out in.o ...)
 	CMPL	$4, 0(%ebp)	# three args => argc == 4
 	JL	error
 
-	#  Check argv[1] is '-o'
-	MOVL	8(%ebp), %eax
+	MOVL	$3, %eax		# argn of first input file
+	PUSH	%eax			# -60(%ebp)
+
+	#  Check argv[1] is '-o' or '-r'
+	LEA	8(%ebp), %esi
+	MOVL	(%esi), %eax
+	CMPB	$0x2D, (%eax)		# '-'
+	JNE	error
+	CMPB	$0x6F, 1(%eax)		# 'o'
+	JE	.L4a
+
+	CMPB	$0x72, 1(%eax)		# 'r'
+	JNE	error
+	CMPB	$0x0, 2(%eax)		# '\0'
+	JNE	error
+
+	MOVL	$0x118, -52(%ebp)	# sizeof shdr
+	MOVL	$0x148, -56(%ebp)	# sizeof shdr + shstrtab
+	INCL	-60(%ebp)
+
+	#  Check argv[2] is '-o'
+	LEA	12(%ebp), %esi
+	MOVL	(%esi), %eax
 	CMPB	$0x2D, (%eax)		# '-'
 	JNE	error
 	CMPB	$0x6F, 1(%eax)		# 'o'
 	JNE	error
-	CMPB	$0x0, 2(%eax)		# NUL
+.L4a:
+	CMPB	$0x0, 2(%eax)		# '\0'
 	JNE	error
 
 	#  Open the output file
-	MOVL	$0x1FD, %edx		# 0755
+	MOVL	$0x1A4, %edx		# 0644 (we chmod later if necessary)
 	MOVL	$0x242, %ecx		# O_RDWR=2|O_CREAT=0x40|O_TRUNC=0x200
-	MOVL	12(%ebp), %ebx		# argv[2]
+	MOVL	4(%esi), %ebx		# argv[2]
 	MOVL	$5, %eax		# 5 == __NR_open
 	INT	$0x80
 	CMPL	$0, %eax
@@ -937,8 +994,7 @@ _start:
 	MOVL	%eax, -32(%ebp)
 
 	#  Loop over input files for .text
-	MOVL	$3, %eax		# argn: about to read argv[argn]
-	PUSH	%eax			# -52(%ebp)
+	PUSH	-60(%ebp)		# take a copy of the starting argn
 .L16:
 	POP	%eax
 	CMPL	0(%ebp), %eax
@@ -966,7 +1022,7 @@ _start:
 	PUSH	%ecx			# ptr to ".text"
 
 	#  Stage 2/3 as doesn't support  PUSH (%ebp,%eax,4)
-	MOVL	-52(%ebp), %eax
+	MOVL	-64(%ebp), %eax
 	MOVL	$4, %ecx
 	MULL	%ecx
 	ADDL	%ebp, %eax
@@ -984,8 +1040,7 @@ _start:
 	MOVL	$0, -12(%ebp)
 
 	#  Loop over input files for .data
-	MOVL	$3, %eax		# argn: about to read argv[argn]
-	PUSH	%eax			# -52(%ebp)
+	#  The original argn is still at the top of the stack
 .L16a:
 	POP	%eax
 	CMPL	0(%ebp), %eax
@@ -1014,7 +1069,7 @@ _start:
 	PUSH	%ecx			# ptr to ".data"
 
 	#  Stage 2/3 as doesn't support  PUSH (%ebp,%eax,4)
-	MOVL	-52(%ebp), %eax
+	MOVL	-60(%ebp), %eax
 	MOVL	$4, %ecx
 	MULL	%ecx
 	ADDL	%ebp, %eax
@@ -1032,7 +1087,7 @@ _start:
 	MOVL	-48(%ebp), %eax
 	ADDL	%eax, -12(%ebp)
 
-	#  Locate the section headers & .shstrtab
+	#  Locate the section headers
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
 	CALL	.L5
 .L5:
@@ -1040,23 +1095,38 @@ _start:
 	ADDL	sect_hdr, %ecx	# Assembled as six bytes (op, modrm, imm32)
 	ADDL	$8, %ecx	# len of prev two instr
 
-	#  Write the section headers & .shstrtab
-	MOVL	$0x118, %edx		# Length of headers
+	#  Write the section headers
+	MOVL	-52(%ebp), %edx		# Length of headers
 	MOVL	-16(%ebp), %ebx		# fd
 	MOVL	$4, %eax		# 4 == __NR_write
 	INT	$0x80
-	CMPL	$0x118, %eax
+	CMPL	-52(%ebp), %eax
+	JL	error
+
+	#  And similarly for the .shstrtab
+	CALL	.L5a
+.L5a:
+	POP	%ecx		# Currently assembled sub-optimally as 2 bytes
+	ADDL	shstrtab, %ecx	# Assembled as six bytes (op, modrm, imm32)
+	ADDL	$8, %ecx	# len of prev two instr
+
+	#  Write the shstrtab
+	MOVL	$0x30, %edx		# Length of table
+	MOVL	-16(%ebp), %ebx		# fd
+	MOVL	$4, %eax		# 4 == __NR_write
+	INT	$0x80
+	CMPL	$0x30, %eax
 	JL	error
 
 	#  Write the string table, starting with a null character
 	XORL	%eax, %eax
-	PUSH	%eax			# -52(%ebp), will be used as .strtab sz
+	PUSH	%eax			# -60(%ebp), will be used as .strtab sz
 	MOVL	%esp, %eax		# ptr to '\0'
 	PUSH	-16(%ebp)		# fd_out  **
 	PUSH	%eax
 	CALL	writestr
 	POP	%ecx
-	ADDL	%eax, -52(%ebp)		# strtabsz += return of writestr()
+	ADDL	%eax, -60(%ebp)		# strtabsz += return of writestr()
 
 	MOVL	-28(%ebp), %edi		# syms.start
 	SUBL	$28, %edi		# start at labels - 1;  sizeof(label)
@@ -1067,23 +1137,23 @@ _start:
 	JGE	.L29			# finished
 
 	#  Write string
-	MOVL	-52(%ebp), %ecx
+	MOVL	-60(%ebp), %ecx
 	MOVL	%ecx, 24(%edi)		# set label->strno
 	PUSH	%edi
 	CALL	writestr
 	POP	%ecx
-	ADDL	%eax, -52(%ebp)
+	ADDL	%eax, -60(%ebp)
 	JMP	.L28
 
 .L29:
 	#  And pad to the dword boundary
 	XORL	%eax, %eax
 	PUSH	%eax			# pad with '\0'
-	PUSH	-52(%ebp)
+	PUSH	-60(%ebp)
 	CALL	writepad4
 	POP	%ecx
 	POP	%ecx
-	ADDL	%eax, -52(%ebp)
+	ADDL	%eax, -60(%ebp)
 
 	#  Write Null symbol (per gABI-4.1, Fig 4-18)
 	XORL	%eax, %eax		# 0 -- placeholder for string
@@ -1115,6 +1185,8 @@ _start:
 	XORL	%eax, %eax
 	JMP	.L26a
 .L26:
+	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
+	JNE	.L26a			# If yes, don't fix up offsets
 	ADDL	$0x8048074, %eax
 	CMPL	$0, 16(%edi)		# Is the symbol in the .data section?
 	JE	.L26a
@@ -1146,6 +1218,48 @@ _start:
 
 	JMP	.L24
 .L25:
+	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
+	JE	.L32
+
+	#  Write .rel.text section
+	MOVL	-40(%ebp), %edi		# relocs.start
+	SUBL	$28, %edi		# start at labels - 1;  sizeof(label)
+.L33:
+	#  Loop: Generate the relocation table
+	ADDL	$28, %edi		# sizeof(label)
+	CMPL	-36(%ebp), %edi		# syms.end
+	JGE	.L32			# finished
+
+	#  Write r_offset
+	PUSH	12(%edi)		# rel->val
+	CALL	writedword
+	POP	%eax
+
+	#  Look up the symbol.  TODO: store symbol index instead
+	#  XXX This doesn't cope with multiple symbols of the same name
+	LEA	-28(%ebp), %ecx		# syms
+	PUSH	%ecx
+	PUSH	%edi			# rel->name
+	CALL	strlen
+	PUSH	%eax
+	CALL	findsym
+	ADDL	$12, %esp
+
+	#  Calculate and write the symbol offset
+	SUBL	-28(%ebp), %eax
+	XORL	%edx, %edx
+	MOVL	$28, %ecx		# sizeof(label)
+	DIVL	%ecx			# acts on %edx:%eax
+	INCL	%eax			# for initial null symbol
+	MOVB	$8, %cl
+	SHLL	%eax			# <<= 8
+	ADDL	20(%edi), %eax		# += rel->type
+	PUSH	%eax
+	CALL	writedword
+	POP	%eax
+
+	JMP	.L33
+.L32:
 	POP	%eax			# fd_out **
 	
 	#  The output file is completely written. 
@@ -1170,6 +1284,12 @@ _start:
 	JA	error			# unsigned comparison handles above
 	MOVL	%eax, %ebx	
 
+	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
+	JE	.L25a
+	MOVB	$1, 0x10(%ebx)		# .o
+	MOVB	$7, 0x30(%ebx)		# shnum
+
+.L25a:
 	#  Tell the program header the .text size
 	MOVL	-48(%ebp), %ecx		# .text sh_size
 	MOVL	%ecx, 0x44(%ebx)	# ELF p_filesz
@@ -1186,79 +1306,66 @@ _start:
 
 
 	#  Link ELF header to the section headers
-	MOVL	-12(%ebp), %ecx		# total .text + .data
-	ADDL	$0x74, %ecx		# for ELF
-	MOVL	%ecx, 0x20(%ebx)	# ELF shdroff
+	MOVL	$0x74, %edx		# size of ELF & program headers
+	ADDL	-12(%ebp), %edx		# size of .text and .data together 
+	MOVL	%edx, 0x20(%ebx)	# ELF shdroff
 
 	#  .text section header needs .text section size
-	MOVL	-12(%ebp), %ecx		# total .text + .data
-	ADDL	$0x74, %ecx		# for ELF
-	ADDL	$0x3C, %ecx		# size field in second section header
-	ADDL	%ebx, %ecx
+	MOVL	%edx, %esi
+	ADDL	%ebx, %esi
 	MOVL	-48(%ebp), %eax		# .text size
-	MOVL	%eax, (%ecx)
+	MOVL	%eax, 0x3C(%esi)	# size field in 2nd section header
 
 	#  .data offset & size
-	ADDL	$0x20, %ecx		# sizeof(Shdr) minus 4 bytes 
-	ADDL	%eax, (%ecx)		# Write .data load addr in section hdr
-	ADDL	$4, %ecx
-	ADDL	%eax, (%ecx)		# Write .data offset in section hdr
+	ADDL	%eax, 0x5C(%esi)	# Write .data load addr in section hdr
+	ADDL	%eax, 0x60(%esi)	# Write .data offset in section hdr
 	MOVL	-44(%ebp), %eax		# .data size
-	ADDL	$4, %ecx
-	ADDL	%eax, (%ecx)		# Write .data size in section hdr
+	ADDL	%eax, 0x64(%esi)	# Write .data size in section hdr
 
-	#  .shstrtab section header needs link to table
-	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
-	ADDL	$0x74, %ecx		# for ELF
-	MOVL	%ecx, %eax
-	ADDL	$0x88, %ecx		# offset field in third section header
-	ADDL	%ebx, %ecx
-	ADDL	$0xF0, %eax		# .shstrtab
-	MOVL	%eax, (%ecx)
+	#  .shstrtab, .strtab, .symtab section headers
+	MOVL	%edx, %eax
+	ADDL	-52(%ebp), %eax		# section hdrs size
+	MOVL	%eax, 0x88(%esi)	# .shstrtab offset
+	ADDL	-56(%ebp), %edx		# += sizeof of section headers etc
+	MOVL	%edx, 0xD8(%esi)	# .strtab offset
+	MOVL	-60(%ebp), %eax
+	MOVL	%eax, 0xDC(%esi)	# .strtab size
+	ADDL	%eax, %edx		# += size of .strtab section
+	MOVL	%edx, 0xB0(%esi)
 
-	#  .symtab section head needs link to table
-	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
-	ADDL	$0x74, %ecx		# for ELF
-	MOVL	%ecx, %eax
-	ADDL	$0xB0, %ecx		# offset field in third section header
-	ADDL	%ebx, %ecx
-	ADDL	$0x118, %eax		# sizeof of section headers etc
-	ADDL	-52(%ebp), %eax		# + .strtab length
-	MOVL	%eax, (%ecx)
-
-	#  .symtab section head needs size
+	#  .symtab section head needs size, which we need to calculate
+	PUSH	%edx
 	MOVL	-24(%ebp), %eax
 	SUBL	-28(%ebp), %eax
 	XORL	%edx, %edx
 	MOVL	$28, %ecx		# sizeof(label)
 	DIVL	%ecx			# acts on %edx:%eax
-	INCL	%eax
-	MOVL	$16, %ecx		# sizeof ELF section 
+	INCL	%eax			# initial NULL symbol
+	MOVL	$16, %ecx		# sizeof Elf32_Sym
 	MULL	%ecx			# %eax now contains .symtab size
-	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
-	ADDL	$0x74, %ecx		# for ELF
-	ADDL	$0xB4, %ecx		# offset field in third section header
-	ADDL	%ebx, %ecx
-	MOVL	%eax, (%ecx)
+	POP	%edx
+	MOVL	%eax, 0xB4(%esi)
 
-	#  .strtab section head needs link to table
-	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
-	ADDL	$0x74, %ecx		# for ELF
-	MOVL	%ecx, %eax
-	ADDL	$0xD8, %ecx		# offset field in third section header
-	ADDL	%ebx, %ecx
-	ADDL	$0x118, %eax		# sizeof of section headers etc
-	MOVL	%eax, (%ecx)
+	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
+	JE	.L30a
 
-	#  .strtab section head needs size
-	MOVL	-12(%ebp), %ecx		# total of .text + .data sh_size
-	ADDL	$0x74, %ecx		# for ELF
-	ADDL	$0xDC, %ecx		# offset field in third section header
-	ADDL	%ebx, %ecx
-	MOVL	-52(%ebp), %eax
-	MOVL	%eax, (%ecx)
+	#  .rel.text, only if partial linking
+	ADDL	%eax, %edx		# += size of .symtab section
+	MOVL	%edx, 0x100(%esi)
+	PUSH	%edx
+	MOVL	-36(%ebp), %eax
+	SUBL	-40(%ebp), %eax
+	XORL	%edx, %edx
+	MOVL	$28, %ecx		# sizeof(label)
+	DIVL	%ecx			# acts on %edx:%eax
+	MOVL	$8, %ecx		# sizeof Elf32_Rel
+	MULL	%ecx			# %eax now contains .symtab size
+	POP	%edx
+	MOVL	%eax, 0x104(%esi)
+	JMP	.L30
 
-	#  The string literal "_start"
+.L30a:
+	#  The string literal "_start", only if not partial linking
 	MOVL	$0x7472, %eax		# 'rt'
 	PUSH	%eax	
 	MOVL	$0x6174735F, %eax	# '_sta'
@@ -1331,7 +1438,7 @@ _start:
 	JMP	.L21
 .L22:
 	POP	%ecx			# syms
-
+.L30:
 	#  Unmap and close the output
 	MOVL	-12(%ebp), %ecx		# .text written
 	ADDL	$0x74, %ecx		# Add ELF, etc.
@@ -1339,6 +1446,21 @@ _start:
 	PUSH	%ecx			# size
 	MOVL	$91, %eax		# __NR_munmap == 91
 	INT	$0x80
+
+	#  Set the permissions on the output.
+	#  If we're overwriting an existing file, the O_CREAT permissions
+	#  to open(2) are ignored, so an explicit chmod is necessary.
+	MOVL	$0x1ED, %ecx		# 0755
+	MOVL	-16(%ebp), %ebx		# fd_out
+	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
+	JE	.L31
+	MOVL	$0x1A4, %ecx		# 0644
+.L31:
+	MOVL	$94, %eax		# __NR_fchmod = 94
+	INT	$0x80
+	TESTL	%eax, %eax
+	JNZ	error
+
 	MOVL	-16(%ebp), %ebx		# fd_out
 	MOVL	$6, %eax		# __NR_close == 6
 	INT	$0x80

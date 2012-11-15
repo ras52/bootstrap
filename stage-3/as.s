@@ -309,7 +309,7 @@ elf_hdr:
 #	shdr-off--\  flags-----\    ehsz\
 .hex	34 00 00 00  00 00 00 00    34 00
 #	phsz\ phn-\  shsz\ shn-\    shst\
-.hex	00 00 00 00  28 00 08 00    03 00 
+.hex	00 00 00 00  28 00 07 00    03 00 
 
 # #0  Null section header.   start: 0x34; length: 0x28
 # c.f. Fig 4.10 in gABI 4.1
@@ -322,8 +322,8 @@ elf_hdr:
 #
 #	name-str--\  PROGBITS--\    EXEC|ALLOC\  load-addr-\
 .hex	1F 00 00 00  01 00 00 00    06 00 00 00  00 00 00 00
-#	offset----\  **size**--\    /-- Fig 4.12 in gABI --\   <-- 0x1A4
-.hex	A4 01 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+#	offset----\  **size**--\    /-- Fig 4.12 in gABI --\   <-- 0x178
+.hex	78 01 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
 .hex	04 00 00 00  00 00 00 00
 
@@ -331,7 +331,7 @@ elf_hdr:
 # (Offsets 0x94, 0x98 need setting)  Y Y
 #
 #	name-str--\  PROGBITS--\    WRIT|ALLOC\  load-addr-\
-.hex	29 00 00 00  01 00 00 00    03 00 00 00  00 00 00 00
+.hex	25 00 00 00  01 00 00 00    03 00 00 00  00 00 00 00
 #	**offset**\  **size**--\    /-- Fig 4.12 in gABI --\ 
 .hex	00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
@@ -342,7 +342,7 @@ elf_hdr:
 #	name-str--\  STRTAB----\    no-flags--\  load-addr-\ 
 .hex	01 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
 #	offset----\  size------\    /-- Fig 4.12 in gABI --\
-.hex	74 01 00 00  30 00 00 00    00 00 00 00  00 00 00 00
+.hex	4C 01 00 00  2C 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
 .hex	01 00 00 00  00 00 00 00
 
@@ -376,26 +376,17 @@ elf_hdr:
 #	align-----\  entry-sz--\
 .hex	04 00 00 00  08 00 00 00
 
-# #7  Data relocations.     start: 0x14C; length: 0x28
-#
-#	name-str--\  SHT_REL--\     no-flags\    load-addr-\
-.hex	25 00 00 00  09 00 00 00    00 00 00 00  00 00 00 00
-#	**offset**\  **size**--\    .symtab---\  .data-----\
-.hex	00 00 00 00  00 00 00 00    04 00 00 00  02 00 00 00
-#	align-----\  entry-sz--\
-.hex	04 00 00 00  08 00 00 00
-
-# The shared string table itself.  start 0x174; length: 0x30
+# The shared string table itself.  start 0x14C; length: 0x2C
 #
 .hex	00                                # NULL        Offset 0x00
 .hex	2E 73 68 73 74 72 74 61 62 00     # .shstrtab   Offset 0x01
 .hex	2E 73 79 6D 74 61 62 00           # .symtab     Offset 0x0B
 .hex	2E 73 74 72 74 61 62 00           # .strtab     Offset 0x13
 .hex	2E 72 65 6C 2E 74 65 78 74 00     # .rel.text   Offset 0x1B (0x1F)
-.hex	2E 72 65 6C 2E 64 61 74 61 00     # .rel.data   Offset 0x25 (0x29)
+.hex	2E 64 61 74 61 00                 # .data       Offset 0x25 (0x29)
 .hex	00
 
-# End of headers.   offset 0x1A4
+# End of headers.   offset 0x178
 
 
 # ########################################################################
@@ -3221,7 +3212,7 @@ _start:
 	#  Write the ELF header
 	#  Don't use writedptr because we don't want to update ofile->count
 	MOVL	%eax, %ebx
-	MOVL	$0x1A4, %edx		# Length of ELF header
+	MOVL	$0x178, %edx		# Length of ELF header
 	MOVL	$4, %eax		# 4 == __NR_write
 	INT	$0x80
 	CMPL	$0, %eax
@@ -3290,7 +3281,7 @@ _start:
 	MOVL	$0x94, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text size + padding
-	ADDL	$0x1A4, %eax		# size of ELF headers
+	ADDL	$0x178, %eax		# size of ELF headers
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -3344,7 +3335,7 @@ _start:
 	MOVL	$0xE4, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax        # .text size + padding
-	ADDL	$0x1A4, %eax            # ELF header size
+	ADDL	$0x178, %eax            # ELF header size
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -3427,7 +3418,7 @@ _start:
 	MOVL	$0x10C, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text + .rel.text + padding + .symtab
-	ADDL	$0x1A4, %eax		# ELF header size
+	ADDL	$0x178, %eax		# ELF header size
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -3448,7 +3439,7 @@ _start:
 	# table entry; %ebx is the start of the string section
 	MOVL	-4(%ebp), %edi
 	SUBL	$20, %edi		# labels - 1   (sizeof(label))
-	ADDL	$0x1B4, %esi		# ELF header size (0x1A4) + null symbol
+	ADDL	$0x188, %esi		# ELF header size (0x178) + null symbol
 	MOVL	-108(%ebp), %ebx
 
 	# Null symbol's name
@@ -3508,7 +3499,7 @@ _start:
 	MOVL	$0x134, %eax
 	PUSH	%eax
 	MOVL	-108(%ebp), %eax 	# ofile->count
-	ADDL	$0x1A4, %eax		# Length of ELF header
+	ADDL	$0x178, %eax		# Length of ELF header
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax

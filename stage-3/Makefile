@@ -1,6 +1,6 @@
 # stage-3/Makefile
 
-# Copyright (C) 2010, 2011 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2010, 2011, 2012 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 SHELL = /bin/sh
@@ -58,11 +58,13 @@ check-ld:	as2 ld2 ld.s
 	$(CMP) ld2 ld3
 	$(RM) ld.o ld3
 
-testprog:	as2 ld2 test1.s test2.s
-	as2 test1.s
+testprog:	as2 ld2 test1.s test2.s test3.s
 	as2 test2.s
-	ld2 -o testprog test1.o test2.o
-	$(RM) test1.o test2.o
+	as2 test3.s
+	ld2 -r -o test2+3.o test2.o test3.o
+	as2 test1.s
+	ld2 -o testprog test1.o test2+3.o
+	$(RM) test1.o test2.o test3.o test2+3.o
 
 check-sep:	testprog
 	testprog

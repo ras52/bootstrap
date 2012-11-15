@@ -1,3 +1,8 @@
+# stage-3/test2.s
+
+# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# All rights reserved.
+
 .text
 exit:
 	PUSH	%ebp
@@ -10,6 +15,7 @@ exit:
 
 	POP	%ebx
 	LEAVE
+	RET
 
 .data
 	.byte	'!', '_'

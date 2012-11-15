@@ -1,21 +1,32 @@
+# stage-3/test1.s
+
+# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# All rights reserved.
+
 .data
+foo:
+	.int	0xFFFF
 bar:
 	.int	0x2A
-
-foo:
-	.int	0xFFFF	
 
 .text
 _start:
 	MOVL	%esp, %ebp
 
-	#  Call exit(foo)
-	MOVL	foo, %eax
-	CMPL	$0, %eax
-	SETE	%al
+	#  bar = square(bar)
+	MOVL	bar, %eax
+	PUSH	%eax
+	CALL	square
+	POP	%ecx
+	MOVL	%eax, bar
+
+	MOVL	bar, %eax
+	CMPL	$1764, %eax
+	SETNE	%al
 	MOVZBL	%al, %eax
 	MOVL	%eax, foo
 
+	#  Call exit(foo)
 	MOVL	foo, %eax
 	PUSH	%eax
 
