@@ -6,4 +6,4 @@
 STAGES = 4
 
 all init check clean world:
-	set -e; for n in `seq 0 $(STAGES)`; do $(MAKE) -C stage-$$n $@; done
+	set -e; for n in `seq 0 $(STAGES)`; do $(MAKE) -r -C stage-$$n $@; done

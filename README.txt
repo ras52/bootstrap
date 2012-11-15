@@ -30,5 +30,12 @@ Stage 3 -- as & ld
   The assembler is rewritten in assembly language and is joined by a
   linker, which together allow for separate compilation.
 
+Stage 4 -- cc
+
+  The project's first compiler is added at this stage.  Its input 
+  language is a typeless language similar to B, except that it uses
+  byte addressing, and certain syntactic incompatibilities with C 
+  have been removed.
+
 
 The code in this project is copyright (C) Richard Smith, 2009-12.

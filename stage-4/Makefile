@@ -31,6 +31,8 @@ lib.o:	ld $(LIB_OBJS)
 cc:	ld lib.o crt0.o $(CC_OBJS)
 	ld -o cc lib.o crt0.o $(CC_OBJS)
 
+.INTERMEDIATE:	$(CC_OBJS) $(LIB_OBJS)
+
 check:	all
 
 clean:
