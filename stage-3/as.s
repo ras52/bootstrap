@@ -277,6 +277,7 @@ mnemonics:
 #   Sub-type 3:  .string         -- no parameters
 #   Sub-type 4:  .zero           -- no parameters
 #   Sub-type 5:  .align          -- no parameters
+#   Sub-type 6:  .globl .local   -- one parameter: st_info bits (bind<<4|type)
 #
 # The first parameter is an unique code used internally to represent the 
 # sub-type of directive.  Each directive type is special-cased in the code.
@@ -289,6 +290,9 @@ mnemonics:
 .hex	2E 73 74 72  69 6E 67 00  00 00 00 00    FF 03 00 00	# .string
 .hex	2E 7A 65 72  6F 00 00 00  00 00 00 00    FF 04 00 00	# .zero
 .hex	2E 61 6C 69  67 6E 00 00  00 00 00 00    FF 05 00 00	# .align
+.hex	2E 67 6C 6F  62 61 6C 00  00 00 00 00    FF 06 10 00	# .global
+.hex	2E 67 6C 6F  62 6C 00 00  00 00 00 00    FF 06 10 00	# .globl
+.hex	2E 6C 6F 63  61 6C 00 00  00 00 00 00    FF 06 00 00	# .local
 
 zeros:
 # End of table marker -- first byte of name is NULL.
@@ -1346,7 +1350,7 @@ getlabel:
 	MOVL	16(%ebp), %ebx
 	LEA	-96(%ebx), %esi
 	MOVL	-4(%ebx), %edi
-	SUBL	$20, %edi		# sizeof(label)
+	SUBL	$24, %edi		# sizeof(label)
 
 	#  Null terminate
 	MOVL	%esi, %edx
@@ -1364,7 +1368,7 @@ getlabel:
 	POP	%ecx
 
 	INCL	%edx
-	ADDL	$20, %edi		# sizeof(label)
+	ADDL	$24, %edi		# sizeof(label)
 	CMPL	-8(%ebx), %edi
 	JGE	.L11b
 	PUSH	%ecx
@@ -1449,7 +1453,9 @@ savelabel:
 	MOVL	%eax, 12(%edi)
 	MOVL	-132(%ebx), %eax	# section
 	MOVL	%eax, 16(%edi)
-	ADDL	$20, -8(%ebx)		# sizeof(label)
+	ADDL	$0x00000010, %eax	# (STB_GLOBAL<<4) | STT_NOTYPE
+	MOVL	%eax, 20(%edi)		# type
+	ADDL	$24, -8(%ebx)		# sizeof(label)
 
 	POP	%edi
 	POP	%esi
@@ -1547,7 +1553,7 @@ labelref:
 
 	#  Is it in the current section?
 	MOVL	-8(%ebp), %eax		# symbol number (from slot)
-	MOVL	$20, %ecx		# sizeof(label)
+	MOVL	$24, %ecx		# sizeof(label)
 	MULL	%ecx
 	ADDL	-4(%ebx), %eax		# + label_start
 	MOVL	-132(%ebx), %ecx	# parse_sect
@@ -1605,7 +1611,7 @@ labelref:
 	MOVL	-8(%edx), %eax		# label_end
 	SUBL	-4(%edx), %eax		# - label_start
 	XORL	%edx, %edx
-	MOVL	$20, %ecx		# sizeof(label)
+	MOVL	$24, %ecx		# sizeof(label)
 	DIVL	%ecx			# acts on %edx:%eax
 	DECL	%eax			# want an index (0 based)
 	MOVL	%eax, %edx
@@ -2068,6 +2074,95 @@ zero_direct:
 	RET
 
 
+####	#  Function:	void type_direct( int opinf, main_frame* p );
+	#
+	#  Process a .globl or .local directive.
+type_direct:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	#  Skip horizontal whitespace and read an identifier
+	MOVL	12(%ebp), %ebx
+	LEA	-104(%ebx), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	CALL	getone
+	MOVB	%al, -96(%ebx)
+	PUSH	%ebx			# main_frame
+	CALL	read_id			# this validates the first char.
+	POP	%ecx
+	PUSH	(%eax)
+	XORL	%ecx, %ecx
+	MOVL	%ecx, (%eax)		# zero terminate
+	CALL	unread
+	POP	%eax
+	POP	%ecx
+
+	#  If we're in pass #1, do nothing
+	CMPL	$0, -112(%ebx)
+	JLE	.L43
+
+	LEA	-96(%ebx), %eax
+	PUSH	%eax
+	CALL	strlen
+	POP	%ecx
+	PUSH	%eax
+
+	#  Make a slot for the index of the symbol
+	XORL	%ecx, %ecx
+	DECL	%ecx
+	PUSH	%ecx			# this is -12(%ebp)
+
+	PUSH	%ebx
+	PUSH	%eax			# strlen
+	LEA	-12(%ebp), %eax		# the symbol table slot, above
+	PUSH	%eax
+	CALL	getlabel
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+
+	#  Have we already got a symbol table slot for it?
+	POP	%edx			# symbol slot -12(%ebp)
+	CMPL	$-1, %edx
+	JNE	.L41
+
+	#  Create a symbol table entry for it
+	PUSH	%ebx			# main frame bp
+	PUSH	-8(%ebp)		# strlen
+	PUSH	%edx			# %edx == -1 
+	CALL	savelabel
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+
+	#  Find the number of the new symbol
+	MOVL	-8(%ebx), %edx		# label_end
+	SUBL	$24, %edx		# sizeof(label)
+	JMP	.L42
+
+.L41:
+	MOVL	%edx, %eax		# symbol number
+	MOVL	$24, %ecx		# sizeof(label)
+	MULL	%ecx
+	ADDL	-4(%ebx), %eax		# + label_start
+	MOVL	%eax, %edx
+
+.L42:
+	MOVL	8(%ebp), %eax		# opcode info
+	MOVB	$16, %cl
+	SHRL	%eax
+
+	MOVL	%eax, 20(%edx)		# %edx is a pointer to the symbol
+	POP	%ecx			# strlen
+
+.L43:
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	int read_imm( int bits, int reltype, main_frame* p );
 	#
 	#  Skip whitespace and then read an immediate value, or similar.
@@ -2267,7 +2362,7 @@ write_mrm:
 	#     -140(%ebp)	int sect_len[2];   # 0 .text; 1 .data
 	#     -148(%ebp)	int sect_fd[2];
 	#
-	#  where label is a { char name[12]; int addr; int sect; },
+	#  where label is a { char name[12]; int addr, sect, type; },
 	#  rel is a { int offset; int sym_no; int sect; int reltype; },
 	#  instrct is a { char name[12]; char type; char data[3]; },
 	#  ifile is a { int fd; bool has_pback :8; char pback_char; int:16; }.
@@ -2997,6 +3092,8 @@ tl_ident:
 	JE	.L40e
 	CMPB	$0x05, %dh
 	JE	.L40f
+	CMPB	$0x06, %dh
+	JE	.L40g
 	HLT				# There should be no other directives
 
 .L40a:	CALL	hex_direct
@@ -3010,6 +3107,8 @@ tl_ident:
 .L40e:	CALL	zero_direct
 	JMP	.L40
 .L40f:	CALL	algn_direct
+	JMP	.L40
+.L40g:	CALL	type_direct
 .L40:
 	POP	%ecx
 	POP	%ecx
@@ -3133,7 +3232,7 @@ _start:
 	MOVL	$0, -100(%ebp)		# putback boolean and data
 
 	#  Set up the label vector
-	MOVL	$1280, %ecx		# 64 * sizeof(label)
+	MOVL	$1536, %ecx		# 64 * sizeof(label)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
@@ -3358,11 +3457,11 @@ _start:
 
 	#  Write .symtab section
 	MOVL	-4(%ebp), %edi
-	SUBL	$20, %edi		# start at labels - 1;  sizeof(label)
+	SUBL	$24, %edi		# start at labels - 1;  sizeof(label)
 
 .L8c:	
 	#  Loop: Generate the symbol table, initially without string pointers
-	ADDL	$20, %edi		# sizeof(label)
+	ADDL	$24, %edi		# sizeof(label)
 	CMPL	-8(%ebp), %edi
 	JGE	.L8d			# finished
 
@@ -3396,11 +3495,11 @@ _start:
 	INCL	%eax			# .text is 1
 	MOVB	$16, %cl
 	SHLL	%eax			# shift into st_shndx
-	ADDL	$0x00000010, %eax	# STB_GLOBAL, STT_NOTYPE, .text
+	ADDL	20(%edi), %eax		# label->type
 	MOVL	0xC(%edi), %ecx		# offset from start of .text
 	CMPL	$-1, %ecx
 	JNE	.L8e3
-	MOVL	$0x00000010, %eax	# STB_GLOBAL, STT_NOTYPE, SHN_UNDEF
+	MOVL	20(%edi), %eax		# label->type
 .L8e3:
 	PUSH	%eax
 	CALL	writedword		# st_info, st_other, st_shndx
@@ -3438,7 +3537,7 @@ _start:
 	# %edi is the label pointer; %esi is the offset for the next symbol
 	# table entry; %ebx is the start of the string section
 	MOVL	-4(%ebp), %edi
-	SUBL	$20, %edi		# labels - 1   (sizeof(label))
+	SUBL	$24, %edi		# labels - 1   (sizeof(label))
 	ADDL	$0x188, %esi		# ELF header size (0x178) + null symbol
 	MOVL	-108(%ebp), %ebx
 
@@ -3449,7 +3548,7 @@ _start:
 	POP	%eax
 .L8f:
 	# Loop writing strings and fixing up references to symbol names
-	ADDL	$20, %edi		# sizeof(label)
+	ADDL	$24, %edi		# sizeof(label)
 	CMPL	-8(%ebp), %edi
 	JGE	.L8i			# finished
 
@@ -3526,7 +3625,7 @@ _start:
 	#  Get the symbol number
 	MOVL	4(%edi), %eax		# in-memory symbol number
 	XORL	%edx, %edx
-	MOVL	$20, %ecx		# sizeof(label)
+	MOVL	$24, %ecx		# sizeof(label)
 	MULL	%ecx			# acts on %edx:%eax
 	ADDL	-4(%ebp), %eax		# label_start
 	MOVL	0xC(%eax), %eax		# look up the value for the global no.

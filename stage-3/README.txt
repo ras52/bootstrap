@@ -42,17 +42,22 @@ The .text and .data directives are used to switch between sections, and
 several other new assembler directives are added.  The complete list is
 now as follows
 
-  .hex .int .byte .zero .string .text .data
+  .hex .int .byte .zero .string .text .data .global .globl .local
+
+The .global (or equivalently, .globl) and .local directives take a
+symbol name as their single argument.  They specify the binding of 
+that symbol.  Global binding is currently the default, though that will
+be changed in a later stage.
 
 The .int and .byte directives allow 32-bit and 8-bit integers to be
 included directly into the output.  Multiple integers, separated by 
 commas, can be included as arguments.  Unlike the existing .hex 
-directive which only accepts hexadecimal octets without prefixes, these 
-support any form of literal.  The .zero directive takes one argument
-and writes that number of zeros to the output.  The .string directive 
-allows for strings in double quotes with a maximum length of 78 
-characters.  They are automatically null terminated, and the following 
-escapes understood:
+directive (unchanged from stage 2) which only accepts hexadecimal octets 
+without prefixes, these support any form of literal.  The .zero 
+directive takes one argument and writes that number of zeros to the 
+output.  The .string directive allows for strings in double quotes with 
+a maximum length of 78 characters.  They are automatically null 
+terminated, and the following escapes understood:
 
   \n \t \" \\
 
@@ -92,5 +97,9 @@ The linker can take arbitrary input and output file names.  The output
 file is specified with the -o option which must be first on the command
 line.
 
-  Usage: ld -o executable file1.o file2.o ...
+  Usage: ld [-r] -o output file1.o file2.o ...
 
+If -r is specified, the linker partially links its input generating an 
+object file as output.  Without it, the output is an executable.  At 
+present, even when partial linking, there cannot be any undefined 
+symbols in the output.
