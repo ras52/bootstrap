@@ -1,6 +1,6 @@
 # stmt.s  --  statement parser
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 .text
@@ -8,6 +8,7 @@
 ####	#  Function:	void semicolon();
 	#
 	#  Require the current token to be ';' and call next()
+.local semicolon
 semicolon:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -26,6 +27,7 @@ semicolon:
 	#    brack-expr ::= '(' expr ')'
 	#
 	#  Current token is '('.
+.local brack_expr
 brack_expr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -52,6 +54,7 @@ brack_expr:
 	#    if-stmt ::= 'if' '(' expr ')' stmt
 	# 
 	#  Current token is 'if'
+.local if_stmt
 if_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -101,6 +104,7 @@ if_stmt:
 	#    while-stmt ::= 'while' '(' expr ')' stmt
 	#
 	#  Current token is 'while'
+.local while_stmt
 while_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -134,6 +138,7 @@ while_stmt:
 ####	#  Function:	void return_stmt(int brk, int cont, int ret);
 	#
 	#    return-stmt ::= 'return' expr? ';'
+.local return_stmt
 return_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -155,6 +160,7 @@ return_stmt:
 ####	#  Function:	void break_stmt(int brk, int cont, int ret);
 	#
 	#    return-stmt ::= 'break' ';'
+.local break_stmt
 break_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -171,6 +177,7 @@ break_stmt:
 ####	#  Function:	void cont_stmt(int brk, int cont, int ret);
 	#
 	#    return-stmt ::= 'continue' ';'
+.local cont_stmt
 cont_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -190,6 +197,7 @@ cont_stmt:
 	#    auto-stmt ::= 'auto' init-decl ( ',' init-decl )* ';'
 	#
 	#  Current token is 'auto'
+.local auto_stmt
 auto_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -229,6 +237,7 @@ auto_stmt:
 	#    expr-stmt ::= expr ';'
 	#
 	#  NB. Null statements are handled in stmt
+.local expr_stmt
 expr_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -246,6 +255,7 @@ expr_stmt:
 ####	#  Function:	void stmt(int brk, int cont, int ret);
 	#
 	#  Process a statement.  Current token is first token of statement.
+.local stmt
 stmt:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp

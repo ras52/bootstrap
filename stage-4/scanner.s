@@ -1,15 +1,17 @@
 # scanner.s  --  code to tokenising B input stream
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 .data 
 
 #  We use TOKEN as an enum for the different token types.
+.globl token
 token:
 	.int	0
 
 #  The VALUE buffer contains tokens as they are being read.
+.globl value
 value:
 	.zero	80
 
@@ -20,6 +22,7 @@ value:
 	#
 	#  Skips over a C-style comment (the opening /* having been read
 	#  already).
+.local skip_ccomm
 skip_ccomm:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -45,6 +48,7 @@ skip_ccomm:
 	#
 	#  Skips over any white space characters, and returns the next
 	#  character (having ungot it).
+.local skip_white
 skip_white:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -86,6 +90,7 @@ skip_white:
 ####	#  Function:	int isidchar1(int chr);
 	#
 	#  Test whether CHR can start an identifier.
+.local isidchar1
 isidchar1:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -107,6 +112,7 @@ isidchar1:
 	#
 	#  Test whether CHR can occur in an identifier, other than as
 	#  the first character.
+.local isidchar
 isidchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -128,9 +134,13 @@ isidchar:
 	#
 	#  Is CHR a character than can occur at the start of a multi-character
 	#  operator?
-.data mopchars:
+.data 
+.local mopchars
+mopchars:
 	.string	"+-*/<>&|!=%^"
-.text ismopchar:
+.text 
+.local ismopchar
+ismopchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
@@ -145,12 +155,16 @@ isidchar:
 ####	#  Function:	void get_multiop();
 	#
 	#  Reads a multi-character operator.
-.data mops2:
+.data 
+.local mops2
+mops2:
 	.int	'++', '--', '<<', '>>', '<=', '>=', '==', '!=', '&&', '||'
 	.int	'*=', '%=', '/=', '+=', '-=', '&=', '|=', '^='
 	.int	0 	# <-- end of table
 	
-.text get_multiop:
+.text 
+.local get_multiop
+get_multiop:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
@@ -212,6 +226,7 @@ isidchar:
 	#
 	#  Reads an identifier or keyword (without distinguishing them)
 	#  into VALUE, and returns the next byte (having ungot it).
+.local get_word
 get_word:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -267,7 +282,10 @@ get_word:
 	#  Check whether VALUE contains a keyword, and if so, sets TOKEN
 	#  accordingly.
 	#
-.data .align 12 keywords:
+.data 
+.local keywords
+.align 12 
+keywords:
 	.string "auto"		.align 12	# TODO
 	.string "break"		.align 12
 	.string "case"		.align 12	# TODO
@@ -282,7 +300,9 @@ get_word:
 	.string "while"		.align 12
 	.byte  0	# <-- the end of table marker
 
-.text chk_keyword:
+.text 
+.local chk_keyword
+chk_keyword:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	PUSH	%edi
@@ -315,10 +335,111 @@ get_word:
 	RET
 
 
+####	#  Function:	int get_charlit();
+	#
+	#  Reads the textual representation of a character literal into VALUE,
+	#  including the single quotation marks, and returns the next byte
+	#  (having ungot it).
+.local get_charlit
+get_charlit:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  Skip whitespace and test for the opening '\''
+	CALL	skip_white
+	CMPB	'\'', %al
+	JNE	_error
+
+	MOVL	'char', %eax		# 'char' for character literal
+	MOVL	%eax, token
+	MOVL	$value, %eax
+	MOVL	%eax, %edi		# string pointer
+
+	CALL	getchar
+	MOVB	%al, (%edi)
+
+.L21:	#  Loop reading characters, and check for buffer overflow
+	INCL	%edi
+	MOVL	$value, %eax
+	SUBL	%edi, %eax
+	CMPL	$-79, %eax
+	JLE	_error
+
+	CALL	getchar
+	MOVB	%al, (%edi)
+	CMPB	'\'', %al
+	JNE	.L21
+
+	#  Write null terminator
+	INCL	%edi
+	XORB	%cl, %cl
+	MOVB	%cl, (%edi)
+
+	#  Peek another character
+	CALL	getchar
+	PUSH	%eax
+	CALL	ungetchar
+	POP	%eax
+
+POP	%ebp
+	RET
+
+
+####	#  Function:	int get_strlit();
+	#
+	#  Reads the textual representation of a string literal into VALUE,
+	#  including the quotation marks, and returns the next byte
+	#  (having ungot it).
+.local get_strlit
+get_strlit:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  Skip whitespace and test for the opening '\"'
+	CALL	skip_white
+	CMPB	'\"', %al
+	JNE	_error
+
+	MOVL	'str', %eax		# 'str' for character literal
+	MOVL	%eax, token
+	MOVL	$value, %eax
+	MOVL	%eax, %edi		# string pointer
+
+	CALL	getchar
+	MOVB	%al, (%edi)
+
+.L22:	#  Loop reading characters, and check for buffer overflow
+	INCL	%edi
+	MOVL	$value, %eax
+	SUBL	%edi, %eax
+	CMPL	$-79, %eax
+	JLE	_error
+
+	CALL	getchar
+	MOVB	%al, (%edi)
+	CMPB	'\"', %al
+	JNE	.L22
+
+	#  Write null terminator
+	INCL	%edi
+	XORB	%cl, %cl
+	MOVB	%cl, (%edi)
+
+	#  Peek another character
+	CALL	getchar
+	PUSH	%eax
+	CALL	ungetchar
+	POP	%eax
+
+POP	%ebp
+	RET
+
+
 ####	#  Function:	int get_number();
 	#
 	#  Reads the textual representation of a number into VALUE, 
 	#  and returns the next byte (having ungot it).
+.local get_number
 get_number:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -402,6 +523,11 @@ next:
 	TESTL	%eax, %eax
 	JNZ	.L8a
 
+	CMPB	'\'', %cl
+	JE	.L8b
+	CMPB	'\"', %cl
+	JE	.L8c
+
 	CALL	getchar
 .L6a:
 	MOVL	%eax, token
@@ -415,6 +541,13 @@ next:
 	JMP	.L9
 .L8a:
 	CALL	get_multiop
+	JMP	.L9
+.L8b:
+	CALL	get_charlit
+	JMP	.L9
+.L8c:
+	CALL	get_strlit
+	JMP	.L9
 .L9:
 	MOVL	token, %eax
 .L6:

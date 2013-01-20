@@ -1,18 +1,22 @@
 # main.s  --  entry point 
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
-.data frame_size:
+.data
+.globl frame_size
+frame_size:
 	.int	0
 
 ####	#  Function:	void int_decl(char* name);
 	#
 	#  Process an integer declaration for NAME.  The name has been read, 
 	#  and TOKEN advanced to the next token: either '=' or ';'
-.data f_int_decl:
+.data .LC1:
 	.string "\n.data\n%s:\n\t.int %s\n"
-.text int_decl:
+.text
+.local int_decl
+int_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
@@ -25,8 +29,11 @@
 	#  Read an initialiser
 	CALL	next
 	CMPL	'num', %eax
+	JE	.L3a
+	CMPL	'char', %eax
 	JNE	_error
 
+.L3a:
 	#  Because the next token is punctuation, value is not set.
 	CALL	next
 	MOVL	$value, %eax
@@ -36,7 +43,7 @@
 	PUSH	%esp
 .L4:
 	PUSH	8(%ebp)
-	MOVL	$f_int_decl, %eax
+	MOVL	$.LC1, %eax
 	PUSH	%eax
 	CALL	printf
 	POP	%eax
@@ -55,6 +62,7 @@
 ####	#  Function:	void int_decl(char* name);
 	#
 	#  Process a function declaration.  Current token is '('.
+.local func_decl
 func_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -121,6 +129,7 @@ func_decl:
 	#                    | name '(' ')' '{' '}'
 	#  
 	#  When called, TOKEN should be the name.
+.local ext_decl
 ext_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp

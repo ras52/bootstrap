@@ -40,4 +40,3 @@ TODO
   Switch statements
   Goto and labels
   Function-scope static variables
-  String & character literals

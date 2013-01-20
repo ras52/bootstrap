@@ -1,9 +1,11 @@
 # ctype.s
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
-.data ctype_tbl:
+.data 
+.local ctype_tbl
+ctype_tbl:
 
 #  This table contains character bits for the 0x80 characters in ASCII:
 #
@@ -34,7 +36,7 @@
 
 
 .text
-
+.local getctype
 ####	#  Function:	int getctype(int chr);
 	#
 	#  A utility function to return the character class(es) of CHR.

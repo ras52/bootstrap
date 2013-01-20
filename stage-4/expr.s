@@ -1,6 +1,6 @@
 # expr.s  --  expression parser
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 # Many of the functions here return a typedef int type_t.
@@ -16,6 +16,7 @@
 	#    expression ( ',' expression )*
 	#
 	#  Returns the number of arguments
+.local arg_list
 arg_list:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -45,6 +46,7 @@ arg_list:
 	#
 	#    maybe_call ::= identifier ( '(' params ')' )?
 	#
+.local maybe_call
 maybe_call:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -105,6 +107,7 @@ maybe_call:
 	#
 	#    primry-expr ::= number | identifier | '(' expr ')'
 	#
+.local primry_expr
 primry_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -112,6 +115,10 @@ primry_expr:
 	MOVL	token, %eax
 	CMPL	'num', %eax
 	JE	.L35
+	CMPL	'char', %eax
+	JE	.L35a
+	CMPL	'str', %eax
+	JE	.L35b
 	CMPL	'id', %eax
 	JE	.L36
 	CMPL	'(', %eax
@@ -131,6 +138,22 @@ primry_expr:
 	PUSH	%eax
 	CALL	load_const
 	POP	%eax
+	JMP	.L35c
+
+.L35a:
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	load_chrlit
+	POP	%eax
+	JMP	.L35c
+
+.L35b:
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	load_strlit
+	POP	%eax
+
+.L35c:
 	CALL	next
 	XORL	%eax, %eax
 	JMP	.L37
@@ -146,6 +169,7 @@ primry_expr:
 ####	#  Function:	void make_rvalue(type_t type);
 	#
 	#  Convert the accumulator (which is of type TYPE) into an rvalue
+.local make_rvalue
 make_rvalue:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -164,6 +188,7 @@ make_rvalue:
 	#    unary-op   ::= '+' | '-' | '~' | '!' | '*' | '&' | '++' | '--'
 	#    unary-expr ::= unary-op unary-expr | primry-expr
 	#
+.local unary_expr
 unary_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -266,6 +291,7 @@ unary_expr:
 	#    mult-op   ::= '*' | '/' | '%'
 	#    mult-expr ::= unary-expr ( mult-op unary-expr )*
 	#
+.local mult_expr
 mult_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -329,6 +355,7 @@ mult_expr:
 	#    add-op   ::= '+' | '-' 
 	#    add-expr ::= mult-expr ( add-op mult-expr )*
 	#
+.local add_expr
 add_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -378,6 +405,7 @@ add_expr:
 	#    shift-op   ::= '<<' | '>>' 
 	#    shift-expr ::= add-expr ( shift-op add-expr )*
 	#
+.local shift_expr
 shift_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -427,6 +455,7 @@ shift_expr:
 	#    rel-op   ::= '<' | '<=' | '>' | '>='
 	#    rel-expr ::= shift_expr ( rel-op shift_expr )*
 	#
+.local rel_expr
 rel_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -504,6 +533,7 @@ rel_expr:
 	#    eq-op   ::= '==' | '!=' 
 	#    eq-expr ::= rel-expr ( eq-op rel-expr )*
 	#
+.local eq_expr
 eq_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -552,6 +582,7 @@ eq_expr:
 	#
 	#    bitand-expr ::= eq-expr ( '&' eq-expr )*
 	#
+.local bitand_expr
 bitand_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -583,6 +614,7 @@ bitand_expr:
 	#
 	#    bitxor-expr ::= bitand-expr ( '^' bitand-expr )*
 	#
+.local bitxor_expr
 bitxor_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -614,6 +646,7 @@ bitxor_expr:
 	#
 	#    bitor-expr ::= bitxor-expr ( '|' bitxor-expr )*
 	#
+.local bitor_expr
 bitor_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -645,6 +678,7 @@ bitor_expr:
 	#
 	#    logand-expr ::= bitor-expr ( '&&' bitor-expr )*
 	#
+.local logand_expr
 logand_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -682,6 +716,7 @@ logand_expr:
 	#
 	#    logor-expr ::= logand-expr ( '||' logand-expr )*
 	#
+.local logor_expr
 logor_expr:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -718,9 +753,12 @@ logor_expr:
 
 ####	#  Function:	int new_label();
 	#  Return the next local label id.
-.data label_count:
+.data
+.local label_count
+label_count:
 	.int	0
-.text new_label:
+.text
+new_label:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 	MOVL	label_count, %eax
@@ -734,6 +772,7 @@ logor_expr:
 	#
 	#    cond-expr ::= logor-expr ( '?' expr ':' cond-expr )?
 	#
+.local cond_expr
 cond_expr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp

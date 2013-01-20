@@ -1,16 +1,20 @@
 # symtab.s  --  Code to manipulate the symbol table 
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 .data
 
+.local st_start
 st_start:
 	.int	0
+.local st_end
 st_end:
 	.int	0
+.local st_endstore
 st_endstore:
 	.int	0
+.local st_scope_id
 st_scope_id:
 	.int	0
 
@@ -39,6 +43,7 @@ init_symtab:
 ####	#  Function:	void grow_symtab();
 	#
 	#  Double the size of the symbol table storage
+.local grow_symtab
 grow_symtab:
 	PUSH	%ebp
 	MOVL	%esp, %ebp

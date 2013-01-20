@@ -1,6 +1,6 @@
 # stdio.s
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 ####	#  Function:	void putstr(char* str)
@@ -166,9 +166,12 @@ printf:
 	#
 	#  A version of the C standard library ungetc() that acts
 	#  on standard input.
-.data unget_count:
+.data 
+.local unget_count 
+unget_count:
 	.byte	0		# How many characters are in the unget slot?
-.data unget_data:
+.local unget_data
+unget_data:
 	.int	0		# %al -- bool: is slot in use?
 				# %ah -- char: slot content
 .text ungetchar:
