@@ -1533,7 +1533,7 @@ labelref:
 	CMPL	$0, -112(%ebx)
 	JLE	.L11e
 
-	#  Make a slot for the index of the undefined symbol
+	#  Make a slot for the index of the undefined symbol, init'd with -1
 	XORL	%eax, %eax
 	DECL	%eax
 	PUSH	%eax
@@ -1562,7 +1562,7 @@ labelref:
 
 	#  It's in a different section, so we need a relocation
 	POP 	%edx			# symbol value
-	POP 	%edx			# symbol slot
+	POP 	%edx			# symbol slot number
 	CMPL	$-1, %edx
 	JE	error			# Shouldn't be possible
 
@@ -3433,12 +3433,82 @@ _start:
 	#  Offset 0xE4 needs offset to symbol table
 	MOVL	$0xE4, %ecx
 	PUSH	%ecx
-	MOVL	-108(%ebp), %eax        # .text size + padding
+	MOVL	-108(%ebp), %eax        # .text size + .data size + padding
 	ADDL	$0x178, %eax            # ELF header size
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
 	POP	%ecx
+
+	#  Loop over the relocation table looking for .LC relocations
+	#  and change them to reference a new .data symbol.
+	XORL	%esi, %esi		# slot for .data section symbol
+	MOVL	-120(%ebp), %edi
+.L44:
+	CMPL	-124(%ebp), %edi
+	JGE	.L45			# finished
+
+	#  Get the symbol pointer in %ebx
+	MOVL	4(%edi), %eax		# in-memory symbol number
+	XORL	%edx, %edx
+	MOVL	$24, %ecx		# sizeof(label)
+	MULL	%ecx			# acts on %edx:%eax
+	ADDL	-4(%ebp), %eax		# += label_start
+	MOVL	%eax, %ebx 
+
+	CMPB	$0x2E, (%ebx)		# '.'
+	JNE	.L46
+	CMPB	$0x4C, 1(%ebx)		# 'L'
+	JNE	.L46
+
+	#  We have an .LC relocation.  It must be in .data (sect 1), 
+	#  unless it's undefined, which is an error.
+	CMPL	$1, 16(%ebx)
+	JNE	error
+
+	#  Do we have a section symbol yet?
+	TESTL	%esi, %esi
+	JNZ	.L47
+	
+	# Create a section symbol.  
+	# (NB, we're current acting under sect_direct .data)
+	MOVL	%esi, -96(%ebp)		# symbol has no name
+	PUSH	%ebp
+	PUSH	%esi			# strlen == 0
+	PUSH	%esi			# value == 0 (*not* undef)
+	CALL	savelabel
+	ADDL	$12, %esp
+
+	#  Set the symbol type & binding
+	MOVL	-8(%ebp), %eax
+	SUBL	$24, %eax		# sizeof(label)
+	MOVB	$3, 20(%eax)		# STB_LOCAL | STT_SECTION
+
+	#  Find the symbol index.  
+	#  Note because the .LC symbol must already exist, the section symbol
+	#  index cannot be 0.
+	SUBL	-4(%ebp), %eax
+	XORL	%edx, %edx
+	MOVL	$24, %ecx		# sizeof(label)
+	DIVL	%ecx			# acts on %edx:%eax
+	MOVL	%eax, %esi
+	
+.L47:
+	#  Move the .LC symbol value into the relocation addend 
+	MOVL	$0x178, %eax		# size of ELF headers
+	ADDL	(%edi), %eax		# rel->offset
+	PUSH	%eax
+	PUSH	12(%ebx)		# .LC symbol value
+	CALL	writedwat
+	POP	%eax
+	POP	%eax
+
+	#  And point relocation at the section symbol
+	MOVL	%esi, 4(%edi)
+.L46:
+	ADDL	$16, %edi		# sizeof(rel)
+	JMP	.L44
+.L45:
 
 	#  Store the current file offset so we can determine section size
 	#  %ebx is the global symbol number
@@ -3607,13 +3677,13 @@ _start:
 	#  Store the current file offset so we can determine section size
 	MOVL	-108(%ebp), %esi
 
-	#  Write the .rel.text section, initially without any .symtab links
+	#  Loop over the relocations write the .rel.text section
 	MOVL	-120(%ebp), %edi
-
 .L25:
 	CMPL	-124(%ebp), %edi
 	JGE	.L26			# finished
 
+	#  Check that it's in the .text section (sectid 0)
 	CMPL	$0, 8(%edi)
 	JNE	.L25a
 
