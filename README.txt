@@ -38,4 +38,4 @@ Stage 4 -- cc
   have been removed.
 
 
-The code in this project is copyright (C) Richard Smith, 2009-12.
+The code in this project is copyright (C) Richard Smith, 2009-13.

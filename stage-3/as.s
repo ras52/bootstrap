@@ -1,6 +1,6 @@
 # as.s
 
-# Copyright (C) 2011, 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2011, 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 # ########################################################################

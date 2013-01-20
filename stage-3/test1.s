@@ -1,11 +1,10 @@
 # stage-3/test1.s
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 .data
-foo:
-	.int	0xFFFF
+.local bar
 bar:
 	.int	0x2A
 
@@ -21,7 +20,9 @@ _start:
 	MOVL	%eax, bar
 
 	MOVL	bar, %eax
-	CMPL	$1764, %eax
+	MOVL	%eax, %ecx
+	MOVL	foo, %eax
+	CMPL	%eax, %ecx
 	SETNE	%al
 	MOVZBL	%al, %eax
 	MOVL	%eax, foo

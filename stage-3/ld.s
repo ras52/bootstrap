@@ -1,6 +1,6 @@
 # ld.s
 
-# Copyright (C) 2011, 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2011, 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 # ########################################################################
@@ -150,6 +150,49 @@ strlen:
 	RET
 
 
+####	#  Function: void* memset(void* s, int c, size_t n);
+	#  Set N bytes of memory pointed to by S to the C byte
+memset:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%edi
+
+	MOVL	8(%ebp), %edi
+	MOVB	12(%ebp), %al
+	MOVL	16(%ebp), %ecx
+	REP STOSB
+	MOVL	8(%ebp), %eax
+
+	POP	%edi
+	POP	%ebp
+	RET
+
+
+####	#  Function:	void strcpy12(char* dest, char const* src);
+	#  Copy at most 12 bytes (incl. null termination) from SRC to DEST.
+strcpy12:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%edi
+	PUSH	%esi
+
+	PUSH	12(%ebp)
+	CALL	strlen
+	POP	%esi
+	CMPL	$12, %eax
+	JGE	error
+
+	MOVL	%eax, %ecx
+	INCL	%ecx			# +1 for NUL char
+	MOVL	8(%ebp), %edi
+	REP MOVSB
+
+	POP	%esi
+	POP	%edi
+	POP	%ebp
+	RET
+
+
 ####	#  Function: void* malloc(size_t sz)
 	#  Crude dynamic memory allocation, by punting directly to kernel 
 malloc:
@@ -184,6 +227,27 @@ malloc:
 	#  Write size into malloc header
 	MOVL	%ecx, (%eax)
 	ADDL	$4, %eax
+
+	#  Cleanup
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+####	#  Function: void free(void* ptr)
+	#  Returns memory allocated with malloc or realloc
+free:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	8(%ebp), %ebx		# ptr
+	SUBL	$4, %ebx
+	MOVL	(%ebx), %ecx		# old size
+	MOVL	$91, %eax		# 91 == __NR_munmap
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JA	error			# unsigned comparison handles above
 
 	#  Cleanup
 	POP	%ebx
@@ -237,7 +301,7 @@ strneq:
 	MOVL	8(%ebp), %edi
 	MOVL	12(%ebp), %esi
 	MOVL	16(%ebp), %ecx
-	REP CMPSB
+	REPE CMPSB
 	JNE	.L3
 	INCL	%eax
 .L3:
@@ -311,9 +375,10 @@ findsect:
 
 .L1a:
 	#  Not found
+	XORL	%edi, %edi
 	XORL	%esi, %esi
 	DECL	%esi
-	JMP	.L2a
+#	JMP	.L2a
 
 .L2:
 	#  Write the pointer to PTR
@@ -335,99 +400,13 @@ findsect:
 	RET
 
 
-####	#  Function:  void* readsyms( void* elf, size_t offset, 
-	#                             size_t strlen, char* name,
-	#                             vec<label>* syms, vec<label>* relocs,
-	#                             int sectid )
-	#
-	#  Populate the SYM vector with data from .symtab / .strtab for
-	#  the NAME section (which has length STRLEN) of ELF, 
-	#  adding OFFSET to each symbol.  Return 
-readsyms:
+####	#  Function:  void growvec( vec<label>* v );
+	#  Check there is at least one space in the given vector
+growvec:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	PUSH	%ebx
-	PUSH	%edi
-	PUSH	%esi
 
-	#  Slot for pointer to section NAME header **
-	PUSH	%eax			# -16(%ebp)
-	MOVL	%esp, %ecx		# ptr to NAME scratch, above
-
-	#  Find the NAME section
-	PUSH	20(%ebp)		# NAME
-	PUSH	16(%ebp)		# STRLEN
-	PUSH	%ecx
-	PUSH	8(%ebp)			# The elf file image
-	CALL	findsect
-	ADDL	$16, %esp		# POP x4
-	TESTL	%eax, %eax
-	JS	error			# error if not found
-	PUSH	%eax			# NAME header index -20(%ebp) **
-
-	#  The string literal ".symtab"
-	PUSH	%eax			# scratch
-	MOVL	%esp, %ecx		# ptr to scratch
-	MOVL	$0x626174, %eax		# 'tab'
-	PUSH	%eax
-	MOVL	$0x6D79732E, %eax	# '.sym'
-	PUSH	%eax
-	PUSH	%esp			# ptr to string
-	MOVL	$7, %eax		# strlen(".symtab")
-	PUSH	%eax
-	PUSH	%ecx
-	PUSH	8(%ebp)			# The elf file image
-	CALL	findsect
-	ADDL	$24, %esp		# POP x6
-	TESTL	%eax, %eax
-	JS	error			# error if not found
-	POP	%ebx			# Pointer to section header <= scratch
-
-	#  TODO: should use st_link from the symbol table to find this.
-	#  The string literal ".strtab"
-	PUSH	%eax			# scratch
-	MOVL	%esp, %ecx		# ptr to scratch
-	MOVL	$0x626174, %eax
-	PUSH	%eax
-	MOVL	$0x7274732E, %eax
-	PUSH	%eax
-	PUSH	%esp			# ptr to string
-	MOVL	$7, %eax
-	PUSH	%eax			# strlen(".symtab")
-	PUSH	%ecx
-	PUSH	8(%ebp)			# The elf file image
-	CALL	findsect
-	ADDL	$24, %esp		# POP x6
-	TESTL	%eax, %eax
-	JS	error			# error if not found
-	POP	%eax
-
-	#  Find pointer to .symtab section => %edi; .strtab section => %esi
-	MOVL	0x10(%ebx), %edi	
-	ADDL	8(%ebp), %edi
-	PUSH	%edi			# elf **  -24(%ebp)
-	MOVL	0x10(%eax), %esi
-	ADDL	8(%ebp), %esi
-
-	#  Loop over symbol table
-.L10:
-	#  Check whether we're overrunning the object file's symbol table
-	MOVL	0x10(%ebx), %ecx	# offset of start of section
-	ADDL	0x14(%ebx), %ecx	# + size of section
-	ADDL	8(%ebp), %ecx		# => ptr to end of section
-	CMPL	%ecx, %edi
-	JGE	.L11			# Done
-
-	#  Check the symbol is in the correct section
-	#  NB  If the symbol is undefined, the section will be SHN_UNDEF==0
-	MOVL	0xC(%edi), %eax
-	MOVB	$16, %cl
-	SHRL	%eax 			# %eax is now st_shndx
-	CMPL	-20(%ebp), %eax
-	JNE	.L12			# continue
-
-	#  Check we're not about to overrun the label vector
-	MOVL	24(%ebp), %edx
+	MOVL	8(%ebp), %edx
 	MOVL	4(%edx), %eax		# vec.end
 	CMPL	8(%edx), %eax		# vec.end_store
 	JL	.L13
@@ -439,12 +418,12 @@ readsyms:
 	MOVL	$2, %ecx
 	MULL	%ecx			# acts on %edx:%eax
 	PUSH	%eax			# new size (twice old)
-	MOVL	24(%ebp), %edx
-	PUSH	(%edx)			# ptr
+	MOVL	8(%ebp), %edx
+	PUSH	(%edx)			# vec.start
 	CALL	realloc
 
 	#  Store pointers
-	MOVL	24(%ebp), %edx
+	MOVL	8(%ebp), %edx
 	MOVL	%eax, (%edx)		# store new pointer
 	POP	%ecx
 	SUBL	%ecx, 4(%edx)
@@ -454,38 +433,140 @@ readsyms:
 	MOVL	%ecx, 8(%edx)		# new vec->end_store
 
 .L13:
-	#  Do a strcpy
-	PUSH	%esi
-	ADDL	(%edi), %esi		# source = string table + st_name 
-	PUSH	%esi
-	CALL	strlen
-	POP	%esi
-	CMPL	$12, %eax
-	JGE	error			# Buffer overrun
-	MOVL	%eax, %ecx
-	INCL	%ecx			# +1 for NUL char
+	POP	%ebp
+	RET
+
+
+####	#  Function:  void* readsyms( elffile* file, size_t* offsets, 
+	#                             int unused, int unused,
+	#                             vec<label>* syms, vec<label>* relocs,
+	#                             int unused )
+	#
+	#  Populate the SYM vector with data from .symtab / .strtab for
+	#  the NAME section (which has length STRLEN) of ELF, 
+	#  adding OFFSET to each symbol.  Return 
+readsyms:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
 	PUSH	%edi
+	PUSH	%esi
+
+	PUSH	%eax			# Unused return value -16(%ebp) **
+	PUSH	%eax			# Unused              -20(%ebp) **
+
+	#  Set pointers to .symtab header => %ebx, .symtab section => %edi,
+	#  and .strtab section => %esi
+	MOVL	8(%ebp), %ecx
+	MOVL	28(%ecx), %ebx		# file->symhdr in %ebx
+	MOVL	0x10(%ebx), %edi	# .symtab sh_offset
+	ADDL	4(%ecx), %edi		# += file->ptr
+	PUSH	%edi			#                     -24(%ebp) **
+	MOVL	32(%ecx), %eax		# file->strhdr in %eax
+	MOVL	0x10(%eax), %esi	# .strtab sh_offset
+	ADDL	4(%ecx), %esi		# += file->ptr
+
+	#  Allocate memory for a vector to store a mapping from object file
+	#  symbol number to in-memory symbol number.
+	MOVL	0x14(%ebx), %eax	# sh_size
+	XORL	%edx, %edx
+	MOVL	0x24(%ebx), %ecx	# /= sh_entsize
+	DIVL	%ecx			# acts on %edx:%eax
+	MOVB	$2, %cl
+	SHLL	%eax			# *= 4 (sizeof(int))
+	PUSH	%eax
+	CALL	malloc
+
+	#  Initialise the array to (int)(-1); size still on stack
+	XORL	%ecx, %ecx
+	DECL	%ecx
+	PUSH	%ecx
+	PUSH	%eax
+	CALL	memset
+	ADDL	$12, %esp		# POP x3
+	PUSH	%eax			# -28(%ebp) **
+
+	#  Loop over symbol table -- %edi already set
+.L10:
+	#  Check whether we're overrunning the object file's symbol table
+	MOVL	0x10(%ebx), %ecx	# offset of start of section
+	ADDL	0x14(%ebx), %ecx	# + size of section
+	MOVL	8(%ebp), %eax
+	ADDL	4(%eax), %ecx		# => ptr to end of section
+	CMPL	%ecx, %edi
+	JGE	.L11			# Done
+
+	#  Check the symbol is in the correct section
+	#  NB  If the symbol is undefined, the section will be SHN_UNDEF==0
+	MOVL	0xC(%edi), %eax
+	MOVB	$16, %cl
+	SHRL	%eax 			# %eax is now st_shndx
+	XORL	%edx, %edx		# sectid 0
+	MOVL	8(%ebp), %ecx
+	CMPL	36(%ecx), %eax		# Is it in data?
+	JE	.L12a
+	INCL	%edx			# sectid 1
+	CMPL	40(%ecx), %eax
+	JE	.L12a
+	JMP	.L12			# continue
+
+.L12a:	# We're in .text or .data, and %edx sectid
+	PUSH	%edx
+
+	#  Check we're not about to overrun the symbol vector
+	PUSH	24(%ebp)
+	CALL	growvec
+	POP	%eax
+
+	#  Store the string
+	MOVL	%esi, %ecx
+	ADDL	(%edi), %ecx		# source = string table + st_name 
+	PUSH	%ecx
 	MOVL	24(%ebp), %eax
-	MOVL	4(%eax), %edi		# dest = vec.end
-	REP MOVSB
-	POP	%edi
-	POP	%esi
+	PUSH	4(%eax)			# dest = vec.end
+	CALL	strcpy12
+	ADDL	$8, %esp		# POP x2
+
+	#  Store the section id in label->sect.
+	MOVL	24(%ebp), %edx		# vec
+	MOVL	4(%edx), %eax		# dest = vec->end
+	POP	%edx
+	MOVL	%edx, 16(%eax)
+
+	#  Calculate file offset: offsets[sectid]
+	MOVL	12(%ebp), %eax
+	MOVB	$2, %cl
+	SHLL	%edx
+	ADDL	%edx, %eax
 
 	#  Copy the symbol address
 	MOVL	0x4(%edi), %ecx		# st_value
-	ADDL	12(%ebp), %ecx		# + offset
+	ADDL	(%eax), %ecx		# + file offset
 	MOVL	24(%ebp), %edx		# vec
 	MOVL	4(%edx), %eax		# dest = vec->end
 	MOVL	%ecx, 12(%eax)
-
-	#  Store the section id in label->sect.
-	MOVL	32(%ebp), %ecx
-	MOVL	%ecx, 16(%eax)
 
 	#  Store st_info in label->type
 	XORL	%ecx, %ecx
 	MOVB	0xC(%edi), %cl		# st_info
 	MOVL	%ecx, 20(%eax)
+
+	#  Fill in our temporary array.
+	MOVL	%edi, %eax		# ptr to current symbol
+	SUBL	0x10(%ebx), %eax	# -= offset of start of sectiona
+	MOVL	8(%ebp), %ecx
+	SUBL	4(%ecx), %eax		# -= file->ptr
+	XORL	%edx, %edx
+	MOVL	0x24(%ebx), %ecx	# /= sh_entsize
+	DIVL	%ecx			# %eax is now the .o symbol number
+	MOVB	$2, %cl
+	SHLL	%eax			# dword offset into temporary array
+	ADDL	-28(%ebp), %eax		# offset into array
+
+	MOVL	24(%ebp), %edx		# vec
+	MOVL	4(%edx), %ecx		# vec->end
+	SUBL	(%edx), %ecx		# - vec->start => byte offset 
+	MOVL	%ecx, (%eax)
 
 	ADDL	$28, 4(%edx)		# ++vec->end;  sizeof(label)
 .L12:
@@ -493,110 +574,89 @@ readsyms:
 	JMP	.L10
 
 .L11:
-	PUSH	%ebx			# -28(%ebp) == ptr to .symtab
+	PUSH	%ebx			# -32(%ebp) == ptr to .symtab **
 
-	#  Search for .relNAME section header
-	PUSH	%eax			# -32(%ebp)
-	MOVL	%esp, %ecx
-
-	#  Copy 12 bytes from NAME
-	MOVL	20(%ebp), %eax
-	PUSH	8(%eax)
-	PUSH	4(%eax)
-	PUSH	(%eax)
-	MOVL	$0x6C65722E, %eax	# '.rel'
-	PUSH	%eax
-
+	#  Loop over the two sections { .text, .data }
+	XORL	%eax, %eax
+	PUSH	%eax			# -36(%ebp) == sectid
+.L18a:
 	#  Find the .relNAME section
-	PUSH	%esp			# name
-	MOVL	16(%ebp), %eax
-	ADDL	$4, %eax		# 4 == strlen(".rel")
-	PUSH	%eax			# strlen
-	PUSH	%ecx
-	PUSH	8(%ebp)			# The elf file image
-	CALL	findsect
-	ADDL	$32, %esp		# POP x8
-	POP	%ebx			# -32(%ebp): start of .relNAME section
-	TESTL	%eax, %eax
-	JS	.L19			# It's okay if .relNAME is missing
+	MOVL	8(%ebp), %eax
+	MOVL	-36(%ebp), %edx
+	MOVB	$2, %cl
+	SHLL	%edx
+	ADDL	%edx, %eax
+	MOVL	20(%eax), %ebx		# file->relshdr[sectid]  .relNAME
+	TESTL	%ebx, %ebx
+	JZ	.L19			# It's okay if .relNAME is missing
 
 	#  Find pointer to .relNAME section
 	MOVL	0x10(%ebx), %edi
-	ADDL	8(%ebp), %edi
+	MOVL	8(%ebp), %eax
+	ADDL	4(%eax), %edi		# file->ptr
 
 	#  Loop over relocation table
 .L18:
 	MOVL	0x10(%ebx), %ecx	# offset of start of section
 	ADDL	0x14(%ebx), %ecx	# + size of section
-	ADDL	8(%ebp), %ecx		# => ptr to end of section
+	MOVL	8(%ebp), %eax
+	ADDL	4(%eax), %ecx		# => ptr to end of section
 	CMPL	%ecx, %edi
 	JGE	.L19			# Done
 
 	#  Check we're not about to overrun the relocation vector
-	MOVL	28(%ebp), %edx
-	MOVL	4(%edx), %eax		# vec.end
-	CMPL	8(%edx), %eax		# vec.end_store
-	JL	.L20
+	PUSH	28(%ebp)
+	CALL	growvec
+	POP	%eax
 
-	#  Grow storage
-	MOVL	8(%edx), %eax
-	SUBL	(%edx), %eax
-	XORL	%edx, %edx
-	MOVL	$2, %ecx
-	MULL	%ecx			# acts on %edx:%eax
-	PUSH	%eax			# new size (twice old)
-	MOVL	28(%ebp), %edx
-	PUSH	(%edx)			# ptr
-	CALL	realloc
-
-	#  Store pointers
-	MOVL	28(%ebp), %edx
-	MOVL	%eax, (%edx)		# store new pointer
-	POP	%ecx
-	SUBL	%ecx, 4(%edx)
-	ADDL	%eax, 4(%edx)		# new vec->end
-	POP	%ecx
-	ADDL	%eax, %ecx
-	MOVL	%ecx, 8(%edx)		# new vec->end_store
-
-.L20:
 	#  (%edi) is the r_offset; 4(%edi) is the r_info field
 	MOVL	4(%edi), %eax		# r_info
 	MOVB	$8, %cl
 	SHRL	%eax			# %eax is now r_sym from r_info
+	PUSH	%eax			# save symbol number
 
-	#  Look up symbol
+	#  Use our temporary map to reference the actual symbol.
+	MOVB	$2, %cl
+	SHLL	%eax			# dword offset into temporary array
+	ADDL	-28(%ebp), %eax		# offset into array
+	MOVL	(%eax), %ecx
+	MOVL	28(%ebp), %edx		# vec
+	MOVL	4(%edx), %eax		# dest = vec->end
+	MOVL	%ecx, 24(%eax)		# rel->strno
+
+	#  Look up symbol in input object file
+	POP	%eax			# restore symbol number
 	XORL	%edx, %edx
 	MOVL	$16, %ecx
 	MULL	%ecx			# %eax is now offset into .symtab
-	MOVL	-28(%ebp), %edx		# ptr to .symtab header
+	MOVL	-32(%ebp), %edx		# ptr to .symtab header
 	ADDL	16(%edx), %eax		# offset to .symtab section
-	ADDL	8(%ebp), %eax		# %eax is now a symbol 
+	MOVL	8(%ebp), %ecx
+	ADDL	4(%ecx), %eax		# += file->ptr  => %eax is now a symbol 
 
-	#  Do a strcpy
-	PUSH	%esi
-	ADDL	(%eax), %esi		# source = string table + st_name
-	PUSH	%esi
-	CALL	strlen
-	POP	%esi
-	CMPL	$12, %eax
-	JGE	error
-	MOVL	%eax, %ecx
-	INCL	%ecx			# +1 for NUL char
-	PUSH	%edi
+	#  Store the string
+	MOVL	%esi, %ecx
+	ADDL	(%eax), %ecx		# source = string table + st_name 
+	PUSH	%ecx
 	MOVL	28(%ebp), %eax
-	MOVL	4(%eax), %edi		# dest = vec.end
-	REP MOVSB
-	POP	%edi
-	POP	%esi
-	
+	PUSH	4(%eax)			# dest = vec.end
+	CALL	strcpy12
+	ADDL	$8, %esp		# POP x2
+
+	#  Calculate file offset: offsets[sectid]
+	MOVL	12(%ebp), %eax
+	MOVL	-36(%ebp), %edx
+	MOVB	$2, %cl
+	SHLL	%edx
+	ADDL	%edx, %eax
+
 	#  Store relocation offset
 	MOVL	(%edi), %ecx		# r_offset
-	ADDL	12(%ebp), %ecx		# + offset
+	ADDL	(%eax), %ecx		# + file offset
 	MOVL	28(%ebp), %edx		# vec
 	MOVL	4(%edx), %eax		# dest = vec->end
-	MOVL	%ecx, 12(%eax)
-	MOVL	32(%ebp), %ecx		# sectid
+	MOVL	%ecx, 12(%eax)		# rel->type
+	MOVL	-36(%ebp), %ecx		# sectid
 	MOVL	%ecx, 16(%eax)		# rel->sect
 
 	#  We only understand two types of relocation
@@ -616,7 +676,18 @@ readsyms:
 
 	ADDL	0x24(%ebx), %edi	# Add sh_entsize
 	JMP	.L18
-.L19:
+
+.L19:	# Do we need to loop back to do the next .rel.XXX section
+	POP	%eax			# sectid, -36(%ebp), above **
+	TESTL	%eax, %eax
+	JNZ	.L19a
+	INCL	%eax
+	PUSH	%eax
+	JMP	.L18a
+
+.L19a:
+	POP	%eax			# -32(%ebp), above **
+	CALL	free			# free array in -28(%ebp)
 	ADDL	$12, %esp		# POP x3: -28(%ebp) ... -20(%ebp)
 	POP	%eax			# return pointer to NAME header **
 
@@ -626,14 +697,57 @@ readsyms:
 	POP	%ebp
 	RET
 
-####	#  Function:  void writepad4( int written, int pad_chars, int fd_out )
-	#  Write bytes from PAD_CHARS until WRITTEN is 4-byte aligned
-writepad4:
+
+####	#  Function:  void doreadsyms( elffile* file, size_t* offsets, 
+	#                              vec<label>* syms, vec<label>* relocs );
+doreadsyms:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	PUSH	%ebx
 
-	#  Calculate padding required for 4-byte alignment
+	#  Read the symbols
+	PUSH	20(%ebp)		# relocs
+	PUSH	16(%ebp)		# syms
+	PUSH	%ecx			# (unused)
+	PUSH	%ecx			# (unused)
+	MOVL	12(%ebp), %edx
+	PUSH	%edx			# offsets
+	PUSH	8(%ebp)			# file
+	CALL	readsyms
+	ADDL	$24, %esp		# POP x7
+
+	#  Calculate the size of the section incl. padding
+	MOVL	8(%ebp), %edx
+	MOVL	12(%edx), %eax		# file->shdr[0]
+	MOVL	0x14(%eax), %ecx	# sh_size member
+	PUSH	%ecx
+	CALL	calcpad4
+	POP	%ecx
+	ADDL	%eax, %ecx
+	MOVL	12(%ebp), %edx
+	ADDL	%ecx, (%edx)		# offsets[0]
+
+	#  Calculate the size of the section incl. padding
+	MOVL	8(%ebp), %edx
+	MOVL	16(%edx), %eax		# &file->shdr[1]
+	MOVL	0x14(%eax), %ecx	# sh_size member
+	PUSH	%ecx
+	CALL	calcpad4
+	POP	%ecx
+	ADDL	%eax, %ecx
+	MOVL	12(%ebp), %edx
+	ADDL	%ecx, 4(%edx)		# offsets[1]
+
+	POP	%ebp
+	RET
+
+
+####	#  Function:  int calcpad4( int written );
+	#  Returns the number of padding bytes needed to make WRITTEN 
+	#  4-byte aligned.
+calcpad4:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
 	XORL	%edx, %edx
 	MOVL	8(%ebp), %eax		# bytes written
 	MOVL	$4, %ecx
@@ -641,12 +755,31 @@ writepad4:
 	XORL	%eax, %eax		# ready for return
 	SUBL	%edx, %ecx		# 4 - (bytes % 4)
 	CMPL	$4, %ecx
-	JE	.L23
+	JE	.L23a
+	MOVL	%ecx, %eax
+.L23a:
+	POP	%ebp
+	RET
+
+
+####	#  Function:  int writepad4( int written, int pad_chars, int fd_out )
+	#  Write bytes from PAD_CHARS until WRITTEN is 4-byte aligned, and
+	#  return the number of padding bytes written.
+writepad4:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	PUSH	8(%ebp)
+	CALL	calcpad4
+	POP	%ecx
+	TESTL	%eax, %eax
+	JZ	.L23
 
 	#  And write the padding
-	PUSH	%ecx			# count
+	PUSH	%eax			# count
 	PUSH	12(%ebp)		# pad_chars
-	MOVL	%ecx, %edx
+	MOVL	%eax, %edx
 	MOVL	%esp, %ecx
 	MOVL	16(%ebp), %ebx		# fd
 	MOVL	$4, %eax   		# 4 == __NR_write
@@ -728,7 +861,7 @@ findsym:
 	CMPL	4(%edx), %edi		# sym->end
 	JL	.L14a
 
-	#  Trivial error reporting
+	#  Reached end of vector without finding symbol.  Report error.
 	MOVL	$0x203A646C, %eax	# 'ld: '
 	PUSH	%eax
 	MOVL	$2, %ebx		# STDERR_FILENO
@@ -753,12 +886,21 @@ findsym:
 	JMP	error			# Not found
 
 .L14a:
+	#  Does it have the right name?
 	PUSH	%edi
 	CALL	strneq
 	POP	%ecx
 	CMPL	$0, %eax
-	JNE	.L15			# Found it
+	JE	.L14b
 
+	#  Is it something other than STB_LOCAL (which has value 0)?
+	MOVL	20(%edi), %eax		# sym->type  (from st_info)
+	ANDB	$0xF0, %al		# Just look at the ST_BIND bits
+	CMPB	$0, %al
+	JE	.L14b
+
+	JMP	.L15			# Found it
+.L14b:
 	ADDL	$28, %edi		# sizeof(label)
 	JMP	.L14
 .L15:
@@ -782,103 +924,225 @@ success:
 	INT     $0x80
 
 
-####	#  Function: int section( int fd_out, char* filename, 
-	#                         char* sectname, int sectid, int offset,
-	#                         vector<label>* syms, vector<label>* relocs,
-	#                         int pad_chars );
-section:
+####	#  Function:  void openelf( char* filename, elffile* file );
+	#  where elffile is an { int fd; void* ptr; size_t sz; void* shdr[2];
+	#                        void* relshdr[2]; void* symhdr; void* strhdr;
+	#			 ind sidx[2]; }
+openelf:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	PUSH	%eax		#  -4(%ebp)	void* in
-	PUSH	%eax		#  -8(%ebp)	int fd_in
-	PUSH	24(%ebp)	# -12(%ebp)	int offset 
 	PUSH	%ebx
-	PUSH	%edi
 
 	#  Open the input file
 	XORL	%ecx, %ecx		# 0 == O_RDONLY
-	MOVL	12(%ebp), %ebx		# filename
+	MOVL	8(%ebp), %ebx		# filename
 	MOVL	$5, %eax		# 5 == __NR_open
 	INT	$0x80
 	CMPL	$0, %eax
 	JL	error
-	MOVL	%eax, -8(%ebp) 		# fd_in
+	MOVL	12(%ebp), %edx
+	MOVL	%eax, (%edx) 		# Set file->fd
 
 	#  Find the size of the object file
 	SUBL	$0x58, %esp		# sizeof(struct stat) per [new] fstat
 	MOVL	%esp, %ecx
-	MOVL	-8(%ebp), %ebx		# fd_in
+	MOVL	(%edx), %ebx		# file->fd
 	MOVL	$108, %eax		# 108 == __NR_fstat
 	INT	$0x80
 	CMPL	$0, %eax
 	JL	error
 	ADDL	$0x14, %esp		# move to file size member }
-	POP	%edx			#                          } ADDL $0x58,
+	POP	%eax			#                          } ADDL $0x58,
 	ADDL	$0x40, %esp		# $0x58 - 0x14 - 4         }   %esp
-
-	PUSH	%edx			# stay on stack for munmap **
+	MOVL	12(%ebp), %edx
+	MOVL	%eax, 8(%edx) 		# Set file->sz
 
 	#  Map the input object file
 	XORL	%eax, %eax
 	PUSH	%eax			# 0 offset
-	PUSH	-8(%ebp)		# fd_in
+	PUSH	(%edx)			# file->fd
 	MOVL	$2, %ecx
 	PUSH	%ecx			# MAP_PRIVATE
 	MOVL	$1, %ecx
 	PUSH	%ecx			# PROT_READ
-	PUSH	%edx			# file len
+	PUSH	8(%edx)			# file->sz
 	PUSH	%eax			# NULL
 	MOVL	%esp, %ebx
 	MOVL	$90, %eax		# 90 == __NR_mmap
 	INT	$0x80
 	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
 	JA	error			# unsigned comparison handles above
-	MOVL	%eax, -4(%ebp)		# Save memory location
 	ADDL	$0x18, %esp		# 6x POP
+	MOVL	12(%ebp), %edx
+	MOVL	%eax, 4(%edx)		# Set file->ptr
 
-	#  Read the symbol table
-	PUSH	20(%ebp)		# sectid
-	PUSH	32(%ebp)		# relocs
-	PUSH	28(%ebp)		# syms
-	PUSH	16(%ebp)		# sectname
-	CALL	strlen
-	PUSH	%eax			# strlen(sectname)
-	PUSH	-12(%ebp)		# previous .texts written 
-	PUSH	-4(%ebp)
-	CALL	readsyms
-	ADDL	$0x1C, %esp		# POP x7
-	MOVL	%eax, %edi		# Ptr to .text sect header
+	#  Locate the .text section header
+	MOVL	$0x74, %eax		# 't'
+	PUSH	%eax
+	MOVL	$0x7865742E, %eax	# '.tex'
+	PUSH	%eax
+	PUSH	%esp
+	MOVL	$5, %eax		# strlen(".text")
+	PUSH	%eax
+	LEA	12(%edx), %eax
+	PUSH	%eax			# &file->shdr[0]
+	PUSH	4(%edx)			# file->ptr
+	CALL	findsect
+	ADDL	$16, %esp		# POP x4
+	MOVL	12(%ebp), %edx
+	MOVL	%eax, 36(%edx)		# file->sidx[0]
 
-	#  Write out the section 
-	MOVL	0x14(%edi), %edx	# sh_size member
-	MOVL	0x10(%edi), %ecx	# sh_offset member
-	ADDL	-4(%ebp), %ecx		# data
-	MOVL	8(%ebp), %ebx		# fd
-	MOVL	$4, %eax   		# 4 == __NR_write
-	INT	$0x80
-	CMPL	0x14(%edi), %eax
-	JNE	error
-	ADDL	%eax, -12(%ebp)		# Bytes written in .text
+	#  Locate the .rel.text section header
+	MOVL	$0x6C65722E, %eax	# '.rel'
+	PUSH	%eax
+	PUSH	%esp
+	MOVL	$9, %eax		# strlen(".rel.text")
+	PUSH	%eax
+	LEA	20(%edx), %eax
+	PUSH	%eax			# &file->relshdr[0]
+	PUSH	4(%edx)			# file->ptr
+	CALL	findsect
+	ADDL	$28, %esp		# POP x7
+
+	#  Locate the .data section header
+	MOVL	$0x61, %eax		# 'a'
+	PUSH	%eax
+	MOVL	$0x7461642E, %eax	# '.dat'
+	PUSH	%eax
+	PUSH	%esp
+	MOVL	$5, %eax		# strlen(".data")
+	PUSH	%eax
+	MOVL	12(%ebp), %edx
+	LEA	16(%edx), %eax
+	PUSH	%eax			# &file->shdr[1]
+	PUSH	4(%edx)			# file->ptr
+	CALL	findsect
+	ADDL	$16, %esp		# POP x4
+	MOVL	12(%ebp), %edx
+	MOVL	%eax, 40(%edx)		# file->sidx[1]
+
+	#  Locate the .rel.data section header
+	MOVL	$0x6C65722E, %eax	# '.rel'
+	PUSH	%eax
+	PUSH	%esp
+	MOVL	$9, %eax		# strlen(".rel.data")
+	PUSH	%eax
+	LEA	24(%edx), %eax
+	PUSH	%eax			# &file->relshdr[1]
+	PUSH	4(%edx)			# file->ptr
+	CALL	findsect
+	ADDL	$28, %esp		# POP x7
+
+	#  Locate the .symtab section header
+	MOVL	$0x626174, %eax		# 'tab'
+	PUSH	%eax
+	MOVL	$0x6D79732E, %eax	# '.sym'
+	PUSH	%eax
+	PUSH	%esp			# ptr to string
+	MOVL	$7, %eax		# strlen(".symtab")
+	PUSH	%eax
+	MOVL	12(%ebp), %edx
+	LEA	28(%edx), %eax
+	PUSH	%eax			# file->symhdr
+	PUSH	4(%edx)			# file->ptr
+	CALL	findsect
+	ADDL	$20, %esp		# POP x5
+
+	#  Locate the .strtab section header
+	MOVL	$0x7274732E, %eax	# '.str'
+	PUSH	%eax
+	PUSH	%esp			# ptr to string
+	MOVL	$7, %eax		# strlen(".symtab")
+	PUSH	%eax
+	MOVL	12(%ebp), %edx
+	LEA	32(%edx), %eax
+	PUSH	%eax			# file->strhdr
+	PUSH	4(%edx)			# file->ptr
+	CALL	findsect
+	ADDL	$24, %esp		# POP x6
+
+	POP	%ebx
+	POP	%ebp
+	RET
+	
+
+####	#  Function:  void closeelf( elffile* file );
+closeelf:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
 
 	#  Unmap and close the input file
-	POP	%ecx			# file len from way above **
-	MOVL	-4(%ebp), %ebx
-	MOVL	$91, %eax		# __NR_munmap == 91
-	INT	$0x80
-	MOVL	-8(%ebp), %ebx		# fd_in
-	MOVL	$6, %eax		# __NR_close == 6
+	MOVL	8(%ebp), %edx
+	MOVL	8(%edx), %ecx		# file->sz
+	MOVL	4(%edx), %ebx		# file->ptr
+	MOVL	$91, %eax		# 91 == __NR_munmap
 	INT	$0x80
 
-	POP	%edi
+	MOVL	8(%ebp), %edx
+	MOVL	(%edx), %ebx		# file->fd
+	MOVL	$6, %eax		# 6 == __NR_close
+	INT	$0x80
+
 	POP	%ebx
+	POP	%ebp
+	RET
 
-	PUSH	8(%ebp)
-	PUSH	36(%ebp)
-	PUSH	-12(%ebp)
+
+####	#  Function: int writesect( int sectid, int pad_char, int nfiles,
+	#                           elffile* files, int fd_out );
+writesect:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	#  Loop over input files
+	XORL	%eax, %eax
+	PUSH	%eax			# loop variable	-8(%ebp)
+.L16:
+	MOVL	-8(%ebp), %eax
+	CMPL	16(%ebp), %eax
+	JGE	.L17
+
+	#  Find elffiles[argn]
+	MOVL	$44, %ecx		# %eax *= sizeof(elffile)
+	MULL	%ecx
+	ADDL	20(%ebp), %eax		# += &elffiles[0]  =>  %eax
+	PUSH	%eax			# -12(%ebp)
+
+	#  Locate the correct header
+	MOVL	8(%ebp), %edx
+	MOVB	$2, %cl
+	SHLL	%edx			# 4*sectid
+	ADDL	%eax, %edx		# + file
+	MOVL	12(%edx), %eax		# &file->shdr[sectid]  => %eax
+
+	#  Write the section
+	MOVL	0x14(%eax), %edx	# sh_size member	=> size
+	MOVL	0x10(%eax), %ecx	# sh_offset member
+	POP	%eax			# retrieve file
+	PUSH	%edx			# save size
+	ADDL	4(%eax), %ecx		# + elf	(file->ptr)	=> ptr
+	MOVL	24(%ebp), %ebx		# fd_out		=> fd
+	MOVL	$4, %eax   		# 4 == __NR_write
+	INT	$0x80
+	POP	%ecx
+	CMPL	%ecx, %eax
+	JNE	error
+
+	#  And pad it
+	PUSH	24(%ebp)		# fd_out
+	PUSH	12(%ebp)		# padding
+	PUSH	%eax
 	CALL	writepad4
-	ADDL	-12(%ebp), %eax
+	ADDL	$12, %esp		# POP x3
 
-	LEAVE
+	INCL	-8(%ebp)
+	JMP	.L16
+.L17:
+	POP	%eax
+	POP	%ebx
+	POP	%ebp
 	RET
 
 
@@ -894,19 +1158,20 @@ section:
 	#      -48(%ebp)	int32 sect_size[2]
 	#      -52(%ebp)	int32 shdr_size   # -r ? 0x118 : 0xF0
 	#      -56(%ebp)	int32 shdr_plus_shstr_size # -r ? 0x148 : 0x120
+	#      -60(%ebp)	elffile* files
 	# 
 	#  where vector<T> is a { T* start, end, end_store; },
 	#  and label is a { char name[12]; int32 val, sect, type, strno; }.
 	#  In the SYMS vector, type is the st_info (i.e. binding and type) of 
 	#  the symbol; in the RELOCS vector, type is the relocation type.
+	#  In the SYMS vector, strno is set to the string offset in the output
+	#  file; in the RELOCS vector, strno is the byte offset into SYMS for
+	#  the symbol.
 
 	#  --- The main loop
 _start:
 	MOVL	%esp, %ebp
-	SUBL	$56, %esp	
-
-	XORL	%eax, %eax
-	MOVL	%eax, -12(%ebp)
+	SUBL	$60, %esp	
 
 	#  Non-partial linking
 	MOVL	$0xF0, -52(%ebp)	# sizeof shdr
@@ -917,7 +1182,7 @@ _start:
 	JL	error
 
 	MOVL	$3, %eax		# argn of first input file
-	PUSH	%eax			# -60(%ebp)
+	PUSH	%eax			# -64(%ebp)
 
 	#  Check argv[1] is '-o' or '-r'
 	LEA	8(%ebp), %esi
@@ -934,7 +1199,7 @@ _start:
 
 	MOVL	$0x118, -52(%ebp)	# sizeof shdr
 	MOVL	$0x148, -56(%ebp)	# sizeof shdr + shstrtab
-	INCL	-60(%ebp)
+	INCL	-64(%ebp)
 
 	#  Check argv[2] is '-o'
 	LEA	12(%ebp), %esi
@@ -993,101 +1258,114 @@ _start:
 	ADDL	%ecx, %eax
 	MOVL	%eax, -32(%ebp)
 
-	#  Loop over input files for .text
-	PUSH	-60(%ebp)		# take a copy of the starting argn
-.L16:
-	POP	%eax
-	CMPL	0(%ebp), %eax
-	JGE	.L17
-	INCL	%eax
+	#  Allocate array of elffiles for input files
+	MOVL	0(%ebp), %eax
+	SUBL	$3, %eax		# => number .o files
+	MOVL	$44, %ecx		# sizeof(elffile)
 	PUSH	%eax
-	
-	#  The string literal ".text"
-	MOVL	$0x74, %eax		# 't'
-	PUSH	%eax
-	MOVL	$0x7865742E, %eax	# '.tex'
-	PUSH	%eax
-	MOVL	%esp, %ecx
+	CALL	malloc
+	POP	%ecx
+	MOVL	%eax, -60(%ebp)
 
-	#  Read the symbol table
-	MOVL	$0x90909090, %eax	# 0x90 is NOP; pad .text with this
-	PUSH	%eax
-	LEA	-40(%ebp), %eax
-	PUSH	%eax			# &relocs
-	LEA	-28(%ebp), %eax
-	PUSH	%eax			# &syms
-	PUSH	-12(%ebp)		# offset
-	XORL	%edx, %edx
-	PUSH	%edx			# sectid (0 for .text)
-	PUSH	%ecx			# ptr to ".text"
-
-	#  Stage 2/3 as doesn't support  PUSH (%ebp,%eax,4)
-	MOVL	-64(%ebp), %eax
-	MOVL	$4, %ecx
-	MULL	%ecx
-	ADDL	%ebp, %eax
-	PUSH	(%eax)			# filename
-
-	PUSH	-16(%ebp)
-	CALL	section
-	MOVL	%eax, -12(%ebp)
-	ADDL	$40, %esp		# POP x10
-
-	JMP	.L16			# End loop over input files
-.L17:
-	MOVL	-12(%ebp), %eax
-	MOVL	%eax, -48(%ebp)
-	MOVL	$0, -12(%ebp)
-
-	#  Loop over input files for .data
-	#  The original argn is still at the top of the stack
+	#  Loop opening input files and reading symbols
+	XORL	%eax, %eax
+	MOVL	%eax, -48(%ebp)		# set write counter to zero
+	PUSH	-64(%ebp)		# copy of the starting argn: -68(%ebp)
 .L16a:
 	POP	%eax
 	CMPL	0(%ebp), %eax
 	JGE	.L17a
-	INCL	%eax
 	PUSH	%eax
-	
-	#  The string literal ".data"
-	MOVL	$0x61, %eax		# 'a'
-	PUSH	%eax
-	MOVL	$0x7461642E, %eax	# '.dat'
-	PUSH	%eax
-	MOVL	%esp, %ecx
 
-	#  Read the symbol table
-	XORL	%eax, %eax		# Pad with '\0' in .data
-	PUSH	%eax
+	#  Find elffiles[argn]
+	MOVL	-68(%ebp), %eax		# argn
+	SUBL	-64(%ebp), %eax		# first argn
+	MOVL	$44, %ecx		# *= sizeof(elffile)
+	MULL	%ecx
+	ADDL	-60(%ebp), %eax		# += &elffiles[0]
+	MOVL	%eax, %edx
+	PUSH	%edx
+
+	#  Open the input file	
+	MOVL	-68(%ebp), %eax
+	INCL	%eax
+	MOVL	$4, %ecx		# }  Stage 2/3 does not support
+	MULL	%ecx			# }  PUSH (%ebp,%eax,4)
+	ADDL	%ebp, %eax		# }
+	PUSH	(%eax)			# } filename
+	CALL	openelf
+	POP	%eax
+
+	#  Read the symbols
+	POP	%edx
 	LEA	-40(%ebp), %eax
 	PUSH	%eax			# &relocs
 	LEA	-28(%ebp), %eax
 	PUSH	%eax			# &syms
-	PUSH	-12(%ebp)		# offset
-	XORL	%edx, %edx
-	INCL	%edx
-	PUSH	%edx			# sectid (1 for .data)
-	PUSH	%ecx			# ptr to ".data"
+	LEA	-48(%ebp), %eax
+	PUSH	%eax			# &offsets[0]
+	PUSH	%edx
+	CALL	doreadsyms
+	ADDL	$16, %esp		# POP x4
 
-	#  Stage 2/3 as doesn't support  PUSH (%ebp,%eax,4)
-	MOVL	-60(%ebp), %eax
-	MOVL	$4, %ecx
-	MULL	%ecx
-	ADDL	%ebp, %eax
-	PUSH	(%eax)			# filename
-
-	PUSH	-16(%ebp)
-	CALL	section
-	MOVL	%eax, -12(%ebp)
-	ADDL	$40, %esp		# POP x10
-
+	INCL	-68(%ebp)
 	JMP	.L16a			# End loop over input files
 .L17a:
-	MOVL	-12(%ebp), %eax
-	MOVL	%eax, -44(%ebp)
-	MOVL	-48(%ebp), %eax
-	ADDL	%eax, -12(%ebp)
+	MOVL	-44(%ebp), %eax
+	ADDL	-48(%ebp), %eax
+	MOVL	%eax, -12(%ebp)
 
-	#  Locate the section headers
+	#  Prepare to write the .text and .data sections
+	PUSH	-16(%ebp)		# fd_out
+	PUSH	-60(%ebp)		# &elffiles[0]
+	MOVL	0(%ebp), %eax
+	SUBL	-64(%ebp), %eax
+	PUSH	%eax			# number of input files
+
+	#  Write .text
+	MOVL	$0x90909090, %eax	# 0x90 is NOP; pad .text with this
+	PUSH	%eax
+	XORL	%eax, %eax		# sectid for .text is 0
+	PUSH	%eax
+	CALL	writesect
+	POP	%eax
+	POP	%eax
+
+	#  Write .data
+	XORL	%eax, %eax		# Pad with '\0' in .data
+	PUSH	%eax
+	INCL	%eax			# sectid for .data is 1
+	PUSH	%eax
+	CALL	writesect
+	ADDL	$20, %esp		# POP x5
+
+	#  Loop closing input files
+	PUSH	-64(%ebp)		# copy of the starting argn: -68(%ebp)
+.L16c:
+	POP	%eax
+	CMPL	0(%ebp), %eax
+	JGE	.L17c
+	PUSH	%eax
+	
+	#  Find elffiles[argn]
+	MOVL	-68(%ebp), %eax		# argn
+	SUBL	-64(%ebp), %eax		# first argn
+	MOVL	$44, %ecx		# *= sizeof(elffile)
+	MULL	%ecx
+	ADDL	-60(%ebp), %eax		# += &elffiles[0]
+
+	PUSH	%eax
+	CALL	closeelf
+	POP	%eax
+
+	INCL	-68(%ebp)
+	JMP	.L16c
+.L17c:
+	POP	%eax			# remove -64(%ebp)
+	CALL	free			# unallocate elffiles
+	POP	%eax			# remove -60(%ebp)
+
+	#  Locate the section headers we want to write
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
 	CALL	.L5
 .L5:
@@ -1131,7 +1409,7 @@ _start:
 	MOVL	-28(%ebp), %edi		# syms.start
 	SUBL	$28, %edi		# start at labels - 1;  sizeof(label)
 .L28:
-	#  Loop: Generate the symbol table, initially without string pointers
+	#  Loop: Generate the string table
 	ADDL	$28, %edi		# sizeof(label)
 	CMPL	-24(%ebp), %edi		# syms.end
 	JGE	.L29			# finished
@@ -1235,8 +1513,12 @@ _start:
 	CALL	writedword
 	POP	%eax
 
-	#  Look up the symbol.  TODO: store symbol index instead
-	#  XXX This doesn't cope with multiple symbols of the same name
+	#  Has the symbol already been resolved?
+	MOVL	24(%edi), %eax		# rel->strno
+	CMPL	$-1, %eax
+	JNE	.L34
+
+	#  No.  So look up the symbol.
 	LEA	-28(%ebp), %ecx		# syms
 	PUSH	%ecx
 	PUSH	%edi			# rel->name
@@ -1244,21 +1526,25 @@ _start:
 	PUSH	%eax
 	CALL	findsym
 	ADDL	$12, %esp
+	SUBL	-28(%ebp), %eax		# - syms.start => byte offset into syms
+	MOVL	%eax, 24(%edi)		# save in rel->strno
 
-	#  Calculate and write the symbol offset
-	SUBL	-28(%ebp), %eax
+.L34:
+	#  Calculate and write the symbol offset.  rel->strno is in %eax
 	XORL	%edx, %edx
 	MOVL	$28, %ecx		# sizeof(label)
 	DIVL	%ecx			# acts on %edx:%eax
 	INCL	%eax			# for initial null symbol
 	MOVB	$8, %cl
-	SHLL	%eax			# <<= 8
+	SHLL	%eax			# <<= 8 (to construct r_info)
 	ADDL	20(%edi), %eax		# += rel->type
 	PUSH	%eax
 	CALL	writedword
 	POP	%eax
 
 	JMP	.L33
+	
+
 .L32:
 	POP	%eax			# fd_out **
 	
@@ -1396,13 +1682,24 @@ _start:
 	CMPL	-36(%ebp), %edi		# relocs.end
 	JGE	.L22			# No more relocations
 
-	#  Find the symbol value
+	#  Has the symbol already been resolved?
+	MOVL	24(%edi), %eax		# rel->strno
+	CMPL	$-1, %eax
+	JNE	.L35
+
+	#  No.  So look up the symbol.
+	LEA	-28(%ebp), %ecx		# syms
+	PUSH	%ecx
 	PUSH	%edi			# rel->name
 	CALL	strlen
 	PUSH	%eax
-	CALL	findsym		
-	POP	%ecx
-	POP	%ecx
+	CALL	findsym
+	ADDL	$12, %esp
+	SUBL	-28(%ebp), %eax		# - syms.start => byte offset into syms
+	MOVL	%eax, 24(%edi)		# save in rel->strno
+
+.L35:
+	ADDL	-28(%ebp), %eax		# - syms.start => byte offset into syms
 	PUSH	%eax
 
 	#  Do the relocation
@@ -1444,7 +1741,7 @@ _start:
 	ADDL	$0x74, %ecx		# Add ELF, etc.
 	ADDL	$0x89, %ecx		# Section hdrs, etc.
 	PUSH	%ecx			# size
-	MOVL	$91, %eax		# __NR_munmap == 91
+	MOVL	$91, %eax		# 91 == __NR_munmap
 	INT	$0x80
 
 	#  Set the permissions on the output.
@@ -1456,13 +1753,13 @@ _start:
 	JE	.L31
 	MOVL	$0x1A4, %ecx		# 0644
 .L31:
-	MOVL	$94, %eax		# __NR_fchmod = 94
+	MOVL	$94, %eax		# 94 == __NR_fchmod
 	INT	$0x80
 	TESTL	%eax, %eax
 	JNZ	error
 
 	MOVL	-16(%ebp), %ebx		# fd_out
-	MOVL	$6, %eax		# __NR_close == 6
+	MOVL	$6, %eax		# 6 == __NR_close
 	INT	$0x80
 
 	XORL	%ebx, %ebx

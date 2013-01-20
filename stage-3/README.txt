@@ -46,8 +46,8 @@ now as follows
 
 The .global (or equivalently, .globl) and .local directives take a
 symbol name as their single argument.  They specify the binding of 
-that symbol.  Global binding is currently the default, though that will
-be changed in a later stage.
+that symbol.  Global binding is currently the default (for compatibility
+with stage 2), though that will be changed in a later stage.
 
 The .int and .byte directives allow 32-bit and 8-bit integers to be
 included directly into the output.  Multiple integers, separated by 
