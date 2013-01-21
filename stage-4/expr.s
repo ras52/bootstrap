@@ -29,6 +29,9 @@ arg_list:
 
 .L40:
 	CALL	expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 	CALL	push
 	INCL	-4(%ebp)
 	MOVL	token, %eax
@@ -44,7 +47,7 @@ arg_list:
 
 ####	#  Function: 	type_t maybe_call();
 	#
-	#    maybe_call ::= identifier ( '(' params ')' )?
+	#    maybe-call ::= identifier ( '(' params ')' )?
 	#
 .local maybe_call
 maybe_call:
@@ -82,6 +85,7 @@ maybe_call:
 	XORL	%eax, %eax		# rvalue
 	JMP	.L39
 .L38:
+	#  We just have a symbol
 	LEA	-16(%ebp), %eax
 	PUSH	%eax
 	CALL	lookup_sym
@@ -105,7 +109,7 @@ maybe_call:
 
 ####	#  Function:	type_t primry_expr();
 	#
-	#    primry-expr ::= number | identifier | '(' expr ')'
+	#    primry-expr ::= number | maybe-call | '(' expr ')'
 	#
 .local primry_expr
 primry_expr:
@@ -183,6 +187,44 @@ make_rvalue:
 	RET
 
 
+####	#  Function:	type_t postfx_expr();
+	#
+	#    postfx-expr ::= primary-expr ( '[' expr '] )?
+	#
+.local postfx_expr
+postfx_expr:
+	PUSH	%ebp	
+	MOVL	%esp, %ebp
+
+	CALL	primry_expr
+	PUSH	%eax			# -4(%ebp) -- type_t
+.L48:
+	MOVL	token, %eax
+	CMPL	'[', %eax
+	JNE	.L49
+
+	CALL	make_rvalue
+	CALL	next
+	CALL	push
+	CALL	expr
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
+	CALL	pop_add
+	MOVL	$1, -4(%ebp)
+
+	MOVL	token, %eax
+	CMPL	']', %eax
+	CALL	next
+	JNE	_error
+
+	JMP	.L48
+.L49:
+	POP	%eax
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	type_t unary_expr();
 	#
 	#    unary-op   ::= '+' | '-' | '~' | '!' | '*' | '&' | '++' | '--'
@@ -211,7 +253,7 @@ unary_expr:
 	CMPL	'--', %eax
 	JE	.L47
 
-	CALL	primry_expr
+	CALL	postfx_expr
 	JMP	.L34
 
 .L30:	# +
