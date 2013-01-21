@@ -300,7 +300,8 @@ realloc:
 	RET
 
 
-	####	#  Function:	bool strneq( char* s1, char* s2, int n )
+####	#  Function:	bool strneq( char* s1, char* s2, int n )
+	#  Return 1 if the strings are equal in N bytes, and 0 otherwise
 strneq:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -313,6 +314,8 @@ strneq:
 	MOVL	16(%ebp), %ecx
 	REPE CMPSB
 	JNE	.L3
+	TESTL	%ecx, %ecx
+	JNZ	.L3
 	INCL	%eax
 .L3:
 	POP	%edi
@@ -860,7 +863,9 @@ findsym:
 	MOVL	%esp, %ebp
 	PUSH	%edi
 
-	PUSH	8(%ebp)			# strlen
+	MOVL	8(%ebp), %eax		# strlen
+	INCL	%eax			# add one to compare '\0#
+	PUSH	%eax
 	PUSH	12(%ebp)		# name
 
 	#  Scan the labels looking for NAME  
