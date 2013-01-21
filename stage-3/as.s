@@ -286,6 +286,7 @@ mnemonics:
 .hex	2E 74 65 78  74 00 00 00  00 00 00 00    FF 01 00 00    # .text
 .hex	2E 64 61 74  61 00 00 00  00 00 00 00    FF 01 01 00    # .data
 .hex	2E 69 6E 74  00 00 00 00  00 00 00 00    FF 02 20 00    # .int
+.hex	2E 6C 6F 6E  67 00 00 00  00 00 00 00    FF 02 20 00    # .long
 .hex	2E 62 79 74  65 00 00 00  00 00 00 00    FF 02 08 00    # .byte
 .hex	2E 73 74 72  69 6E 67 00  00 00 00 00    FF 03 00 00	# .string
 .hex	2E 7A 65 72  6F 00 00 00  00 00 00 00    FF 04 00 00	# .zero
@@ -313,7 +314,7 @@ elf_hdr:
 #	shdr-off--\  flags-----\    ehsz\
 .hex	34 00 00 00  00 00 00 00    34 00
 #	phsz\ phn-\  shsz\ shn-\    shst\
-.hex	00 00 00 00  28 00 07 00    03 00 
+.hex	00 00 00 00  28 00 08 00    03 00 
 
 # #0  Null section header.   start: 0x34; length: 0x28
 # c.f. Fig 4.10 in gABI 4.1
@@ -326,8 +327,8 @@ elf_hdr:
 #
 #	name-str--\  PROGBITS--\    EXEC|ALLOC\  load-addr-\
 .hex	1F 00 00 00  01 00 00 00    06 00 00 00  00 00 00 00
-#	offset----\  **size**--\    /-- Fig 4.12 in gABI --\   <-- 0x178
-.hex	78 01 00 00  00 00 00 00    00 00 00 00  00 00 00 00
+#	offset----\  **size**--\    /-- Fig 4.12 in gABI --\   <-- 0x1A4
+.hex	A4 01 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
 .hex	04 00 00 00  00 00 00 00
 
@@ -335,7 +336,7 @@ elf_hdr:
 # (Offsets 0x94, 0x98 need setting)  Y Y
 #
 #	name-str--\  PROGBITS--\    WRIT|ALLOC\  load-addr-\
-.hex	25 00 00 00  01 00 00 00    03 00 00 00  00 00 00 00
+.hex	29 00 00 00  01 00 00 00    03 00 00 00  00 00 00 00
 #	**offset**\  **size**--\    /-- Fig 4.12 in gABI --\ 
 .hex	00 00 00 00  00 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
@@ -346,7 +347,7 @@ elf_hdr:
 #	name-str--\  STRTAB----\    no-flags--\  load-addr-\ 
 .hex	01 00 00 00  03 00 00 00    00 00 00 00  00 00 00 00
 #	offset----\  size------\    /-- Fig 4.12 in gABI --\
-.hex	4C 01 00 00  2C 00 00 00    00 00 00 00  00 00 00 00
+.hex	74 01 00 00  30 00 00 00    00 00 00 00  00 00 00 00
 #	align-----\  entry-sz--\
 .hex	01 00 00 00  00 00 00 00
 
@@ -380,17 +381,27 @@ elf_hdr:
 #	align-----\  entry-sz--\
 .hex	04 00 00 00  08 00 00 00
 
-# The shared string table itself.  start 0x14C; length: 0x2C
+# #7 Text relocations.      start: 0x14C; length: 0x28
+# (Offsets 0x15C, 0x160 need setting)
+#
+#	name-str--\  SHT_REL---\    no-flags--\  load-addr-\
+.hex	25 00 00 00  09 00 00 00    00 00 00 00  00 00 00 00
+#	**offset**\  **size**--\    .symtab---\  .data-----\
+.hex	00 00 00 00  00 00 00 00    04 00 00 00  02 00 00 00
+#	align-----\  entry-sz--\
+.hex	04 00 00 00  08 00 00 00
+
+# The shared string table itself.  start 0x174; length: 0x30
 #
 .hex	00                                # NULL        Offset 0x00
 .hex	2E 73 68 73 74 72 74 61 62 00     # .shstrtab   Offset 0x01
 .hex	2E 73 79 6D 74 61 62 00           # .symtab     Offset 0x0B
 .hex	2E 73 74 72 74 61 62 00           # .strtab     Offset 0x13
 .hex	2E 72 65 6C 2E 74 65 78 74 00     # .rel.text   Offset 0x1B (0x1F)
-.hex	2E 64 61 74 61 00                 # .data       Offset 0x25 (0x29)
+.hex	2E 72 65 6C 2E 64 61 74 61 00     # .rel.data   Offset 0x25 (0x29)
 .hex	00
 
-# End of headers.   offset 0x178
+# End of headers.   offset 0x1A4
 
 
 # ########################################################################
@@ -1551,7 +1562,11 @@ labelref:
 	JE	.L11d
 	PUSH	%eax
 
-	#  Is it in the current section?
+	#  We can only avoid relocation here if they are PC-rel
+	CMPL	$2, 12(%ebp)		# 1 == R_386_PC32	
+	JNE	.L11i
+
+	#  Is it in the current section?  If so, we don't need a relocation
 	MOVL	-8(%ebp), %eax		# symbol number (from slot)
 	MOVL	$24, %ecx		# sizeof(label)
 	MULL	%ecx
@@ -1560,7 +1575,8 @@ labelref:
 	CMPL	16(%eax), %ecx
 	JE	.L11g
 
-	#  It's in a different section, so we need a relocation
+.L11i:
+	#  We need a relocation
 	POP 	%edx			# symbol value
 	POP 	%edx			# symbol slot number
 	CMPL	$-1, %edx
@@ -1954,6 +1970,7 @@ int_direct:
 	MOVL	%esp, %ebp
 	PUSH	%ebx
 	PUSH	%esi
+	PUSH	%edi
 
 	MOVL	12(%ebp), %esi
 	MOVL	8(%ebp), %edx		# opcode info
@@ -1969,7 +1986,42 @@ int_direct:
 	CALL	skiphws
 	CMPB	$0x27, %al		# '\''
 	JE	.L33a
+	CMPB	$0x2D, %cl		# '-'
+	JE	.L33d
+	PUSH	%eax
+	CALL	dchr
+	POP	%ecx
+	CMPB	$-1, %al
+	JNE	.L33d
 
+	#  We have a labelref
+	CALL	getone
+	MOVB	%al, -96(%esi)
+	PUSH	%esi
+	CALL	read_id
+	POP	%ecx
+	PUSH	(%eax)			# so we can unget it later
+
+	#  Calculate the string length
+	LEA	-96(%esi), %edx
+	SUBL	%edx, %eax
+
+	PUSH	%esi
+	MOVL	$1, %ecx		# 1 == R_386_32
+	PUSH	%ecx
+	PUSH	%eax			# strlen
+	CALL	labelref
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+	MOVL	%eax, %edi		# store label value across fn call
+
+	CALL	unread
+	POP	%ecx
+	MOVL	%edi, %eax
+
+	JMP	.L33b
+.L33d:
 	PUSH	%ebx
 	CALL	read_int
 	POP	%ecx
@@ -2006,6 +2058,7 @@ int_direct:
 	JMP	.L33	
 
 .L33c:
+	POP	%edi
 	POP	%esi
 	POP	%ebx
 	POP	%ebp
@@ -2450,15 +2503,15 @@ type_00:
 
 type_01:
 	#  Write the opcode byte(s).
-	PUSH	%ebp		# main_frame
-	PUSH	%edx		# opcode info
+	PUSH	%ebp			# main_frame
+	PUSH	%edx			# opcode info
 	CALL	write_oc12
 	POP	%edx
 
 	#  Skip ws and read immediate.
-	MOVL	$2, %eax	# 2 == R_386_32
+	MOVL	$2, %eax		# 2 == R_386_PC32 (e.g. for CALL)
 	PUSH	%eax
-	PUSH	%ebx		# bits
+	PUSH	%ebx			# bits
 	CALL	read_imm
 	POP	%ecx
 	POP	%ecx
@@ -3311,7 +3364,7 @@ _start:
 	#  Write the ELF header
 	#  Don't use writedptr because we don't want to update ofile->count
 	MOVL	%eax, %ebx
-	MOVL	$0x178, %edx		# Length of ELF header
+	MOVL	$0x1A4, %edx		# Length of ELF header
 	MOVL	$4, %eax		# 4 == __NR_write
 	INT	$0x80
 	CMPL	$0, %eax
@@ -3380,7 +3433,7 @@ _start:
 	MOVL	$0x94, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text size + padding
-	ADDL	$0x178, %eax		# size of ELF headers
+	ADDL	$0x1A4, %eax		# size of ELF headers
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -3434,7 +3487,7 @@ _start:
 	MOVL	$0xE4, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax        # .text size + .data size + padding
-	ADDL	$0x178, %eax            # ELF header size
+	ADDL	$0x1A4, %eax            # ELF header size
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -3495,7 +3548,7 @@ _start:
 	
 .L47:
 	#  Move the .LC symbol value into the relocation addend 
-	MOVL	$0x178, %eax		# size of ELF headers
+	MOVL	$0x1A4, %eax		# size of ELF headers
 	ADDL	(%edi), %eax		# rel->offset
 	PUSH	%eax
 	PUSH	12(%ebx)		# .LC symbol value
@@ -3587,7 +3640,7 @@ _start:
 	MOVL	$0x10C, %ecx
 	PUSH	%ecx
 	MOVL	-108(%ebp), %eax	# .text + .rel.text + padding + .symtab
-	ADDL	$0x178, %eax		# ELF header size
+	ADDL	$0x1A4, %eax		# ELF header size
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -3608,7 +3661,7 @@ _start:
 	# table entry; %ebx is the start of the string section
 	MOVL	-4(%ebp), %edi
 	SUBL	$24, %edi		# labels - 1   (sizeof(label))
-	ADDL	$0x188, %esi		# ELF header size (0x178) + null symbol
+	ADDL	$0x1B4, %esi		# ELF header size (0x1A4) + null symbol
 	MOVL	-108(%ebp), %ebx
 
 	# Null symbol's name
@@ -3668,7 +3721,7 @@ _start:
 	MOVL	$0x134, %eax
 	PUSH	%eax
 	MOVL	-108(%ebp), %eax 	# ofile->count
-	ADDL	$0x178, %eax		# Length of ELF header
+	ADDL	$0x1A4, %eax		# Length of ELF header
 	PUSH	%eax
 	CALL	writedwat
 	POP	%eax
@@ -3724,7 +3777,67 @@ _start:
 	POP	%eax
 	POP	%ecx
 
-POP	%ecx			# ofile -- from way above **
+	#  Offset 0x15C needs offset to start of .rel.data
+	MOVL	$0x15C, %eax
+	PUSH	%eax
+	MOVL	-108(%ebp), %eax 	# ofile->count
+	ADDL	$0x1A4, %eax		# Length of ELF header
+	PUSH	%eax
+	CALL	writedwat
+	POP	%eax
+	POP	%eax
+
+	#  Store the current file offset so we can determine section size
+	MOVL	-108(%ebp), %esi
+
+	#  Loop over the relocations write the .rel.text section
+	MOVL	-120(%ebp), %edi
+.L25b:
+	CMPL	-124(%ebp), %edi
+	JGE	.L26a			# finished
+
+	#  Check that it's in the .text section (sectid 1)
+	CMPL	$1, 8(%edi)
+	JNE	.L25c
+
+	#  Relocation offset
+	PUSH	(%edi)			# r_offset
+	CALL	writedword
+	POP	%eax
+
+	#  Get the symbol number
+	MOVL	4(%edi), %eax		# in-memory symbol number
+	XORL	%edx, %edx
+	MOVL	$24, %ecx		# sizeof(label)
+	MULL	%ecx			# acts on %edx:%eax
+	ADDL	-4(%ebp), %eax		# label_start
+	MOVL	0xC(%eax), %eax		# look up the value for the global no.
+
+	#  Compose and write the r_info field
+	MOVB	$8, %cl
+	SHLL	%eax			# by %cl
+	ADDL	12(%edi), %eax		# relocation type (e.g. R_386_PC32)
+	PUSH	%eax
+	CALL	writedword
+	POP	%eax
+
+.L25c:
+	ADDL	$16, %edi		# sizeof(rel)
+	JMP	.L25b
+
+.L26a:
+	# Offset 0x160 needs the size of the .rel.data table
+	# %esi is counter at start of .rel.data
+	MOVL	$0x160, %ecx
+	PUSH	%ecx
+	MOVL	-108(%ebp), %eax	# .text + .rel.text + .rel.data
+	SUBL	%esi, %eax		# .text + .rel.text
+	PUSH	%eax
+	CALL	writedwat
+	POP	%eax
+	POP	%ecx
+
+	POP	%ecx			# ofile -- from way above **
 
 	XORL	%ebx, %ebx
 	JMP	success

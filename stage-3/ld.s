@@ -113,7 +113,17 @@ sect_hdr:
 #	align-----\  entry-sz--\
 .hex	04 00 00 00  08 00 00 00
 
-# end of sections (inc .rel section) 0x118
+# #7 Text relocations.      start: 0x118; length: 0x28
+# (Offsets 0x128, 0x12C need setting)
+#
+#	name-str--\  SHT_REL---\    no-flags--\  load-addr-\
+.hex	0B 00 00 00  09 00 00 00    00 00 00 00  00 00 00 00
+#	**offset**\  **size**--\    .symtab---\  .text-----\
+.hex	00 00 00 00  00 00 00 00    04 00 00 00  02 00 00 00
+#	align-----\  entry-sz--\
+.hex	04 00 00 00  08 00 00 00
+
+# end of sections inc .rel.XXX sections 0x140 (or 0xF0 without .rel.XXX sects)
 
 shstrtab:
 # The shared string table itself.  start +0xF0; length: 0x30
@@ -126,7 +136,7 @@ shstrtab:
 .hex	2E 73 74 72 74 61 62 00        # .strtab    Offset 0x27
 .hex	00			       # padding to 4-bit boundary
 
-# End of end headers.   offset 0x118 (0x148)
+# End of end headers.   offset 0x120 (0x170)
 
 
 # ########################################################################
@@ -1156,9 +1166,12 @@ writesect:
 	#      -28(%ebp)	vector<label> syms
 	#      -40(%ebp)	vector<label> relocs
 	#      -48(%ebp)	int32 sect_size[2]
-	#      -52(%ebp)	int32 shdr_size   # -r ? 0x118 : 0xF0
-	#      -56(%ebp)	int32 shdr_plus_shstr_size # -r ? 0x148 : 0x120
+	#      -52(%ebp)	int32 shdr_size   # -r ? 0x140 : 0xF0
+	#      -56(%ebp)	int32 shdr_plus_shstr_size # -r ? 0x170 : 0x120
 	#      -60(%ebp)	elffile* files
+	#
+	#  ... later on, 
+	#      -60(%ebp)	int32 strtabsz
 	# 
 	#  where vector<T> is a { T* start, end, end_store; },
 	#  and label is a { char name[12]; int32 val, sect, type, strno; }.
@@ -1197,8 +1210,8 @@ _start:
 	CMPB	$0x0, 2(%eax)		# '\0'
 	JNE	error
 
-	MOVL	$0x118, -52(%ebp)	# sizeof shdr
-	MOVL	$0x148, -56(%ebp)	# sizeof shdr + shstrtab
+	MOVL	$0x140, -52(%ebp)	# sizeof shdr
+	MOVL	$0x170, -56(%ebp)	# sizeof shdr + shstrtab
 	INCL	-64(%ebp)
 
 	#  Check argv[2] is '-o'
@@ -1396,9 +1409,14 @@ _start:
 	CMPL	$0x30, %eax
 	JL	error
 
-	#  Write the string table, starting with a null character
+	#  Set up some new counters
 	XORL	%eax, %eax
-	PUSH	%eax			# -60(%ebp), will be used as .strtab sz
+	PUSH	%eax			# -60(%ebp), for .strtab sz
+	PUSH	%eax			# -64(%ebp), for .strtab sz
+	PUSH	%eax			# -68(%ebp), for .rel.text sz
+	PUSH	%eax			# -72(%ebp), fro .rel.data sz
+
+	#  Write the string table, starting with a null character
 	MOVL	%esp, %eax		# ptr to '\0'
 	PUSH	-16(%ebp)		# fd_out  **
 	PUSH	%eax
@@ -1434,13 +1452,13 @@ _start:
 	ADDL	%eax, -60(%ebp)
 
 	#  Write Null symbol (per gABI-4.1, Fig 4-18)
-	XORL	%eax, %eax		# 0 -- placeholder for string
 	PUSH	%eax
 	CALL	writedword
 	CALL	writedword	
 	CALL	writedword	
 	CALL	writedword	
 	POP	%eax
+	ADDL	$16, -64(%ebp)
 
 	#  Write .symtab section
 	MOVL	-28(%ebp), %edi		# syms.start
@@ -1494,6 +1512,7 @@ _start:
 	CALL	writedword		# st_info, st_other, st_shndx
 	POP	%eax
 
+	ADDL	$16, -64(%ebp)
 	JMP	.L24
 .L25:
 	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
@@ -1506,7 +1525,11 @@ _start:
 	#  Loop: Generate the relocation table
 	ADDL	$28, %edi		# sizeof(label)
 	CMPL	-36(%ebp), %edi		# syms.end
-	JGE	.L32			# finished
+	JGE	.L32a			# finished
+
+	#  Continue unless it's a .text (sectid 0) relocation
+	CMPL	$0, 16(%edi)		# rel->sect
+	JNE	.L33
 
 	#  Write r_offset
 	PUSH	12(%edi)		# rel->val
@@ -1542,7 +1565,60 @@ _start:
 	CALL	writedword
 	POP	%eax
 
-	JMP	.L33
+	ADDL	$8, -68(%ebp)		# .rel.text sz += sizeof(Elf_Rel)
+	JMP	.L33			# end loop over .rel.text
+	
+
+.L32a:
+	#  Write .rel.data section
+	MOVL	-40(%ebp), %edi		# relocs.start
+	SUBL	$28, %edi		# start at labels - 1;  sizeof(label)
+.L33a:
+	#  Loop: Generate the relocation table
+	ADDL	$28, %edi		# sizeof(label)
+	CMPL	-36(%ebp), %edi		# syms.end
+	JGE	.L32			# finished
+
+	#  Continue unless it's a .data (sectid 1) relocation
+	CMPL	$1, 16(%edi)		# rel->sect
+	JNE	.L33a
+
+	#  Write r_offset
+	PUSH	12(%edi)		# rel->val
+	CALL	writedword
+	POP	%eax
+
+	#  Has the symbol already been resolved?
+	MOVL	24(%edi), %eax		# rel->strno
+	CMPL	$-1, %eax
+	JNE	.L34a
+
+	#  No.  So look up the symbol.
+	LEA	-28(%ebp), %ecx		# syms
+	PUSH	%ecx
+	PUSH	%edi			# rel->name
+	CALL	strlen
+	PUSH	%eax
+	CALL	findsym
+	ADDL	$12, %esp
+	SUBL	-28(%ebp), %eax		# - syms.start => byte offset into syms
+	MOVL	%eax, 24(%edi)		# save in rel->strno
+
+.L34a:
+	#  Calculate and write the symbol offset.  rel->strno is in %eax
+	XORL	%edx, %edx
+	MOVL	$28, %ecx		# sizeof(label)
+	DIVL	%ecx			# acts on %edx:%eax
+	INCL	%eax			# for initial null symbol
+	MOVB	$8, %cl
+	SHLL	%eax			# <<= 8 (to construct r_info)
+	ADDL	20(%edi), %eax		# += rel->type
+	PUSH	%eax
+	CALL	writedword
+	POP	%eax
+
+	ADDL	$8, -72(%ebp)		# .rel.text sz += sizeof(Elf_Rel)
+	JMP	.L33a			# end loop over .rel.text
 	
 
 .L32:
@@ -1573,7 +1649,7 @@ _start:
 	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
 	JE	.L25a
 	MOVB	$1, 0x10(%ebx)		# .o
-	MOVB	$7, 0x30(%ebx)		# shnum
+	MOVB	$8, 0x30(%ebx)		# shnum
 
 .L25a:
 	#  Tell the program header the .text size
@@ -1613,41 +1689,30 @@ _start:
 	ADDL	-52(%ebp), %eax		# section hdrs size
 	MOVL	%eax, 0x88(%esi)	# .shstrtab offset
 	ADDL	-56(%ebp), %edx		# += sizeof of section headers etc
+
 	MOVL	%edx, 0xD8(%esi)	# .strtab offset
 	MOVL	-60(%ebp), %eax
 	MOVL	%eax, 0xDC(%esi)	# .strtab size
 	ADDL	%eax, %edx		# += size of .strtab section
-	MOVL	%edx, 0xB0(%esi)
 
-	#  .symtab section head needs size, which we need to calculate
-	PUSH	%edx
-	MOVL	-24(%ebp), %eax
-	SUBL	-28(%ebp), %eax
-	XORL	%edx, %edx
-	MOVL	$28, %ecx		# sizeof(label)
-	DIVL	%ecx			# acts on %edx:%eax
-	INCL	%eax			# initial NULL symbol
-	MOVL	$16, %ecx		# sizeof Elf32_Sym
-	MULL	%ecx			# %eax now contains .symtab size
-	POP	%edx
+	MOVL	%edx, 0xB0(%esi)
+	MOVL	-64(%ebp), %eax		# .symtab size
 	MOVL	%eax, 0xB4(%esi)
+	ADDL	%eax, %edx		# += size of .symtab section
 
 	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
 	JE	.L30a
 
-	#  .rel.text, only if partial linking
-	ADDL	%eax, %edx		# += size of .symtab section
+	#  .rel.text, .rel.data only if partial linking
 	MOVL	%edx, 0x100(%esi)
-	PUSH	%edx
-	MOVL	-36(%ebp), %eax
-	SUBL	-40(%ebp), %eax
-	XORL	%edx, %edx
-	MOVL	$28, %ecx		# sizeof(label)
-	DIVL	%ecx			# acts on %edx:%eax
-	MOVL	$8, %ecx		# sizeof Elf32_Rel
-	MULL	%ecx			# %eax now contains .symtab size
-	POP	%edx
+	MOVL	-68(%ebp), %eax		# .rel.text size
 	MOVL	%eax, 0x104(%esi)
+	ADDL	%eax, %edx		# += size of .rel.text section
+
+	MOVL	%edx, 0x128(%esi)
+	MOVL	-72(%ebp), %eax		# .rel.data size
+	MOVL	%eax, 0x12C(%esi)
+	ADDL	%eax, %edx		# += size of .rel.data section
 	JMP	.L30
 
 .L30a:

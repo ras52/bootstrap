@@ -38,11 +38,17 @@ assembler which supports a writable .data section.  References in the
 .text section to objects in the .data section are handled by way of
 R_386_32 relocations.  
 
+Objects in the .data can be initialised with the address of other 
+objects, e.g. by passing a symbol name to the argument of an .int 
+directive.   These are handled by R_386_32 relocations which are
+stored in a .rel.data section.
+
 The .text and .data directives are used to switch between sections, and
 several other new assembler directives are added.  The complete list is
 now as follows
 
-  .hex .int .byte .zero .string .text .data .global .globl .local
+  .text .data .global .globl .local .int .byte .long .hex
+  .zero .align .string
 
 The .global (or equivalently, .globl) and .local directives take a
 symbol name as their single argument.  They specify the binding of 
@@ -50,12 +56,17 @@ that symbol.  Global binding is currently the default (for compatibility
 with stage 2), though that will be changed in a later stage.
 
 The .int and .byte directives allow 32-bit and 8-bit integers to be
-included directly into the output.  Multiple integers, separated by 
-commas, can be included as arguments.  Unlike the existing .hex 
-directive (unchanged from stage 2) which only accepts hexadecimal octets 
-without prefixes, these support any form of literal.  The .zero 
-directive takes one argument and writes that number of zeros to the 
-output.  The .string directive allows for strings in double quotes with 
+included directly into the output; .long is a synonym for .int.  
+Multiple integers, separated by commas, can be included as arguments.  
+Unlike the existing .hex directive (unchanged from stage 2) which only 
+accepts hexadecimal octets without prefixes, these support any form of 
+literal.  The .zero directive takes one argument and writes that number 
+of zeros to the output.  The .align directive also writes a number of
+zeros to the output, but the argument to .align is the alignment 
+required.  So .align 16 outputs enough zero bytes to align the section 
+to the next 16-byte boundary.
+
+The .string directive allows for strings in double quotes with 
 a maximum length of 78 characters.  They are automatically null 
 terminated, and the following escapes understood:
 
