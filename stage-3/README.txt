@@ -114,3 +114,10 @@ If -r is specified, the linker partially links its input generating an
 object file as output.  Without it, the output is an executable.  At 
 present, even when partial linking, there cannot be any undefined 
 symbols in the output.
+
+
+TODO
+
+undefined symbols when partially linking (ld -r)
+?? case insensitive mnemonics, registers & hex numbers
+octal numbers
