@@ -880,26 +880,111 @@ assign_expr:
 	MOVL	%esp, %ebp
 
 	CALL	cond_expr
-	PUSH	%eax
-
+	MOVL	%eax, %ecx
 	MOVL	token, %eax
-	CMPL	'=', %eax
-	JNE	.L43
+	PUSH	%eax
+	PUSH	%ecx			# lvalue flag
 
+	MOVL	-4(%ebp), %eax
+	CMPL	'=', %eax
+	JE	.L50
+	CMPL	'+=', %eax
+	JE	.L51
+	CMPL	'-=', %eax
+	JE	.L51
+	CMPL	'*=', %eax
+	JE	.L51
+	CMPL	'/=', %eax
+	JE	.L51
+	CMPL	'%=', %eax
+	JE	.L51
+	CMPL	'&=', %eax
+	JE	.L51
+	CMPL	'|=', %eax
+	JE	.L51
+	CMPL	'^=', %eax
+	JE	.L51
+	CMPL	'<<=', %eax
+	JE	.L51
+	CMPL	'>>=', %eax
+	JE	.L51
+	JMP	.L43
+.L51:
+	#  Make an rvalue copy on the stack
+	CALL	push
+	CALL	make_rvalue
+.L50:
 	POP	%eax
 	TESTL	%eax, %eax
-	JZ	_error
+	JZ	_error			# Check the lhs is an lvalue
 	CALL	next
 	CALL	push
 	CALL	assign_expr
 	PUSH	%eax
 	CALL	make_rvalue
 	POP	%eax
+
+	MOVL	-4(%ebp), %eax
+	CMPL	'=', %eax
+	JE	.L52
+	CMPL	'+=', %eax
+	JE	.L53
+	CMPL	'-=', %eax
+	JE	.L54
+	CMPL	'*=', %eax
+	JE	.L55
+	CMPL	'/=', %eax
+	JE	.L56
+	CMPL	'%=', %eax
+	JE	.L57
+	CMPL	'&=', %eax
+	JE	.L58
+	CMPL	'|=', %eax
+	JE	.L59
+	CMPL	'^=', %eax
+	JE	.L60
+	CMPL	'<<=', %eax
+	JE	.L61
+	CMPL	'>>=', %eax
+	JE	.L62
+	JMP	_error
+.L53:
+	CALL	pop_add
+	JMP	.L52
+.L54:
+	CALL	pop_sub
+	JMP	.L52
+.L55:
+	CALL	pop_mult
+	JMP	.L52
+.L56:
+	CALL	pop_div
+	JMP	.L52
+.L57:
+	CALL	pop_mod
+	JMP	.L52
+.L58:
+	CALL	pop_bitand
+	JMP	.L52
+.L59:
+	CALL	pop_bitor
+	JMP	.L52
+.L60:
+	CALL	pop_bitxor
+	JMP	.L52
+.L61:
+	CALL	pop_lshift
+	JMP	.L52
+.L62:
+	CALL	pop_rshift
+	JMP	.L52
+.L52:
 	CALL	pop_assign
 	XORL	%eax, %eax
 	PUSH	%eax
 .L43:
 	POP	%eax
+	POP	%ecx
 	POP	%ebp
 	RET
 

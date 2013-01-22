@@ -286,7 +286,7 @@ get_word:
 .local keywords
 .align 12 
 keywords:
-	.string "auto"		.align 12	# TODO
+	.string "auto"		.align 12
 	.string "break"		.align 12
 	.string "case"		.align 12	# TODO
         .string "continue"      .align 12

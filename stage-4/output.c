@@ -35,7 +35,7 @@ fwrite( ptr, size, nmemb, stream ) {
         else if ( stream[8] == stream[12] && len >= stream[4] ) {
             auto n = write( stream[0], ptr, len );
             if ( n == -1 ) return written;
-            written = written + n;
+            written += n;
             if ( n != len ) return written;
             len = 0;
         }
@@ -45,9 +45,9 @@ fwrite( ptr, size, nmemb, stream ) {
             auto chunk = space < len ? space : len;
             memcpy( stream[8], ptr, chunk );
             stream[8] = stream[8] + chunk;
-            ptr = ptr + chunk;
-            len = len - chunk;
-            written = written + chunk;
+            ptr += chunk;
+            len -= chunk;
+            written += chunk;
 
             /* Flush the buffer now if it's full. */
             if ( chunk == space && fflush( stream ) == -1 )
@@ -107,19 +107,19 @@ vfprintf(stream, fmt, ap) {
         c = char(++fmt, 0);
         
         if (c == 'c') {
-            ap = ap + 4;
+            ap += 4;
             if ( fputc(*ap, stream) == -1 )
                 return -1;
             ++written;
         }
         else if (c == 's') {
-            ap = ap + 4;
+            ap += 4;
             if ( ( n = fputs(*ap, stream) ) == -1 )
                 return -1; 
-            written = written + n;
+            written += n;
         }
         else if (c == 'd') {
-            ap = ap + 4;
+            ap += 4;
             if (*ap == 0) { 
                 if ( fputc('0', stream) == -1 )
                     return -1;
@@ -141,12 +141,12 @@ vfprintf(stream, fmt, ap) {
                 while (i) {
                     --bufp;
                     lchar(bufp, 0, i % 10 + '0');
-                    i = i / 10;                
+                    i /= 10;
                 }
 
                 if ( ( n = fputs(bufp, stream) ) == -1 )
                     return -1; 
-                written = written + n;
+                written += n;
             }
         }
         else {

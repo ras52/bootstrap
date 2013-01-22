@@ -28,7 +28,7 @@ Summary of differences from B:
   * External declarations require '=' (i.e. 'i = 42' not 'i 42').
   * The '{' ... '}' around single-statement functions are required.
   * We support logical && and || complete with short circuiting.
-  * We support the 'continue' keyword.
+  * We support the 'continue' keyword from C.
   * We don't allow backspace (character 0x7F) in identifiers.
 
 Differences to C.
@@ -36,8 +36,9 @@ Differences to C.
   * We allow a dot (.) to occur in identifiers.
 
 TODO
-  Assignment operators OP=
+  C's for loops 
   Switch statements
   Goto and labels
   Function-scope static variables
   Arrays
+  Postfix ++ and --
