@@ -154,7 +154,7 @@ end_scope:
 	MOVL	%edx, %eax
 	MOVL	%eax, st_scope_id
 
-	#  Return number of variables removed
+	#  Return number of bytes of variables removed
 	MOVL	st_end, %eax
 	SUBL	%ecx, %eax
 	NEGL	%eax

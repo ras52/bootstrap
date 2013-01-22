@@ -36,7 +36,7 @@ Differences to C.
   * We allow a dot (.) to occur in identifiers.
 
 TODO
-  Operators [], =OP
+  Assignment operators OP=
   Switch statements
   Goto and labels
   Function-scope static variables

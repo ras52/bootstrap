@@ -221,6 +221,9 @@ auto_stmt:
 	JNE	.L14
 	CALL	next
 	CALL	assign_expr	
+	PUSH	%eax
+	CALL	make_rvalue
+	POP	%eax
 .L14:
 	CALL	push
 	MOVL	token, %eax
@@ -340,6 +343,9 @@ block:
 	PUSH	%eax
 	CALL	clear_stack
 	CALL	next
+	MOVL	$frame_size, %eax
+	POP	%ecx
+	ADDL	%ecx, (%eax)
 
 	LEAVE
 	RET

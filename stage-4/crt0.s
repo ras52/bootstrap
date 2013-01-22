@@ -31,6 +31,12 @@ _error:
 _exit:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
+
+	MOVL	stdout, %eax
+	PUSH	%eax
+	CALL	fflush
+	POP	%eax
+
 	MOVL	8(%ebp), %ebx
 .L1:
 	MOVL	$1, %eax

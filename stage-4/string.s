@@ -31,7 +31,6 @@ strcmp:
 	#  Note the order is chosen so we set CF correctly.
 	MOVL	12(%ebp), %edi
 	MOVL	8(%ebp), %esi
-	CLD
 .L1:
 	LODSB			# Loads (%esi) to %al
 	SCASB			# Compares (%edi) to %al
@@ -64,7 +63,6 @@ strchr:
 
 	MOVL	12(%ebp), %ecx
 	MOVL	8(%ebp), %esi
-	CLD
 .L4:
 	LODSB
 	CMPB	%cl, %al
@@ -94,12 +92,33 @@ strcpy:
 
 	MOVL	12(%ebp), %esi
 	MOVL	8(%ebp), %edi
-	CLD
 .L7:
 	LODSB
 	STOSB
 	CMPB	$0, %al
 	JNE	.L7
+  
+	MOVL	8(%ebp), %eax
+
+	POP	%edi
+	POP	%esi
+	POP	%ebp
+	RET
+
+
+####	#  Function:	int memcpy(char* dest, char const* str, size_t n);
+	#
+memcpy:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+	PUSH	%edi
+
+	MOVL	16(%ebp), %ecx
+	MOVL	12(%ebp), %esi
+	MOVL	8(%ebp), %edi
+
+	REP MOVSB
   
 	MOVL	8(%ebp), %eax
 

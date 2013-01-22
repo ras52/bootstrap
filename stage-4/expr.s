@@ -173,7 +173,7 @@ primry_expr:
 ####	#  Function:	void make_rvalue(type_t type);
 	#
 	#  Convert the accumulator (which is of type TYPE) into an rvalue
-.local make_rvalue
+.globl make_rvalue
 make_rvalue:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
@@ -215,8 +215,8 @@ postfx_expr:
 
 	MOVL	token, %eax
 	CMPL	']', %eax
-	CALL	next
 	JNE	_error
+	CALL	next
 
 	JMP	.L48
 .L49:
@@ -228,7 +228,7 @@ postfx_expr:
 ####	#  Function:	type_t unary_expr();
 	#
 	#    unary-op   ::= '+' | '-' | '~' | '!' | '*' | '&' | '++' | '--'
-	#    unary-expr ::= unary-op unary-expr | primry-expr
+	#    unary-expr ::= unary-op unary-expr | postfx-expr
 	#
 .local unary_expr
 unary_expr:
@@ -828,11 +828,11 @@ cond_expr:
 
 	CALL	make_rvalue
 	CALL	new_label
-	PUSH	%eax		# JMP -4(%ebp) if false
+	PUSH	%eax		# JMP -8(%ebp) if false
 	CALL	new_label
-	PUSH	%eax		# JMP -8(%ebp) to end
+	PUSH	%eax		# JMP -12(%ebp) to end
 
-	PUSH	-4(%ebp)
+	PUSH	-8(%ebp)
 	CALL	branch_ifz
 	POP	%eax
 	CALL	next
@@ -840,7 +840,7 @@ cond_expr:
 	PUSH	%eax
 	CALL	make_rvalue
 	POP	%eax
-	PUSH	-8(%ebp)
+	PUSH	-12(%ebp)
 	CALL	branch
 	POP	%eax
 
@@ -848,7 +848,7 @@ cond_expr:
 	CMPL	':', %eax
 	JNE	_error
 
-	PUSH	-4(%ebp)
+	PUSH	-8(%ebp)
 	CALL	local_label
 	POP	%eax
 	CALL	next
@@ -856,14 +856,17 @@ cond_expr:
 	PUSH	%eax
 	CALL	make_rvalue
 	POP	%eax
-	PUSH	-8(%ebp)
+	PUSH	-12(%ebp)
 	CALL	local_label
 	POP	%eax
-	MOVL	$0, -4(%ebp)
+
+	POP	%eax
+	POP	%eax
+	MOVL	$0, -4(%ebp)	# return 0: not an lvalue
 
 .L29:
 	POP	%eax
-	LEAVE
+	POP	%ebp
 	RET
 
 

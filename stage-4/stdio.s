@@ -11,21 +11,23 @@
 putstr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	PUSH	%ebx
 
 	PUSH	8(%ebp)
 	CALL	strlen
 	POP	%ecx
 
-	MOVL	%eax, %edx
-	MOVL	8(%ebp), %ecx
-	MOVL	$1, %ebx		# 1 == STDOUT_FILENO
-	MOVL	$4, %eax		# 4 == __NR_write
-	INT	$0x80
-	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
-	JA	_error			# unsigned comparison handles above
+	PUSH	%eax
+	PUSH	%ecx
+	MOVL	$1, %eax		# 1 == STDOUT_FILENO
+	PUSH	%eax
+	CALL	write
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
 
-	POP	%ebx
+	CMPL	%eax, %ecx
+	JNE	_error
+
 	POP	%ebp
 	RET
 
@@ -39,17 +41,21 @@ putstr:
 putchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	PUSH	%ebx
 
-	MOVL	$1, %edx
-	LEA	8(%ebp), %ecx
-	MOVL	$1, %ebx		# 1 == STDOUT_FILENO
-	MOVL	$4, %eax		# 4 == __NR_write
-	INT	$0x80
-	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
-	JA	_error			# unsigned comparison handles above
+	MOVL	$1, %eax
+	PUSH	%eax			# strlen
+	LEA	8(%ebp), %eax
+	PUSH	%eax			# &chr
+	MOVL	$1, %eax		# 1 == STDOUT_FILENO
+	PUSH	%eax
+	CALL	write
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
 
-	POP	%ebx
+	CMPL	%eax, %ecx
+	JNE	_error
+
 	POP	%ebp
 	RET
 
@@ -233,23 +239,38 @@ getchar:
 	JMP	.L13
 
 .L14:	#  Read from OS
-	PUSH	%ebx
 	XORL	%eax, %eax
 	PUSH	%eax			# A 4-byte buffer: %esp points here
-	MOVL	$1, %edx
 	MOVL	%esp, %ecx
-	MOVL	$0, %ebx		# 0 == STDOUT_FILENO
-	MOVL	$3, %eax		# 3 == __NR_read
-	INT	$0x80
-	MOVL	%eax, %ecx
-	POP	%eax
-	POP	%ebx
-	CMPL	$1, %ecx		# Successfully read one byte
+
+	MOVL	$1, %eax
+	PUSH	%eax			# strlen
+	PUSH	%ecx			# ptr to buffer
+	XORL	%eax, %eax
+	PUSH	%eax			# 0 == STDOUT_FILENO
+	CALL	read
+	MOVL	%eax, %edx
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx			# strlen == 1
+	POP	%eax			# character read
+
+	CMPL	%edx, %ecx		# Successfully read one byte
 	JE	.L13
-	CMPL	$0, %ecx		# Necessarily indicates end of file
+	CMPL	$0, %edx		# Necessarily indicates end of file
 	JNE	_error
 	MOVL	$-1, %eax		# -1 == EOF
 .L13:
 	POP	%ebp
 	RET
 
+####	#  Function: void fflush( void* dummy );
+	#  
+	#  ABI compatible with the C library fflush, so the crt0.s can flush
+	#  stdout before we have buffering on stdout.
+fflush:
+	RET
+
+.data:
+stdout:
+	.int 0
