@@ -9,9 +9,11 @@
 .text
 .globl char
 
-####	#  Function:  char char(char const* s, size_t n);
-	#  Returns the byte S[N], zero padded in a word
-char:
+####	#  Function:  char rchar(char const* s, size_t n);
+	#
+	#  B's char function, renamed to avoid forward compatibility problems 
+	#  with C's keyword.  Returns the byte S[N], zero padded in a word.
+rchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
@@ -24,7 +26,8 @@ char:
 	RET
 
 ####	#  Function: char lchar(char const* s, size_t n, char c);
-	#  Sets S[N] = C, and returns C, zero padded in a word
+	#  B's lchar function.  Sets S[N] = C, and returns C, zero padded in 
+	#  a word.
 lchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp

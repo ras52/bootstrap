@@ -92,19 +92,18 @@ putchar(c) {
 /* The C library vfprintf() */
 vfprintf(stream, fmt, ap) {
     auto written = 0, c, n;
-    while ( c = char(fmt, 0) ) {
+    while ( c = rchar(fmt++, 0) ) {
         /* Pass normal characters straight through.
          * TODO:  We could strchr for '%' and push through the whole lot
          * with fputs */
         if (c != '%') {
-            if ( fputc(*fmt, stream) == -1 )
+            if ( fputc(c, stream) == -1 )
                 return -1;
             ++written;
-            ++fmt;
             continue;
         }
 
-        c = char(++fmt, 0);
+        c = rchar(fmt++, 0);
         
         if (c == 'c') {
             ap += 4;
@@ -137,8 +136,8 @@ vfprintf(stream, fmt, ap) {
                 }
 
                 while (i) {
-                    lchar(buffer, b, i % 10 + '0');
-                    i /= 10; --b;
+                    lchar(buffer, b--, i % 10 + '0');
+                    i /= 10;
                 }
 
                 if ( ( n = fputs(buffer+b+1, stream) ) == -1 )
@@ -151,8 +150,6 @@ vfprintf(stream, fmt, ap) {
                 return -1;
             ++written;
         }
-
-        ++fmt;
     }
 
     return written;

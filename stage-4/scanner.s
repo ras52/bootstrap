@@ -99,8 +99,6 @@ isidchar1:
 	MOVL	$1, %eax
 	CMPB	'_', %cl
 	JE	.L2
-	CMPB	'.', %cl
-	JE	.L2
 	PUSH	%ecx
 	CALL	isalpha
 .L2:
@@ -120,8 +118,6 @@ isidchar:
 	MOVL	8(%ebp), %ecx
 	MOVL	$1, %eax
 	CMPB	'_', %cl
-	JE	.L3
-	CMPB	'.', %cl
 	JE	.L3
 	PUSH	%ecx
 	CALL	isalnum

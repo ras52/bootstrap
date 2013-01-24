@@ -209,12 +209,18 @@ postfx_expr:
 	MOVL	%esp, %ebp
 
 	CALL	primry_expr
-	PUSH	%eax			# -4(%ebp) -- type_t
+	PUSH	%eax			# -4(%ebp) -- type_t lval
 .L48:
 	MOVL	token, %eax
 	CMPL	'[', %eax
-	JNE	.L49
+	JE	.L49
+	CMPL	'++', %eax
+	JE	.L63
+	CMPL	'--', %eax
+	JE	.L64
+	JMP	.L65
 
+.L49:
 	CALL	make_rvalue
 	CALL	next
 	CALL	push
@@ -232,7 +238,24 @@ postfx_expr:
 	CALL	next
 
 	JMP	.L48
-.L49:
+.L63:
+	MOVL	-4(%ebp), %eax
+	TESTL	%eax, %eax		# check acting on an lvalue
+	JZ	_error
+	CALL	postfix_inc
+	MOVL	$0, -4(%ebp)		# result is not an lvalue
+	CALL	next
+	JMP	.L48
+.L64:
+	#  Check it's an lvalue
+	MOVL	-4(%ebp), %eax
+	TESTL	%eax, %eax		# check acting on an lvalue
+	JZ	_error
+	CALL	postfix_dec
+	MOVL	$0, -4(%ebp)		# result is not an lvalue
+	CALL	next
+	JMP	.L48
+.L65:
 	POP	%eax
 	POP	%ebp
 	RET
@@ -319,7 +342,7 @@ unary_expr:
 .L46:	# ++
 	CALL	next
 	CALL	unary_expr
-	TESTL	%eax, %eax
+	TESTL	%eax, %eax	# check it's an lvalue
 	JZ	_error
 	PUSH	%eax
 	CALL	increment
@@ -329,7 +352,7 @@ unary_expr:
 .L47:	# --	
 	CALL	next
 	CALL	unary_expr
-	TESTL	%eax, %eax
+	TESTL	%eax, %eax	# check it's an lvalue
 	JZ	_error
 	PUSH	%eax
 	CALL	decrement

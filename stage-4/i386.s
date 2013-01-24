@@ -549,7 +549,6 @@ new_clabel:
 .L4:
 	LEAVE
 	RET
-		
 
 ####	#  Function:	void call(char const* name, int nargs);
 	#  We've just pushed NARGS arguments.  Now call NAME.
@@ -638,7 +637,6 @@ new_clabel:
 	LEAVE
 	RET
 
-
 ####	#  Function:	void stk_assign(int offset);
 	#  Assign accumulator to an address on the stack
 .data .LC41:
@@ -650,6 +648,32 @@ new_clabel:
 	MOVL	$.LC41, %eax
 	PUSH	%eax
 	CALL	printf
+	LEAVE
+	RET
+
+####	#  Function:	void postfix_inc();
+	#  Increment the value pointed to by the accumulator.
+.data .LC42:
+.string	"\tMOVL\t%eax, %ecx\n\tMOVL\t(%eax), %eax\n\tINCL\t(%ecx)\n"
+.text postfix_inc:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$.LC42, %eax
+	PUSH	%eax
+	CALL	putstr
+	LEAVE
+	RET
+
+####	#  Function:	void postfix_dec();
+	#  Decrement the value pointed to by the accumulator.
+.data .LC43:
+.string	"\tMOVL\t%eax, %ecx\n\tMOVL\t(%eax), %eax\n\tDECL\t(%ecx)\n"
+.text postfix_dec:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$.LC43, %eax
+	PUSH	%eax
+	CALL	putstr
 	LEAVE
 	RET
 
