@@ -19,7 +19,10 @@ compiler.  Our single type is a 32-bit integer which also serves as an
 address.  Incrementing the value increments the underlying address by 
 one, as with a char* in C.  This means, that unlike in B, incrementing 
 an address  does not move to the next integer in an array: use ptr += 4 
-for that.
+for that.  However, subscripting with [] works with 32-bit word offsets,
+so that ptr[1] is equivalent to *(ptr + 4).  When types are introduced
+in a subsequent stage, this behaviour can be preserved because 
+subscripting an int (other than with a pointer) is not legal in C.
 
 Summary of differences from B:
 
@@ -40,5 +43,4 @@ TODO
   Switch statements
   Goto and labels
   Function-scope static variables
-  Arrays
   Postfix ++ and --

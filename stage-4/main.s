@@ -10,6 +10,10 @@ frame_size:
 
 ####	#  Function:	void int_decl(char* name);
 	#
+	#    constant ::= number | char
+	#
+	#    int_decl ::= name ( '=' constant )? ';'
+	#
 	#  Process an integer declaration for NAME.  The name has been read, 
 	#  and TOKEN advanced to the next token: either '=' or ';'
 .data .LC1:
@@ -59,7 +63,11 @@ int_decl:
 	RET
 
 
-####	#  Function:	void int_decl(char* name);
+####	#  Function:	void func_decl(char* name);
+	#
+	#    func-params ::= name ( ',' name )*
+	#
+	#    func-decl   ::= name '(' func-params? ')' block
 	#
 	#  Process a function declaration.  Current token is '('.
 .local func_decl
@@ -74,8 +82,13 @@ func_decl:
 	CALL	next
 	CMPL	')', %eax
 	JE	.L5
+
+	MOVL	$4, %ecx
+	PUSH	%ecx		# all parameters have size 4	-4(%ebp)
+	MOVL	$1, %ecx
+	PUSH	%ecx		# parameters are lvalues	-8(%ebp)
 	MOVL	$8, %ecx
-	PUSH	%ecx
+	PUSH	%ecx		# frame_off			-12(%ebp)
 
 .L5a:
 	CMPL	'id', %eax
@@ -87,7 +100,7 @@ func_decl:
 	POP	%eax
 	CALL	next
 
-	ADDL	$4, -4(%ebp)
+	ADDL	$4, -12(%ebp)
 	CMPL	',', %eax
 	JNE	.L5b
 	CALL	next
@@ -115,8 +128,10 @@ func_decl:
 	CALL	local_label
 	POP	%eax
 
-	CALL	epilog
+	#  Don't call clear_stack because this scope only contains 
+	#  function parameters, and the caller cleans up the stack.
 	CALL	end_scope
+	CALL	epilog
 
 	LEAVE
 	RET
@@ -125,8 +140,7 @@ func_decl:
 	#
 	#  Process an external declaration.
 	#
-	#    extern-decl ::=   name ( '=' number )? ';' 
-	#                    | name '(' ')' '{' '}'
+	#    ext-decl ::= func-decl | int-decl
 	#  
 	#  When called, TOKEN should be the name.
 .local ext_decl
@@ -167,6 +181,7 @@ ext_decl:
 	RET
 
 
+	#    program ::= ext-decl*
 main:
 	PUSH	%ebp
 	MOVL	%esp, %ebp

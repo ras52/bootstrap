@@ -51,7 +51,7 @@ brack_expr:
 
 ####	#  Function:	void if_stmt(int brk, int cont, int ret);
 	#
-	#    if-stmt ::= 'if' '(' expr ')' stmt
+	#    if-stmt ::= 'if' brack-expr stmt
 	# 
 	#  Current token is 'if'
 .local if_stmt
@@ -101,7 +101,7 @@ if_stmt:
 
 ####	#  Function:	void while_stmt(int brk, int cont, int ret);
 	#
-	#    while-stmt ::= 'while' '(' expr ')' stmt
+	#    while-stmt ::= 'while' brack-expr stmt
 	#
 	#  Current token is 'while'
 .local while_stmt
@@ -138,6 +138,8 @@ while_stmt:
 ####	#  Function:	void return_stmt(int brk, int cont, int ret);
 	#
 	#    return-stmt ::= 'return' expr? ';'
+	#
+	#  Current token is 'return'
 .local return_stmt
 return_stmt:
 	PUSH	%ebp
@@ -159,7 +161,9 @@ return_stmt:
 
 ####	#  Function:	void break_stmt(int brk, int cont, int ret);
 	#
-	#    return-stmt ::= 'break' ';'
+	#    break-stmt ::= 'break' ';'
+	#
+	#  Current token is 'break'
 .local break_stmt
 break_stmt:
 	PUSH	%ebp
@@ -176,7 +180,9 @@ break_stmt:
 
 ####	#  Function:	void cont_stmt(int brk, int cont, int ret);
 	#
-	#    return-stmt ::= 'continue' ';'
+	#    cont-stmt ::= 'continue' ';'
+	#
+	#  Current token is 'continue'
 .local cont_stmt
 cont_stmt:
 	PUSH	%ebp
@@ -191,32 +197,95 @@ cont_stmt:
 	RET
 
 
-####	#  Function:	void auto_stmt(int brk, int cont, int ret);
+####	#  Function:	void init_array(int dim, char const* var);
 	#
-	#    init-decl ::= name ( '=' assign-expr )?
-	#    auto-stmt ::= 'auto' init-decl ( ',' init-decl )* ';'
+	#    init-list  ::= assign-expr ( ',' assign-expr )*
 	#
-	#  Current token is 'auto'
-.local auto_stmt
-auto_stmt:
+	#    init-array ::= ( '=' '{' init-list '}' )?
+	#
+	#  Current token is '=' if an initialiser is present.
+.local init_array
+init_array:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
+	PUSH	%esi
 
-.L15:
-	CALL	next
-	CMPL	'id', %eax
-	JNE	_error
-
+	MOVL	8(%ebp), %edx
+	MOVB	$2, %cl
+	SHLL	%edx
+	PUSH	%edx
+	XORL	%eax, %eax
+	PUSH	%eax			# arrays are rvalues
 	MOVL	$frame_size, %eax
-	SUBL	$4, (%eax)
+	SUBL	%edx, (%eax)
 	PUSH	(%eax)
-	MOVL	$value, %eax
-	PUSH	%eax
+	PUSH	12(%ebp)
 	CALL	save_sym
 	POP	%ecx
 	POP	%ecx
+	POP	%ecx
 
+	#  size is still on stack
+	CALL	alloc_stack
+	POP	%edx			# size
+
+	MOVL	token, %eax
+	CMPL	'=', %eax
+	JNE	.L18
+
+	#  We have an initialisation list.
 	CALL	next
+	CMPL	'{', %eax
+	JNE	_error
+	MOVL	frame_size, %eax
+	MOVL	%eax, %esi
+
+.L19:
+	CALL	next
+	CALL	assign_expr	
+	PUSH	%esi
+	CALL	stk_assign
+	POP	%eax
+	ADDL	$4, %esi
+
+	MOVL	token, %eax
+	CMPL	',', %eax
+	JE	.L19
+	CMPL	'}', %eax
+	JNE	_error
+	CALL	next
+
+.L18:
+	POP	%esi
+	POP	%ebp
+	RET
+
+
+####	#  Function:	void init_int(char const* var);
+	#
+	#    init-int ::= ( '=' assign-expr )?
+	#
+	#  Current token is '=' if an initialiser is present.
+.local init_int
+init_int:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	MOVL	$4, %eax
+	PUSH	%eax			# sizeof(int)
+	MOVL	$1, %eax
+	PUSH	%eax			# auto ints are lvalues
+	MOVL	$frame_size, %eax
+	SUBL	$4, (%eax)
+	PUSH	(%eax)
+	PUSH	8(%ebp)
+	CALL	save_sym
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+
+	MOVL	token, %eax
 	CMPL	'=', %eax
 	JNE	.L14
 	CALL	next
@@ -226,12 +295,73 @@ auto_stmt:
 	POP	%eax
 .L14:
 	CALL	push
+	POP	%ebp
+	RET
+
+
+####	#  Function:	void auto_stmt(int brk, int cont, int ret);
+	#
+	#    init-decl ::= name ( init-int | '[' number ']' init-array )
+	#
+	#    auto-stmt ::= 'auto' init-decl ( ',' init-decl )* ';'
+	#
+	#  Current token is 'auto'
+.local auto_stmt
+auto_stmt:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	SUBL	$16, %esp		# temporary buffer
+	LEA	-16(%ebp), %eax
+	PUSH	%eax			# pointer to buffer
+.L15:
+	CALL	next
+	CMPL	'id', %eax
+	JNE	_error
+
+	#  Copy the identifier into the temporary buffer
+	MOVL	$value, %eax
+	PUSH	%eax
+	LEA	-16(%ebp), %eax
+	PUSH	%eax
+	CALL	strcpy
+	POP	%eax
+	POP	%eax
+
+	CALL	next
+	CMPL	'[', %eax
+	JNE	.L16
+
+	#  It's an array, and we require an array size
+	CALL	next
+	CMPL	'num', %eax
+	JNE	_error
+
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	atoi
+	POP	%ecx
+	PUSH	%eax			# store size
+
+	CALL	next
+	CMPL	']', %eax
+	JNE	_error
+	CALL	next
+	CALL	init_array
+	POP	%eax
+
+	JMP	.L17
+
+.L16:
+	CALL	init_int
+
+.L17:
 	MOVL	token, %eax
 	CMPL	',', %eax
 	JE	.L15
 	CALL	semicolon
 
-	POP	%ebp
+	LEAVE
 	RET	
 
 
@@ -256,6 +386,9 @@ expr_stmt:
 
 
 ####	#  Function:	void stmt(int brk, int cont, int ret);
+	#
+	#    stmt ::= if-stmt | while-stmt | return-stmt | break-stmt
+	#           | cont-stmt | auto-stmt | expr-stmt
 	#
 	#  Process a statement.  Current token is first token of statement.
 .local stmt
@@ -317,6 +450,8 @@ stmt:
 
 
 ####	#  Function:	void block(int brk, int cont, int ret);
+	#
+	#    block ::= '{' stmt* '}'
 	#
 	#  Process a block.  Current token is '{'.
 block:

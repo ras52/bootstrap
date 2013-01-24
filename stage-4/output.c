@@ -6,9 +6,9 @@
 
 /* The C library fflush() */
 fflush( stream ) {
-    auto count = stream[8] - stream[12];
+    auto count = stream[2] - stream[3];
     if ( count ) {
-        if ( write( stream[0], stream[12], count ) != count )
+        if ( write( stream[0], stream[3], count ) != count )
             return -1;
     }
     return 0;
@@ -20,19 +20,19 @@ fwrite( ptr, size, nmemb, stream ) {
     auto written = 0;
 
     while ( len ) {
-        auto space = stream[4] - (stream[8] - stream[12]);
+        auto space = stream[1] - (stream[2] - stream[3]);
 
         /* If the buffer is partially full, and after filling and emptying it,
          * it still won't have space for the string, then flush the buffer
          * immediately. */
-        if ( stream[8] != stream[12] && len >= space + stream[4] ) {
+        if ( stream[2] != stream[3] && len >= space + stream[1] ) {
             if ( fflush( stream ) == -1 )
                 return written;
         }
 
         /* If the buffer is empty and not big enough to hold the string,
          * then write the string out directly. */
-        else if ( stream[8] == stream[12] && len >= stream[4] ) {
+        else if ( stream[2] == stream[3] && len >= stream[1] ) {
             auto n = write( stream[0], ptr, len );
             if ( n == -1 ) return written;
             written += n;
@@ -43,8 +43,8 @@ fwrite( ptr, size, nmemb, stream ) {
         /* Otherwise append as much as possible to the buffer. */
         else {
             auto chunk = space < len ? space : len;
-            memcpy( stream[8], ptr, chunk );
-            stream[8] = stream[8] + chunk;
+            memcpy( stream[2], ptr, chunk );
+            stream[2] = stream[2] + chunk;
             ptr += chunk;
             len -= chunk;
             written += chunk;
@@ -127,11 +127,9 @@ vfprintf(stream, fmt, ap) {
             }
             else {
                 /* We don't currently support arrays. */
-                auto buf1, buf2, buf3, buf4;
-                auto bufp = &buf1 + 1;  /* end of buffer as stack grows down */
-                auto i = *ap;
+                auto buffer[4] = {0,0,0,0},  b = 14,  i = *ap;
 
-                if (i < 0) { 
+                if (i < 0) {
                     if ( fputc('-', stream) == -1 )
                         return -1;
                     ++written;
@@ -139,12 +137,11 @@ vfprintf(stream, fmt, ap) {
                 }
 
                 while (i) {
-                    --bufp;
-                    lchar(bufp, 0, i % 10 + '0');
-                    i /= 10;
+                    lchar(buffer, b, i % 10 + '0');
+                    i /= 10; --b;
                 }
 
-                if ( ( n = fputs(bufp, stream) ) == -1 )
+                if ( ( n = fputs(buffer+b+1, stream) ) == -1 )
                     return -1; 
                 written += n;
             }

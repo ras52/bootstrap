@@ -13,7 +13,7 @@
 
 ####	#  Function:	int arg_list();
 	#
-	#    expression ( ',' expression )*
+	#    params ::= expr ( ',' expr )*
 	#
 	#  Returns the number of arguments
 .local arg_list
@@ -47,14 +47,15 @@ arg_list:
 
 ####	#  Function: 	type_t maybe_call();
 	#
-	#    maybe-call ::= identifier ( '(' params ')' )?
+	#    maybe-call ::= name ( '(' params ')' )?
 	#
 .local maybe_call
 maybe_call:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
+
+	#  Create a temporary buffer and copy the identifier to it.
 	SUBL	$16, %esp
-	
 	MOVL	$value, %eax
 	PUSH	%eax
 	LEA	-16(%ebp), %eax
@@ -86,21 +87,32 @@ maybe_call:
 	JMP	.L39
 .L38:
 	#  We just have a symbol
+	PUSH	%eax			# slot for frame offset
+	PUSH	%esp			# &offset
 	LEA	-16(%ebp), %eax
 	PUSH	%eax
 	CALL	lookup_sym
-	TESTL	%eax, %eax
-	JZ	.L38a
 	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+	CMPL	$-1, %eax
+	JE	.L38a			# lookup_sym returns -1 if not found
+
 	PUSH	%eax
+	PUSH	%ecx			# frame offset
 	CALL	load_local
 	POP	%ecx
+	POP	%eax			# return lvalue flag
 	JMP	.L39
+
 .L38a:
+	#  Symbol not found, so leave it as a symbol for the linker to resolve
+	LEA	-16(%ebp), %eax
+	PUSH	%eax
 	CALL	load_var
 	POP	%eax
 	XORL	%eax, %eax
-	INCL	%eax			# lvalue
+	INCL	%eax			# It's an lvalue
 	
 .L39:
 	LEAVE
@@ -210,6 +222,7 @@ postfx_expr:
 	PUSH	%eax
 	CALL	make_rvalue
 	POP	%eax
+	CALL	conv_w2bo
 	CALL	pop_add
 	MOVL	$1, -4(%ebp)
 
@@ -872,7 +885,9 @@ cond_expr:
 
 ####	#  Function:	type_t assign_expr();
 	#
-	#    assign-op   ::= '='
+	#    assign-op   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%=' 
+	#                  | '&=' | '|=' | '^=' | '<<=' | '>>='
+	#
 	#    assign-expr ::= cond-expr ( assign-op assign-expr )?
 	#
 assign_expr:

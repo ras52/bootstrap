@@ -264,6 +264,7 @@ getchar:
 	POP	%ebp
 	RET
 
+
 ####	#  Function: void fflush( void* dummy );
 	#  
 	#  ABI compatible with the C library fflush, so the crt0.s can flush
@@ -274,3 +275,44 @@ fflush:
 .data:
 stdout:
 	.int 0
+
+
+####	#  Function: int atoi( char const* str );
+	#
+	#  Convert STR to an integer.  Returns undefined value on error.
+atoi:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+
+	XORL	%eax, %eax			# value
+	MOVL	8(%ebp), %esi			# ptr
+
+	#  Recurse to process a -ve sign
+	CMPB	'-', (%esi)
+	JNE	.L16
+	INCL	%esi
+	PUSH	%esi
+	CALL	atoi
+	POP	%edx
+	NEGL	%eax
+	JMP	.L17
+.L16:
+	XORL	%ecx, %ecx
+	MOVB	(%esi), %cl
+	SUBL	'0', %ecx
+	CMPL	'9', %ecx
+	JA	.L17			# unsigned, so everything else is > '9'
+
+	PUSH	%ecx
+	MOVL	$10, %ecx
+	MULL	%ecx
+	POP	%ecx
+	ADDL	%ecx, %eax
+
+	INCL	%esi
+	JMP	.L16	
+.L17:
+	POP	%esi
+	POP	%ebp
+	RET

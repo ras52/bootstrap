@@ -613,3 +613,44 @@ new_clabel:
 	POP	%esi
 	POP	%ebp
 	RET
+
+.data .LC39:
+.string	"\tMOVB\t$2, %cl\n\tSHLL\t%eax\n"
+.text conv_w2bo:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$.LC39, %eax
+	PUSH	%eax
+	CALL	putstr
+	LEAVE
+	RET
+
+####	#  Function:	void alloc_stack(int n_bytes);
+.data .LC40:
+.string "\tSUBL\t$%d, %%esp\n"
+.text alloc_stack:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	8(%ebp)
+	MOVL	$.LC40, %eax
+	PUSH	%eax
+	CALL	printf
+	LEAVE
+	RET
+
+
+####	#  Function:	void stk_assign(int offset);
+	#  Assign accumulator to an address on the stack
+.data .LC41:
+.string "\tMOVL\t%%eax,%d(%%ebp)\n"
+.text stk_assign:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	8(%ebp)
+	MOVL	$.LC41, %eax
+	PUSH	%eax
+	CALL	printf
+	LEAVE
+	RET
+
+

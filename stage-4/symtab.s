@@ -18,7 +18,8 @@ st_endstore:
 st_scope_id:
 	.int	0
 
-#  struct entry { char sym[12]; int32_t frame_off; int32_t scope_id; };
+#  struct entry { char sym[12]; int32_t frame_off; int32_t scope_id; 
+#                 type_t lval; type_t size; };
 
 .text
 
@@ -28,7 +29,7 @@ st_scope_id:
 init_symtab:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	MOVL	$1280, %ecx		# 64 * sizeof(entry)
+	MOVL	$1792, %ecx		# 64 * sizeof(entry)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
@@ -77,7 +78,8 @@ grow_symtab:
 	RET
 
 
-####	#  Function:	void save_sym( char const* name, int32_t frame_off );
+####	#  Function:	void save_sym( char const* name, int32_t frame_off,
+	#                              type_t lval, int32_t sym_size );
 	#
 	#  Save a local symbol.
 save_sym:
@@ -100,7 +102,11 @@ save_sym:
 	MOVL	%ecx, 12(%edx)	# save value
 	MOVL	st_scope_id, %eax
 	MOVL	%eax, 16(%edx)
-	ADDL	$20, %edx	# sizeof(entry)
+	MOVL	16(%ebp), %ecx
+	MOVL	%ecx, 20(%edx)	# lval flag
+	MOVL	20(%ebp), %ecx
+	MOVL	%ecx, 24(%edx)	# symbol size
+	ADDL	$28, %edx	# sizeof(entry)
 	MOVL	%edx, %eax
 	MOVL	%eax, st_end
 
@@ -131,42 +137,49 @@ end_scope:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
-	MOVL	st_scope_id, %eax
-	MOVL	%eax, %edx		# %edx  id
 	MOVL	st_end, %eax
 	MOVL	%eax, %ecx		# %ecx  end
-	MOVL	st_start, %eax		# %eax  ptr
-	SUBL	$20, %eax		# sizeof(entry)
+	MOVL	st_start, %eax
+	SUBL	$28, %eax		# sizeof(entry)a
+	MOVL	%eax, %edx		# %edx  ptr
 .L4:
-	ADDL	$20, %eax		# sizeof(entry)
-	CMPL	%ecx, %eax
+	#  Zero %eax in case we jump to the end where %eax is the scope size
+	XORL	%eax, %eax
+
+	ADDL	$28, %edx		# sizeof(entry)
+	CMPL	%ecx, %edx
 	JGE	.L5
 
-	CMPL	%edx, 16(%eax)
+	MOVL	st_scope_id, %eax
+	CMPL	%eax, 16(%edx)
 	JL	.L4
 
-	MOVL	%eax, %ecx
-	MOVL	st_end, %eax
-	XCHGL	%eax, %ecx
-	MOVL	%eax, st_end
-.L5:
-	DECL	%edx
-	MOVL	%edx, %eax
-	MOVL	%eax, st_scope_id
+	#  The symbol table is sorted by scope id, so as soon as we find
+	#  one symbol in the current scope, all later ones must be too.
 
-	#  Return number of bytes of variables removed
-	MOVL	st_end, %eax
-	SUBL	%ecx, %eax
-	NEGL	%eax
-	XORL	%edx, %edx
-	MOVL	$5, %ecx		# sizeof(entry)/4
-	IDIVL	%ecx
+	#  First, shrink the table
+	MOVL	%edx, %eax
+	MOVL	%eax, st_end
+
+	#  Then iterate over the remainder adding up the scope size
+	MOVL	24(%edx), %eax		# %edx is now scope size
+.L7:
+	ADDL	$28, %edx		# sizeof(entry)
+	CMPL	%ecx, %edx
+	JGE	.L5
+	ADDL	24(%edx), %eax
+	JMP	.L7
+.L5:
+	PUSH	%eax			# store frame size
+	MOVL	$st_scope_id, %eax
+	DECL	(%eax)
+	POP	%eax
 
 	POP	%ebp
 	RET
 
 
-####	#  Function:	int lookup_sym(char const* name);
+####	#  Function:	int lookup_sym(char const* name, int* off);
 	#
 	#  Return the frame offset of the symbol NAME, or 0 if it is 
 	#  not defined.  (0 is not a valid offset because (%ebp) is the 
@@ -182,9 +195,9 @@ lookup_sym:
 	MOVL	%eax, %edi
 	MOVL	st_end, %eax
 	MOVL	%eax, %esi
-	SUBL	$20, %edi	# sizeof(entry)
+	SUBL	$28, %edi	# sizeof(entry)
 .L2:
-	ADDL	$20, %edi	# sizeof(entry)
+	ADDL	$28, %edi	# sizeof(entry)
 	XORL	%eax, %eax
 	CMPL	%esi, %edi
 	JGE	.L3
@@ -193,10 +206,20 @@ lookup_sym:
 	POP	%ecx
 	TESTL	%eax, %eax
 	JNZ	.L2
-	MOVL	12(%edi), %eax
+	MOVL	20(%edi), %eax		# return lv flag
+	MOVL	12(%edi), %edx		# frame offset
+	JMP	.L6
 .L3:
-	POP	%ecx
+	#  Symbol not found
+	XORL	%eax, %eax
+	DECL	%eax			# return -1 if not found
+	XORL	%edx, %edx		# use 0 frame offset for error
+.L6:
+	# write *off
+	MOVL	12(%ebp), %ecx
+	MOVL	%edx, (%ecx)
 
+	POP	%ecx
 	POP	%esi
 	POP	%edi
 	POP	%ebp
