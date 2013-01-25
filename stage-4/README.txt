@@ -53,7 +53,7 @@ syscall per call to getchar() or putchar().  Similarly, malloc() is
 implemented as in stage 3, by sending each allocation request to the
 kernel as a mmap(MAP_ANON) call.  The resultant compiler, cc0, is used
 to compile an improved set of I/O functions that do buffering.  These
-are linked together with ld -r into a proto-C-library, lib.o.  There is
+are linked together with ld -r into a proto-C-library, libc.o.  There is
 also a trivial startup file, crt0.o, that implements _start() by calling 
 exit(main()).  We use these to relink the compiler against this to 
 produce a significantly faster compiler.

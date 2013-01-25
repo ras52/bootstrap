@@ -32,21 +32,21 @@ as ld:
 LIB0_OBJS = memory.o string.o ctype.o exit.o unistd.o
 CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 
-lib0.o:	ld $(LIB0_OBJS) stdio.o
-	ld -r -o lib0.o $(LIB0_OBJS) stdio.o
+libc0.o:	ld $(LIB0_OBJS) stdio.o
+	ld -r -o libc0.o $(LIB0_OBJS) stdio.o
 
-cc0:	ld lib0.o crt0.o $(CC_OBJS)
-	ld -o cc0 lib0.o crt0.o $(CC_OBJS)
+cc0:	ld libc0.o crt0.o $(CC_OBJS)
+	ld -o cc0 libc0.o crt0.o $(CC_OBJS)
 
 LIB1_OBJS = stdioobjs.o output.o input.o char.o
 
-lib.o:	ld $(LIB0_OBJS) $(LIB1_OBJS)
-	ld -r -o lib.o $(LIB0_OBJS) $(LIB1_OBJS)
+libc.o:	ld $(LIB0_OBJS) $(LIB1_OBJS)
+	ld -r -o libc.o $(LIB0_OBJS) $(LIB1_OBJS)
 
-cc:	ld lib.o crt0.o $(CC_OBJS)
-	ld -o cc lib.o crt0.o $(CC_OBJS)
+cc:	ld libc.o crt0.o $(CC_OBJS)
+	ld -o cc libc.o crt0.o $(CC_OBJS)
 
-.INTERMEDIATE:	$(CC_OBJS) $(LIB0_OBJS) $(LIB1_OBJS) stdio.o lib0.o cc0
+.INTERMEDIATE:	$(CC_OBJS) $(LIB0_OBJS) $(LIB1_OBJS) stdio.o libc0.o cc0
 
 check:	check-output check-input
 
@@ -65,8 +65,8 @@ check-input: cc as input.c input.o
 	$(RM) input2.c input2.o input2.s
 
 clean:
-	$(RM) -f as ld $(LIB0_OBJS) stdio.o lib0.o crt0.o 
-	$(RM) -f $(LIB1_OBJS) input.s output.s lib.o 
+	$(RM) -f as ld $(LIB0_OBJS) stdio.o libc0.o crt0.o 
+	$(RM) -f $(LIB1_OBJS) input.s output.s libc.o 
 	$(RM) -f $(CC_OBJS) cc0 cc
 	$(RM) -f output2.o output2.s input2.o input2.s
 

@@ -30,7 +30,7 @@ Stage 3 -- as & ld
   The assembler is rewritten in assembly language and is joined by a
   linker, which together allow for separate compilation.
 
-Stage 4 -- cc, crt0.o, lib.o
+Stage 4 -- cc, crt0.o, libc.o
 
   The project's first compiler is added at this stage.  Its input 
   language is a typeless subset of C similar to B.  We also build
