@@ -30,12 +30,11 @@ Stage 3 -- as & ld
   The assembler is rewritten in assembly language and is joined by a
   linker, which together allow for separate compilation.
 
-Stage 4 -- cc
+Stage 4 -- cc, crt0.o, lib.o
 
   The project's first compiler is added at this stage.  Its input 
-  language is a typeless language similar to B, except that it uses
-  byte addressing, and certain syntactic incompatibilities with C 
-  have been removed.
+  language is a typeless subset of C similar to B.  We also build
+  a startup file (crt0.o) and the start of a simple C library.
 
 
 The code in this project is copyright (C) Richard Smith, 2009-13.
