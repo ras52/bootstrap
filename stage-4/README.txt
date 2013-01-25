@@ -27,9 +27,10 @@ subscripting an int (other than with a pointer) is not legal in C.
 Summary of differences from B:
 
   * Compound assignment operators are spelt OP= instead of =OP.
-  * There are no relop assignment operators (e.g. =<).
+  * There are no relop assignment operators (e.g. =<, =>=, ===).
   * External declarations require '=' (i.e. 'i = 42' not 'i 42').
   * Arrays require a size (i.e. 'auto a[1] = {0}' not 'auto a[] = {0}').
+  * Arrays with too many intialisers do not expand to accommodate them.
   * The '{' ... '}' around single-statement functions are required.
   * We support logical && and || complete with short circuiting.
   * We support the 'continue' keyword from C.
@@ -38,8 +39,8 @@ Summary of differences from B:
 
 
 TODO
-  C's for loops 
   Switch statements
   Goto and labels
   Global-scope arrays
   Function-scope static variables
+  Function pointers

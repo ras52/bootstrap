@@ -10,13 +10,13 @@ fflush( stream ) {
     if ( count ) {
         if ( write( stream[0], stream[3], count ) != count )
             return -1;
+        stream[2] = stream[3];
     }
     return 0;
 }
 
-/* The C library fwrite() */
-fwrite( ptr, size, nmemb, stream ) {
-    auto len = size * nmemb;
+/* Implementation detail _fputsn() -- TODO declare this static */
+_fputsn( ptr, len, stream ) {
     auto written = 0;
 
     while ( len ) {
@@ -42,9 +42,10 @@ fwrite( ptr, size, nmemb, stream ) {
 
         /* Otherwise append as much as possible to the buffer. */
         else {
+if (space == 0) _exit(42);
             auto chunk = space < len ? space : len;
             memcpy( stream[2], ptr, chunk );
-            stream[2] = stream[2] + chunk;
+            stream[2] += chunk;
             ptr += chunk;
             len -= chunk;
             written += chunk;
@@ -58,39 +59,43 @@ fwrite( ptr, size, nmemb, stream ) {
     return written;
 }
 
+/* The C library fwrite() */
+fwrite( buf, size, nmem, stream ) {
+  return _fputsn( buf, size * nmem, stream ) / size; 
+}
 
 /* The C library fputs() */
-fputs(s, stream) {
-    return fwrite( s, 1, strlen(s), stream );
+fputs( s, stream ) {
+    return _fputsn( s, strlen(s), stream );
 }
 
 /* The B library putstr() -- unlike C's puts, it doesn't add a '\n' */
-putstr(s) {
+putstr( s ) {
     return fputs( s, stdout );
 }
 
 /* The C library puts() */
-puts(s) {
+puts( s ) {
     return putstr(s) + putchar('\n');
 }
 
 /* The C library fputc() */
-fputc(c, stream) {
-    return fwrite( &c, 1, 1, stream ) == 1 ? c : -1;
+fputc( c, stream ) {
+    return _fputsn( &c, 1, stream ) == 1 ? c : -1;
 }
 
 /* The C library putc() */
-putc(s, stream) {
+putc( s, stream ) {
     return putc( s, stream );
 }
 
 /* The C library putchar() */
-putchar(c) {
+putchar( c ) {
     return fputc( c, stdout );
 }
 
 /* The C library vfprintf() */
-vfprintf(stream, fmt, ap) {
+vfprintf( stream, fmt, ap ) {
     auto written = 0, c, n;
     while ( c = rchar(fmt++, 0) ) {
         /* Pass normal characters straight through.
@@ -156,6 +161,6 @@ vfprintf(stream, fmt, ap) {
 }
 
 /* The C library printf() */
-printf(fmt) {
+printf( fmt ) {
     return vfprintf(stdout, fmt, &fmt);
 }

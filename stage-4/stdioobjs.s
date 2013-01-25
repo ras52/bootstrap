@@ -11,19 +11,26 @@
 #  At present the compiler isn't smart enough to handle this.
 
 #  These are the output buffers themselves
-.LC0:	.zero	128
-.LC1:	.zero	128
+.LC0a:	.zero	128
+.LC1a:	.zero	128
+.LC2a:	.zero	128
 
-#  These are the FILE structs
-#		fd	bufsz	bufp	buffer
-.LC2:	.int	1,	128,	.LC0,	.LC0
-.LC3:	.int	2,	128,	.LC1,	.LC1
+#  These are the FILE structs.
+#  bufend is ignored for output streams
+#		fd	bufsz	bufp	buffer	bufend
+.LC0:	.int	0,	128,	.LC0a,	.LC0a,	.LC0a
+.LC1:	.int	1,	128,	.LC1a,	.LC1a,	.LC1a
+.LC2:	.int	2,	128,	.LC2a,	.LC2a,	.LC2a
 
+
+.globl stdin
+stdin:
+	.int	.LC0
 
 .globl stdout
 stdout:
-	.int	.LC2
+	.int	.LC1
 
 .globl stderr
 stderr:
-	.int	.LC3
+	.int	.LC2
