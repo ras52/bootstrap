@@ -273,8 +273,66 @@ fflush:
 	RET
 
 .data:
-stdout:
-	.int 0
+stdout: .int 1  # These are nominally pointers and need to be distinguishable
+stdin:	.int 1  # from the NULL pointer returned on error from e.g. freopen.
+
+
+.text:
+####	#  Function: FILE* freopen( char const* filename, char const* mode,
+	#                           FILE* stream );
+	#
+	#  A minimal freopen, just to get the main() function of the compiler
+	#  to work.
+freopen:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	12(%ebp), %eax
+	CMPB	'w', (%eax)
+	JE	.L18
+
+	# reopen stdin
+	XORL	%eax, %eax		# 0 == O_RDONLY
+	PUSH	%eax
+	PUSH	8(%ebp)
+	CALL	open
+	ADDL	$8, %esp
+	CMPL	$-1, %eax
+	JE	_error
+
+	XORL	%ecx, %ecx		# stdin
+	JMP	.L19
+.L18:
+	# reopen stdout
+	MOVL	$0x1A4, %eax		# 0644 (we chmod later if necessary)
+	PUSH	%eax
+	MOVL	$0x241, %eax		# O_WRONLY=1|O_CREAT=0x40|O_TRUNC=0x200
+	PUSH	%eax
+	PUSH	8(%ebp)
+	CALL	open
+	ADDL	$12, %esp
+	CMPL	$-1, %eax
+	JE	_error
+	
+	XORL	%ecx, %ecx
+	INCL	%ecx			# stdout
+
+.L19:
+	PUSH	%ecx			# new_fd
+	PUSH	%eax			# old_fd
+	CALL	dup2
+	CMPL	$-1, %eax
+	JE	_error
+	CALL	close
+	POP	%eax
+	POP	%eax
+
+	MOVL	16(%ebp), %eax
+
+	POP	%ebx
+	POP	%ebp
+	RET
 
 
 ####	#  Function: int atoi( char const* str );

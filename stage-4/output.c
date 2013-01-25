@@ -15,6 +15,41 @@ fflush( stream ) {
     return 0;
 }
 
+/* The C library fclose() */
+fclose( stream ) {
+    /* Only flush output streams */
+    if ( stream[5] ) fflush( stream );
+    return close( stream[0] );
+}
+
+/* The C library freopen() */
+freopen( filename, mode, stream ) {
+    auto fmode = 0, fd;
+
+    if ( fclose( stream ) == -1 ) 
+        /* The standard does not state explicitly that errno is cleared, 
+         * but it seems implied when it says that failure is ignored. */
+        errno = 0;
+
+    if ( rchar(mode, 0) == 'w' ) fmode |= 65;  /* 65 == O_RWONLY | O_CREAT */
+    fd = open( filename, fmode, 420 );  /* 420 == 0644 */
+    if ( fd == -1 ) return 0;
+
+    if ( fd != stream[0] ) {
+        if ( dup2(fd, stream[0]) == -1 ) {
+            /* This is nice to have, but not a requirement */
+            stream[0] = fd;
+            errno = 0;
+        } else if ( close(fd) == -1 )
+            return 0;
+    }
+
+    stream[2] = stream[4] = stream[3];
+    stream[5] = fmode & 3;
+
+    return stream;
+}
+
 /* Implementation detail _fputsn() -- TODO declare this static */
 _fputsn( ptr, len, stream ) {
     auto written = 0;
@@ -42,7 +77,6 @@ _fputsn( ptr, len, stream ) {
 
         /* Otherwise append as much as possible to the buffer. */
         else {
-if (space == 0) _exit(42);
             auto chunk = space < len ? space : len;
             memcpy( stream[2], ptr, chunk );
             stream[2] += chunk;

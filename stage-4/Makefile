@@ -27,7 +27,7 @@ as ld:
 	as $<
 
 %.s:	%.c cc0
-	cc0 < $< > $@
+	cc0 -S $<
 
 LIB0_OBJS = memory.o string.o ctype.o exit.o unistd.o
 CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
@@ -50,17 +50,19 @@ cc:	ld lib.o crt0.o $(CC_OBJS)
 
 check:	check-output check-input
 
-check-output: cc as
-	./cc < output.c > output2.s
-	./as output2.s
+check-output: cc as output.c output.o
+	$(LN_S) output.c output2.c
+	cc -S output2.c
+	as output2.s
 	$(CMP) output2.o output.o
-	$(RM) output2.o output2.s
+	$(RM) output2.c output2.o output2.s
 
-check-input: cc as
-	./cc < input.c > input2.s
-	./as input2.s
+check-input: cc as input.c input.o
+	$(LN_S) input.c input2.c
+	cc -S input2.c
+	as input2.s
 	$(CMP) input2.o input.o
-	$(RM) input2.o input2.s
+	$(RM) input2.c input2.o input2.s
 
 clean:
 	$(RM) -f as ld $(LIB0_OBJS) stdio.o lib0.o crt0.o 

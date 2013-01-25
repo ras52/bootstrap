@@ -180,15 +180,13 @@ ext_decl:
 	LEAVE
 	RET
 
-
+####	#  Function:  void program();
+	#  
 	#    program ::= ext-decl*
-main:
+	#
+program:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-
-	CALL	init_symtab
-	CALL	next
-
 .L1:
 	MOVL	token, %eax
 	CMPL	$-1, %eax
@@ -198,8 +196,74 @@ main:
 	JNE	_error
 	CALL	ext_decl
 	JMP	.L1
-
 .L2:
+	POP	%ebp
+	RET
+
+
+####	#  Function:  int main(int argc, char** argv);
+#
+main:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	CMPL	$3, 8(%ebp)		# Require two arguments: -S file.c
+	JNE	_error
+
+	#  Check that argv[1] == '-S'
+	MOVL	'-S', %eax
+	PUSH	%eax
+	PUSH	%esp
+	MOVL	12(%ebp), %eax
+	PUSH	4(%eax)
+	CALL	strcmp
+	ADDL	$12, %esp
+	TESTL	%eax, %eax
+	JNZ	_error
+
+	#  Use argv[2] as a filename and reopen stdin as it.
+	MOVL	'r', %eax
+	PUSH	%eax
+	MOVL	%esp, %ecx
+	MOVL	stdin, %eax
+	PUSH	%eax
+	PUSH	%ecx
+	MOVL	12(%ebp), %eax
+	PUSH	8(%eax)
+	CALL	freopen
+	ADDL	$16, %esp
+	TESTL	%eax, %eax
+	JZ	_error
+
+	#  Construct the output filename.
+	MOVL	12(%ebp), %eax
+	PUSH	8(%eax)
+	CALL	strlen
+	POP	%edx
+	ADDL	%eax, %edx
+	CMPB	'c', -1(%edx)
+	JNE	_error
+	CMPB	'.', -2(%edx)
+	JNE	_error
+	MOVB	's', -1(%edx)
+
+	#  And reopen stdout as it.
+	MOVL	'w', %eax
+	PUSH	%eax
+	MOVL	%esp, %ecx
+	MOVL	stdout, %eax
+	PUSH	%eax
+	PUSH	%ecx
+	MOVL	12(%ebp), %eax
+	PUSH	8(%eax)
+	CALL	freopen
+	ADDL	$16, %esp
+	TESTL	%eax, %eax
+	JZ	_error
+
+	CALL	init_symtab
+	CALL	next
+	CALL	program
 	XORL	%eax, %eax
 	LEAVE
 	RET

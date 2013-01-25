@@ -1,6 +1,6 @@
 # stdio.s
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 ####	#  Function:	size_t strlen(char* s);

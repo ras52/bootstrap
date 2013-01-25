@@ -34,8 +34,31 @@ Summary of differences from B:
   * The '{' ... '}' around single-statement functions are required.
   * We support logical && and || complete with short circuiting.
   * We support the 'continue' keyword from C.
+  * The return statement does not require brackets.
   * We don't allow backspace (character 0x7F) or dot (.) in identifiers.
   * The escape characters in strings is \ not *, and there is no \e.
+
+The stage 4 compiler is a simple afair, making a single pass over the 
+input file and code generation is done straight out of the parser,
+without building an abstract syntax tree (AST) representation.  This 
+means that the code generated is very inefficient, and even very obvious
+optimisations are not made.  As an example, all lvalue-to-rvalue
+conversions are done as separate statements, so to read a local auto
+variable, we generated LEA -offset(%ebp), %eax; MOVL (%eax), %eax
+instead of the more obvious MOVL -offset(%ebp), %eax.
+
+The compiler is initially linked against a trivial I/O library that
+implements the basic C I/O functions in an unbuffered manner, doing one
+syscall per call to getchar() or putchar().  Similarly, malloc() is
+implemented as in stage 3, by sending each allocation request to the
+kernel as a mmap(MAP_ANON) call.  The resultant compiler, cc0, is used
+to compile an improved set of I/O functions that do buffering.  These
+are linked together with ld -r into a proto-C-library, lib.o.  There is
+also a trivial startup file, crt0.o, that implements _start() by calling 
+exit(main()).  We use these to relink the compiler against this to 
+produce a significantly faster compiler.
+
+  Usage: cc -S file.c
 
 
 TODO

@@ -1,6 +1,6 @@
 # crt0.s
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 ####	#  Function:	void _start()
@@ -10,35 +10,11 @@ _start:
 	XORL	%ebp, %ebp
 	PUSH	%ebp
 	MOVL	%esp, %ebp
+	LEA	8(%ebp), %eax		# argv
+	PUSH	%eax
+	PUSH	4(%ebp)			# argc
 	CALL	main
 	PUSH	%eax
-	CALL	_exit
+	CALL	exit
 	HLT
 
-
-####	#  Function:	void _error()
-	#
-	#  All library error handling is done here.  
-	#  (Note we can JMP here instead of CALLing it, as we never RET.)
-_error:
-	MOVL	$1, %ebx
-	JMP	.L1
-
-
-####	#  Function:	void _exit(int status)
-	#
-	#  Terminate program execution with given status.
-_exit:
-	PUSH	%ebp
-	MOVL	%esp, %ebp
-
-	MOVL	stdout, %eax
-	PUSH	%eax
-	CALL	fflush
-	POP	%eax
-
-	MOVL	8(%ebp), %ebx
-.L1:
-	MOVL	$1, %eax
-	INT	$0x80
-	HLT
