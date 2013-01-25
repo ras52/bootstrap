@@ -1104,8 +1104,8 @@ closeelf:
 	RET
 
 
-####	#  Function: int writesect( int sectid, int pad_char, int nfiles,
-	#                           elffile* files, int fd_out );
+####	#  Function: void writesect( int sectid, int pad_char, int nfiles,
+	#                            elffile* files, int fd_out );
 writesect:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -1329,8 +1329,9 @@ _start:
 	INCL	-68(%ebp)
 	JMP	.L16a			# End loop over input files
 .L17a:
-	MOVL	-44(%ebp), %eax
-	ADDL	-48(%ebp), %eax
+	MOVL	$0x74, %eax		# size of Elf header + PHdrs
+	ADDL	-44(%ebp), %eax		# .data size
+	ADDL	-48(%ebp), %eax		# .text size
 	MOVL	%eax, -12(%ebp)
 
 	#  Prepare to write the .text and .data sections
@@ -1414,6 +1415,10 @@ _start:
 	CMPL	$0x30, %eax
 	JL	error
 
+	#  Add the section headers & shstrtab to the output counter
+	MOVL	-56(%ebp), %eax
+	ADDL	%eax, -12(%ebp)
+
 	#  Set up some new counters
 	XORL	%eax, %eax
 	PUSH	%eax			# -60(%ebp), for .strtab sz
@@ -1455,6 +1460,9 @@ _start:
 	POP	%ecx
 	POP	%ecx
 	ADDL	%eax, -60(%ebp)
+	MOVL	-60(%ebp), %eax
+	ADDL	%eax, -12(%ebp)
+
 
 	#  Write Null symbol (per gABI-4.1, Fig 4-18)
 	PUSH	%eax
@@ -1520,6 +1528,9 @@ _start:
 	ADDL	$16, -64(%ebp)
 	JMP	.L24
 .L25:
+	MOVL	-64(%ebp), %eax
+	ADDL	%eax, -12(%ebp)
+
 	CMPL	$0xF0, -52(%ebp)	# Are we partial linking?
 	JE	.L32
 
@@ -1575,6 +1586,9 @@ _start:
 	
 
 .L32a:
+	MOVL	-68(%ebp), %eax
+	ADDL	%eax, -12(%ebp)
+
 	#  Write .rel.data section
 	MOVL	-40(%ebp), %edi		# relocs.start
 	SUBL	$28, %edi		# start at labels - 1;  sizeof(label)
@@ -1627,6 +1641,9 @@ _start:
 	
 
 .L32:
+	MOVL	-72(%ebp), %eax
+	ADDL	%eax, -12(%ebp)
+
 	POP	%eax			# fd_out **
 	
 	#  The output file is completely written. 
@@ -1638,10 +1655,7 @@ _start:
 	PUSH	%ecx			# MAP_SHARED
 	MOVL	$3, %ecx
 	PUSH	%ecx			# PROT_READ|PROT_WRITE
-	MOVL	-12(%ebp), %ecx		# .text written
-	ADDL	$0x74, %ecx		# Add ELF, etc.
-	ADDL	$0xB6, %ecx		# Section hdrs, etc.
-	PUSH	%ecx			# size
+	PUSH	-12(%ebp)		# size
 	XORL	%eax, %eax		# NULL 
 	PUSH	%eax
 	MOVL	%esp, %ebx
@@ -1674,7 +1688,8 @@ _start:
 
 	#  Link ELF header to the section headers
 	MOVL	$0x74, %edx		# size of ELF & program headers
-	ADDL	-12(%ebp), %edx		# size of .text and .data together 
+	ADDL	-44(%ebp), %edx		# size of .text and .data together 
+	ADDL	-48(%ebp), %edx		# size of .text and .data together 
 	MOVL	%edx, 0x20(%ebx)	# ELF shdroff
 
 	#  .text section header needs .text section size
@@ -1806,11 +1821,8 @@ _start:
 .L22:
 	POP	%ecx			# syms
 .L30:
-	#  Unmap and close the output
-	MOVL	-12(%ebp), %ecx		# .text written
-	ADDL	$0x74, %ecx		# Add ELF, etc.
-	ADDL	$0x89, %ecx		# Section hdrs, etc.
-	PUSH	%ecx			# size
+	#  Unmap and close the output - already in %ebx
+	MOVL	-12(%ebp), %ecx		# file size
 	MOVL	$91, %eax		# 91 == __NR_munmap
 	INT	$0x80
 
