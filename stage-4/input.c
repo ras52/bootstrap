@@ -118,15 +118,39 @@ ungetchar( c ) {
     return ungetc( c, stdin );
 }
 
-/* The C library atoi() */
-atoi( str ) {
-    auto c = rchar( str, 0 ), n = 0;
-    if (c == '-') return -atoi( str+1 );
+/* The C library strtol() */
+strtol( nptr, endptr, base ) {
+    auto c = rchar( nptr, 0 ), n = 0;
 
-    while ( c >= '0' && c <= '9' ) {
-        n = n * 10 + c - '0';
-        c = rchar( ++str, 0 );
+    if (c == '-') return -strtol( nptr+1, endptr, base);
+    else if (c == '+') c = rchar( ++nptr, 0 );
+
+    /* Look for a base prefix */
+    if ( (base == 0 || base == 16) && c == '0' ) {
+        c = rchar( ++nptr, 0 );
+        if (c == 'x') { base = 16; c = rchar( ++nptr, 0 ); }
+        else if (base == 0) base = 8;
+    }
+    if ( base == 0 ) base = 10;
+
+    /* Read the number.  TODO Handle overflow */
+    while (1) {
+        if ( c >= '0' && c <= '0' + (base <= 10 ? base - 1 : 9) )
+            n = n * base + c - '0';
+        else if ( base > 10 && c >= 'a' && c <= 'a' + base - 1 )
+            n = n * base + c - 'a' + 10;
+        else if ( base > 10 && c >= 'A' && c <= 'A' + base - 1 )
+            n = n * base + c - 'A' + 10;
+        else break;
+
+        c = rchar( ++nptr, 0 );
     }
 
-    return n;
+    if ( endptr ) *endptr = nptr;
+    return n;           
+}
+
+/* The C library atoi() */
+atoi( str ) { 
+    return strtol( str, 0, 10 );
 }

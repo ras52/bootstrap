@@ -337,11 +337,23 @@ auto_stmt:
 	CMPL	'num', %eax
 	JNE	_error
 
+	PUSH	%eax			# endptr slot
+	MOVL	%esp, %ecx
+	
+	XORL	%eax, %eax
+	PUSH	%eax			# guess base
+	PUSH	%ecx			# &endptr
 	MOVL	$value, %eax
 	PUSH	%eax
-	CALL	atoi
+	CALL	strtol
+	ADDL	$12, %esp
 	POP	%ecx
 	PUSH	%eax			# store size
+
+	#  %ecx contains the end ptr
+	MOVL	(%ecx), %ecx
+	CMPB	$0, %cl
+	JNE	_error
 
 	CALL	next
 	CMPL	']', %eax

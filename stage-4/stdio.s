@@ -335,10 +335,12 @@ freopen:
 	RET
 
 
-####	#  Function: int atoi( char const* str );
+####	#  Function: int strtol( char const* str, char const **endptr );
 	#
-	#  Convert STR to an integer.  Returns undefined value on error.
-atoi:
+	#  Convert STR to an integer.  This is really the standard atoi,
+	#  rather than than strtol.  As the whole file is discarded after
+	#  the bootstrap cc0 is created, this is okay.
+strtol:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	PUSH	%esi
@@ -351,7 +353,7 @@ atoi:
 	JNE	.L16
 	INCL	%esi
 	PUSH	%esi
-	CALL	atoi
+	CALL	strtol
 	POP	%edx
 	NEGL	%eax
 	JMP	.L17
@@ -371,6 +373,9 @@ atoi:
 	INCL	%esi
 	JMP	.L16	
 .L17:
+	MOVL	12(%ebp), %ecx
+	MOVL	%esi, (%ecx)
+	
 	POP	%esi
 	POP	%ebp
 	RET
