@@ -305,7 +305,7 @@ freopen:
 	JMP	.L19
 .L18:
 	# reopen stdout
-	MOVL	$0x1A4, %eax		# 0644 (we chmod later if necessary)
+	MOVL	$0644, %eax		# permissions
 	PUSH	%eax
 	MOVL	$0x241, %eax		# O_WRONLY=1|O_CREAT=0x40|O_TRUNC=0x200
 	PUSH	%eax

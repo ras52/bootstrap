@@ -67,6 +67,7 @@ getctype:
 ####	#  Function:	int isspace(int c);
 	#
 	#  Standard C library function to test for ASCII space characters.
+.globl isspace
 isspace:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -81,6 +82,7 @@ isspace:
 ####	#  Function: int isdigit(int c);
 	#
 	#  Standard C library function to test for ASCII digits, 0-9.
+.globl isdigit
 isdigit:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -95,6 +97,7 @@ isdigit:
 ####	#  Function:	int isalpha(int c);
 	#
 	#  Standard C library function to test for ASCII letter, a-z, A-Z.
+.globl isalpha
 isalpha:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -109,6 +112,7 @@ isalpha:
 ####	#  Function:	int isalnum(int c);
 	#
 	#  Standard C library function to test for ASCII letters or digits.
+.globl isalnum
 isalnum:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -124,6 +128,7 @@ isalnum:
 	#
 	#  Standard C library function to test for ASCII punctuation,
 	#  i.e. anything that is not a digit, letter, space or control.
+.globl ispunct
 ispunct:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -133,4 +138,20 @@ ispunct:
 	ANDL	$0x80, %eax
 	POP	%ebp
 	RET
+
+
+####	#  Function: int isxdigit(int c);
+	#
+	#  Standard C library function to test for hex ASCII digits, 0-9A-Fa-f.
+.globl isxdigit
+isxdigit:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	8(%ebp)
+	CALL	getctype
+	POP	%ecx
+	ANDL	$0x100, %eax
+	POP	%ebp
+	RET
+
 

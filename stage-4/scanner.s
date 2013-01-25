@@ -441,21 +441,64 @@ get_number:
 	MOVL	%esp, %ebp
 	PUSH	%edi
 
+	MOVL	'num', %eax		# 'num' for number
+	MOVL	%eax, token
+	MOVL	$value, %eax
+	MOVL	%eax, %edi		# string pointer
+
 	#  Skip whitespace and test for an identifier
-	CALL	skip_white
+	CALL	getchar
+	MOVB	%al, (%edi)
 	PUSH	%eax
 	CALL	isdigit
 	POP	%ecx
 	TESTL	%eax, %eax
 	JZ	_error
+	CMPB	'0', (%edi)
+	JNE	.L5
 
-	MOVL	'num', %eax		# 'num' for number
-	MOVL	%eax, token
+	#  The first character was '0', so either octal, hex or zero.
+	
+	#  Store that one byte, and look at the next one
+	INCL	%edi
+	CALL	getchar
+	MOVB	%al, (%edi)
+	CMPB	'x', %al
+	JE	.L24
+	PUSH	%eax
+	CALL	isdigit
+	POP	%ecx
+	TESTL	%eax, %eax
+	JNZ	.L5
+
+	#  It must be a literal zero
+	MOVL	%ecx, %eax		# restore character
+	JMP	.L23
+
+.L24:	#  It's a hex number
+	INCL	%edi
 	MOVL	$value, %eax
-	MOVL	%eax, %edi		# string pointer
-	DECL	%edi
+	SUBL	%edi, %eax
+	CMPL	$-79, %eax
+	JLE	_error
 
-.L5:	#  Loop reading characters, and check for buffer overflow
+	CALL	getchar
+	MOVB	%al, (%edi)
+	PUSH	%eax
+	CALL	isxdigit
+	TESTL	%eax, %eax
+	POP	%eax
+	JNZ	.L24
+
+	PUSH	%eax
+	CALL	isalpha
+	TESTL	%eax, %eax
+	JNZ	_error
+	POP	%eax
+	JMP	.L23
+
+.L5:	#  It's a decimal or octal number -- we don't care which
+	#  Loop reading characters, and check for buffer overflow
 	INCL	%edi
 	MOVL	$value, %eax
 	SUBL	%edi, %eax
@@ -476,6 +519,7 @@ get_number:
 	JNZ	_error
 	POP	%eax
 
+.L23:
 	#  Unget the last character
 	PUSH	%eax
 	CALL	ungetchar

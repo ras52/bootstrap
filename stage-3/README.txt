@@ -120,4 +120,3 @@ TODO
 
 undefined symbols when partially linking (ld -r)
 ?? case insensitive mnemonics, registers & hex numbers
-octal numbers

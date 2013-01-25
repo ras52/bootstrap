@@ -1131,7 +1131,7 @@ read_int:
 	PUSH	12(%ebp)	# ifile
 	CALL	getone
 	CMPB	$0x30, %al	# '0'
-	JE	.L16b		# hex / zero
+	JE	.L16b		# hex / oct / zero
 	CMPB	$0x2D, %al	# '-'
 	JNE	.L16		# deciml
 
@@ -1190,6 +1190,7 @@ read_int:
 	JMP	.L16		# loop
 
 .L16b:
+	#  Is it hex number?
 	#  This would be where we'd consider octal, if we cared about it.
 	#  We don't, but we do care about the special case of zero, so we
 	#  assume anything begining '0' but not continuing 'x' is a plain
@@ -1197,8 +1198,40 @@ read_int:
 	CALL	getone
 	CMPB	$0x78, %al	# 'x'
 	MOVL	%eax, %edx
-	JNE	.L17a
+	JE	.L16f
 
+	#  It must be an octal number (which includes 0).
+	PUSH	%edx
+	CALL	unread
+	POP	%edx
+
+	#  TODO Estimate the number of oct digits (divide number of bits by 2)
+	MOVB	$1, %cl
+	SARL	8(%ebp)		# by %cl
+.L16g:
+	#  Start reading octal numbers.  
+	#  Use the B trick where 0999 is a valid octal number.
+	CALL	getone
+	PUSH	%eax
+	CALL	dchr
+	POP	%edx		# char
+	CMPB	$-1, %al
+	JE	.L17a		# done
+	
+	#  Add the digit to the current value
+	MOVB	$3, %cl
+	SALL	-4(%ebp)	# by %cl
+	ADDL	%eax, -4(%ebp)
+	INCL	-8(%ebp)
+
+	#  Test for overflow: 
+	#  have we read more than the expected number of digits?
+	MOVL	8(%ebp), %eax
+	CMPL	%eax, -8(%ebp)
+	JG	error
+	JMP	.L16g	# loop
+
+.L16f:	#  Handle hex numbers
 	#  Set number of hex digits (divide number of bits by 4)
 	MOVB	$2, %cl
 	SARL	8(%ebp)		# by %cl
@@ -1210,7 +1243,7 @@ read_int:
 	CALL	xchr
 	POP	%edx		# char
 	CMPB	$-1, %al
-	JE	.L17	# done
+	JE	.L17		# done
 
 	#  Add the digit to the current value
 	MOVB	$4, %cl

@@ -31,8 +31,8 @@ freopen( filename, mode, stream ) {
          * but it seems implied when it says that failure is ignored. */
         errno = 0;
 
-    if ( rchar(mode, 0) == 'w' ) fmode |= 65;  /* 65 == O_RWONLY | O_CREAT */
-    fd = open( filename, fmode, 420 );  /* 420 == 0644 */
+    if ( rchar(mode, 0) == 'w' ) fmode |= 0x41;  /* O_RWONLY | O_CREAT */
+    fd = open( filename, fmode, 0644 );
     if ( fd == -1 ) return 0;
 
     if ( fd != stream[0] ) {
