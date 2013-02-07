@@ -273,6 +273,7 @@ fflush:
 	RET
 
 .data:
+stderr: .int 1  # These are nominally pointers and need to be distinguishable
 stdout: .int 1  # These are nominally pointers and need to be distinguishable
 stdin:	.int 1  # from the NULL pointer returned on error from e.g. freopen.
 

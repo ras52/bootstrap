@@ -28,7 +28,7 @@ Summary of differences from B:
 
   * Compound assignment operators are spelt OP= instead of =OP.
   * There are no relop assignment operators (e.g. =<, =>=, ===).
-  * External declarations require '=' (i.e. 'i = 42' not 'i 42').
+  * Definitions require '=' (i.e. 'i = 42' not 'i 42').
   * Arrays require a size (i.e. 'auto a[1] = {0}' not 'auto a[] = {0}').
   * Arrays with too many intialisers do not expand to accommodate them.
   * The '{' ... '}' around single-statement functions are required.
@@ -52,11 +52,11 @@ implements the basic C I/O functions in an unbuffered manner, doing one
 syscall per call to getchar() or putchar().  Similarly, malloc() is
 implemented as in stage 3, by sending each allocation request to the
 kernel as a mmap(MAP_ANON) call.  The resultant compiler, cc0, is used
-to compile an improved set of I/O functions that do buffering.  These
-are linked together with ld -r into a proto-C-library, libc.o.  There is
-also a trivial startup file, crt0.o, that implements _start() by calling 
-exit(main()).  We use these to relink the compiler against this to 
-produce a significantly faster compiler.
+to compile an improved set of I/O and memory-management functions that 
+do buffering.  These are linked together with ld -r into a proto-C-
+library, libc.o.  There is also a trivial startup file, crt0.o, that 
+implements _start() by calling exit(main()).  We use these to relink 
+the compiler against this to produce a significantly faster compiler.
 
   Usage: cc -S file.c
 

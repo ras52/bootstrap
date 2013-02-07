@@ -164,7 +164,7 @@ vfprintf( stream, fmt, ap ) {
                 ++written;
             }
             else {
-                /* We don't currently support arrays. */
+                /* We don't currently support character arrays. */
                 auto buffer[4] = {0,0,0,0},  b = 14,  i = *ap;
 
                 if (i < 0) {
@@ -184,6 +184,29 @@ vfprintf( stream, fmt, ap ) {
                 written += n;
             }
         }
+        else if (c == 'x') {
+            ap += 4;
+            if (*ap == 0) { 
+                if ( fputc('0', stream) == -1 )
+                    return -1;
+                ++written;
+            }
+            else {
+                /* We don't currently support character arrays. */
+                auto buffer[4] = {0,0,0,0},  b = 14,  i = *ap;
+
+                while (i) {
+                    auto x = i % 16;
+                    x = x >= 10 ? x + 'a' - 10 : x + '0';
+                    lchar(buffer, b--, x);
+                    i /= 16;
+                }
+
+                if ( ( n = fputs(buffer+b+1, stream) ) == -1 )
+                    return -1; 
+                written += n;
+            }
+        }
         else {
             if ( fputc(c, stream) == -1 )
                 return -1;
@@ -196,5 +219,10 @@ vfprintf( stream, fmt, ap ) {
 
 /* The C library printf() */
 printf( fmt ) {
-    return vfprintf(stdout, fmt, &fmt);
+    return vfprintf( stdout, fmt, &fmt );
+}
+
+/* The C library fprintf() */
+fprintf( stream, fmt ) {
+    return vfprintf( stream, fmt, &fmt );
 }

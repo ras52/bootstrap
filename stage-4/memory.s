@@ -1,6 +1,6 @@
 # memory.s
 
-# Copyright (C) 2012 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 ####	#  Function: void* malloc(size_t sz)
@@ -26,11 +26,9 @@ malloc:
 	PUSH	%ecx			# size
 	XORL	%eax, %eax		# NULL 
 	PUSH	%eax
-	MOVL	%esp, %ebx
-	MOVL	$90, %eax		# 90 == __NR_mmap
-	INT	$0x80
-	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
-	JA	_error			# unsigned comparison handles above
+	CALL	mmap
+	CMPL	$-1, %eax
+	JE	_error
 	MOVL	-24(%ebp), %ecx		# restore %ecx
 	
 	#  Write size into malloc header

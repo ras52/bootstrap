@@ -19,7 +19,7 @@ st_scope_id:
 	.int	0
 
 #  struct entry { char sym[12]; int32_t frame_off; int32_t scope_id; 
-#                 type_t lval; type_t size; };
+#                 type_t lval; type_t size; };   -- sizeof(entry) == 28
 
 .text
 
@@ -29,7 +29,8 @@ st_scope_id:
 init_symtab:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
-	MOVL	$1792, %ecx		# 64 * sizeof(entry)
+#	MOVL	$1792, %ecx		# 64 * sizeof(entry)
+	MOVL	$28, %ecx		# sizeof(entry)
 	PUSH	%ecx
 	CALL	malloc
 	POP	%ecx
@@ -95,6 +96,8 @@ save_sym:
 	CMPL	%eax, -8(%ebp)
 	JL	.L1
 	CALL	grow_symtab
+	MOVL	st_end, %eax
+	MOVL	%eax, -8(%ebp)
 .L1:
 	CALL	strcpy
 	POP	%edx

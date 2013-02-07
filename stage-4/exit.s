@@ -25,6 +25,10 @@ exit:
 	PUSH	%eax
 	CALL	fflush
 	POP	%eax
+	MOVL	stderr, %eax
+	PUSH	%eax
+	CALL	fflush
+	POP	%eax
 	PUSH	8(%ebp)
 	CALL	_exit
 	HLT

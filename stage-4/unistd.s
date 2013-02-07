@@ -151,3 +151,28 @@ dup2:
 	RET
 
 
+####	#  Function:	void* mmap(void *addr, size_t length, int prot, 
+	#                          int flags, int fd, off_t offset);
+	#
+.globl mmap
+mmap:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	LEA	8(%ebp), %ebx
+	MOVL	$90, %eax		# 90 == __NR_mmap
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L6
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+
+.L6:
+	POP	%ebx
+	POP	%ebp
+	RET
+
