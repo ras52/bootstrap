@@ -12,8 +12,10 @@
  *   struct header* prev;
  * }; */
 
+static
 __heap = 0;
 
+static
 __find_blk( last, size ) {
     /* Look for a block of at least SIZE bytes in the list at LAST */
     while ( last && !( last[1] && last[0] >= size ) )
@@ -21,6 +23,7 @@ __find_blk( last, size ) {
     return last;
 }
 
+static
 __new_blk( size ) {
     /* Allocate a new block for at least SIZE bytes and prepend to __heap */
     auto blksz = size > 0x0FF0 ? size : 0x0FF0;  /* 0x0FF0 == 0x1000 - 16 */
@@ -34,6 +37,7 @@ __new_blk( size ) {
     return p;
 }
 
+static
 __frag( blk, size ) {
     /* If the block BLK is significantly bigger than SIZE bytes, then fragment
      * it into a block of exactly SIZE bytes and a second block for the rest */
@@ -49,6 +53,7 @@ __frag( blk, size ) {
     }
 }
 
+static
 __defrag2( blk, b2 ) {
     /* The block at BLK and the next block, which is at B2, are both empty
      * so coalesce them into a single block. */
@@ -57,6 +62,7 @@ __defrag2( blk, b2 ) {
     if (blk[2]) blk[2][3] = blk;
 }
 
+static
 __defrag( blk ) {
     /* See whether the block at BLK can be coalesced with either neighour */
     if ( blk[2] && blk[2][1] ) __defrag2( blk, blk[2] );

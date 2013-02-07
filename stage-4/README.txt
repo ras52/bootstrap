@@ -34,6 +34,7 @@ Summary of differences from B:
   * The '{' ... '}' around single-statement functions are required.
   * We support logical && and || complete with short circuiting.
   * We support the 'continue' keyword from C.
+  * We allow 'static' on global variables and functions.
   * The return statement does not require brackets.
   * We don't allow backspace (character 0x7F) or dot (.) in identifiers.
   * The escape characters in strings is \ not *, and there is no \e.

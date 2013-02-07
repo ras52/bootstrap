@@ -8,16 +8,45 @@
 frame_size:
 	.int	0
 
-####	#  Function:	void int_decl(char* name);
+####	#  Function:	void strg_class(char* name, bool is_static);
+	#
+	#  Emit a .globl or .local directive for NAME as appropriate for 
+	#  the storage class in IS_STATIC
+.data .LC2:
+	.string ".globl\t%s\n"
+.LC3:
+	.string ".local\t%s\n"
+.text
+.local strg_class
+strg_class:
+	PUSH	%ebp	
+	MOVL	%esp, %ebp
+
+	PUSH	8(%ebp)
+	MOVL	12(%ebp), %eax
+	TESTL	%eax, %eax
+	JZ	.L9
+	MOVL	$.LC3, %eax
+	JMP	.L10
+.L9:
+	MOVL	$.LC2, %eax	
+.L10:
+	PUSH	%eax
+	CALL	printf
+
+	LEAVE
+	RET
+
+####	#  Function:	void int_decl(char* name, bool is_static);
 	#
 	#    constant ::= number | char
 	#
-	#    int_decl ::= name ( '=' constant )? ';'
+	#    int_decl ::= ( 'static' )? name ( '=' constant )? ';'
 	#
 	#  Process an integer declaration for NAME.  The name has been read, 
 	#  and TOKEN advanced to the next token: either '=' or ';'
 .data .LC1:
-	.string "\n.data\n%s:\n\t.int %s\n"
+	.string ".data\n%s:\n\t.int %s\n"
 .text
 .local int_decl
 int_decl:
@@ -63,11 +92,11 @@ int_decl:
 	RET
 
 
-####	#  Function:	void func_decl(char* name);
+####	#  Function:	void func_decl(char* name, bool is_static);
 	#
 	#    func-params ::= name ( ',' name )*
 	#
-	#    func-decl   ::= name '(' func-params? ')' block
+	#    func-decl   ::= ( 'static' )? name '(' func-params? ')' block
 	#
 	#  Process a function declaration.  Current token is '('.
 .local func_decl
@@ -148,25 +177,36 @@ ext_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
-	#  Check that we've read a identifier first
+	SUBL	$16, %esp		# -16(%ebp) buffer
+
+	#  Are we static?
+	XORL	%eax, %eax
+	PUSH	%eax			# bool is_static = false;  -20(%ebp)
 	MOVL	token, %eax
+	CMPL	'stat', %eax
+	JNE	.L8
+	INCL	-20(%ebp)		# is_static = 1
+	CALL	next
+.L8:
+	#  Check that we've read a identifier first
 	CMPL	'id', %eax
 	JNE	_error
 
 	#  Store a copy of the name.  (We can't emit the label yet as we
 	#  don't yet know which section it belongs in.)
-	SUBL	$16, %esp
 	MOVL	$value, %eax
-	PUSH	%eax
+	PUSH	%eax			# src
 	CALL	strlen
 	CMPL	$11, %eax
 	JG	_error
 	LEA	-16(%ebp), %eax
-	PUSH	%eax
+	PUSH	%eax			# dest
 	CALL	strcpy
 	POP	%ecx
 	POP	%eax
 	PUSH	%ecx			# Pointer to name
+
+	CALL	strg_class
 	
 	#  Get the next token and dispatch based on it.
 	CALL	next
@@ -192,8 +232,6 @@ program:
 	CMPL	$-1, %eax
 	JE	.L2
 
-	CMPL	'id', %eax
-	JNE	_error
 	CALL	ext_decl
 	JMP	.L1
 .L2:

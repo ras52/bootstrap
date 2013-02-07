@@ -292,6 +292,7 @@ keywords:
 	.string "goto"		.align 12	# TODO
 	.string "if"		.align 12
 	.string "return"	.align 12
+	.string "static"	.align 12
 	.string "switch"	.align 12	# TODO
 	.string "while"		.align 12
 	.byte  0	# <-- the end of table marker

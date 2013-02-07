@@ -21,7 +21,7 @@
 ####	#  Function:	void epilog();
 	#  Write function epilogue.
 .data .LC1:
-.string	"\tLEAVE\n\tRET\n"
+.string	"\tLEAVE\n\tRET\n\n"
 .text epilog:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
