@@ -4,6 +4,22 @@
  * All rights reserved.
  */
 
+/* Buffers for the output streams */
+static __buf1[32];
+static __buf2[32];
+
+/*                    0     1       2       3       4       5
+ * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode } */
+static __file1[6] = { 1,    128,    __buf1, __buf1, __buf1, 2    };
+static __file2[6] = { 2,    128,    __buf2, __buf2, __buf2, 2    };
+
+/* The stdio objects themselves.  
+ * We can't just use the arrays themselves because we need to force make 
+ * lvalue versions of them, and arrays are only rvalues. */
+stdout = __file1;
+stderr = __file2;
+
+
 /* The C library fflush() */
 fflush( stream ) {
     auto count = stream[2] - stream[3];
@@ -51,6 +67,7 @@ freopen( filename, mode, stream ) {
 }
 
 /* Implementation detail _fputsn() -- TODO declare this static */
+static
 _fputsn( ptr, len, stream ) {
     auto written = 0;
 

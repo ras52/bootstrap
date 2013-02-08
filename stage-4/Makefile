@@ -38,7 +38,7 @@ libc0.o:	ld $(LIB0_OBJS) stdio.o memory.o
 cc0:	ld libc0.o crt0.o $(CC_OBJS)
 	ld -o cc0 libc0.o crt0.o $(CC_OBJS)
 
-LIB1_OBJS = stdioobjs.o output.o input.o char.o malloc.o
+LIB1_OBJS = output.o input.o char.o malloc.o
 
 libc.o:	ld $(LIB0_OBJS) $(LIB1_OBJS)
 	ld -r -o libc.o $(LIB0_OBJS) $(LIB1_OBJS)
@@ -49,7 +49,7 @@ cc:	ld libc.o crt0.o $(CC_OBJS)
 .INTERMEDIATE:	$(CC_OBJS) $(LIB0_OBJS) $(LIB1_OBJS) \
 	stdio.o memory.o libc0.o cc0
 
-check:	check-output check-input
+check:	check-output check-input check-malloc
 
 check-output: cc as output.c output.o
 	$(LN_S) output.c output2.c
@@ -65,11 +65,18 @@ check-input: cc as input.c input.o
 	$(CMP) input2.o input.o
 	$(RM) input2.c input2.o input2.s
 
+check-malloc: cc as malloc.c malloc.o
+	$(LN_S) malloc.c malloc2.c
+	cc -S malloc2.c
+	as malloc2.s
+	$(CMP) malloc2.o malloc.o
+	$(RM) malloc2.c malloc2.o malloc2.s
+
 clean:
 	$(RM) -f as ld $(LIB0_OBJS) stdio.o memory.o libc0.o crt0.o 
 	$(RM) -f $(LIB1_OBJS) input.s output.s malloc.s libc.o 
 	$(RM) -f $(CC_OBJS) cc0 cc
-	$(RM) -f output2.o output2.s input2.o input2.s
+	$(RM) -f output2.o output2.s input2.o input2.s malloc2.o malloc2.s
 
 world:
 	$(MAKE) clean

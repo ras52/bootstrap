@@ -4,7 +4,20 @@
  * All rights reserved.
  */
 
-/* Implementation detail _fgetsn() -- TODO declare this static */
+/* Buffers for the output streams */
+static __buf0[32];
+
+/*                    0     1       2       3       4       5
+ * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode } */
+static __file0[6] = { 0,    128,    __buf0, __buf0, __buf0, 0    };
+
+/* The stdio objects themselves.  
+ * We can't just use the arrays themselves because we need to force make 
+ * lvalue versions of them, and arrays are only rvalues. */
+stdin  = __file0;
+
+/* Implementation detail _fgetsn() */
+static
 _fgetsn( ptr, len, stream ) {
     auto nread = 0;
 

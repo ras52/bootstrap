@@ -37,9 +37,161 @@ strg_class:
 	LEAVE
 	RET
 
+
+####	#  Function:	int init_a_decl(int dim);
+	#
+	#    init-a-list ::= constant ( ',' constant )*
+	#
+	#    init-a-decl ::= ( '=' '{' init-a-list '}' )? ';'
+	#
+	#  Current token is '=' if an initialiser is present.   
+	#  Returns the number of uninitialised elements.
+.data .LC5:
+	.string ".int\t"
+.text
+.local init_a_decl
+init_a_decl:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	8(%ebp)			# -4(%ebp) local copy of dim
+
+	MOVL	token, %eax
+	CMPL	'=', %eax
+	JNE	.L11
+	CALL	next
+	CMPL	'{', %eax
+	JNE	_error
+
+	MOVL	$.LC5, %eax
+	PUSH	%eax
+	CALL	putstr
+	POP	%eax
+
+.L12:	#  Loop over initialisers.
+	#  Do we have too many?
+	DECL	-4(%ebp)
+	CMPL	$0, -4(%ebp)
+	JL	_error
+	
+	CALL	next
+	CMPL	'num', %eax
+	JE	.L13
+	CMPL	'char', %eax
+	JE	.L13
+	CMPL	'id', %eax
+	JE	.L13
+	JMP	_error
+
+.L13:	# number or char
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	putstr
+	POP	%eax
+
+	CALL	next
+	CMPL	',', %eax
+	JNE	.L14
+
+	PUSH	%eax
+	CALL	putchar
+	POP	%eax
+	JMP	.L12
+
+.L14:
+	CMPL	'}', %eax
+	JNE	_error
+
+	MOVL	'\n', %eax
+	PUSH	%eax
+	CALL	putchar
+	POP	%eax
+
+	CALL	next
+.L11:
+	CMPL	';', %eax
+	JNE	_error
+	CALL	next
+
+	POP	%eax
+	POP	%ebp
+	RET
+
+
+####	#  Function:	void array_decl(char* name, bool is_static);
+	#
+	#    array-decl ::= ( 'static' )? name '[' number '] init-a-decl
+	#
+	#  Process an array declaration for NAME.  Current token is '['.
+
+.data .LC4:
+	.string ".data\n%s:\n"
+.LC6:
+	.string ".zero\t%d\n"
+.text
+.local array_decl
+array_decl:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  Require an array size
+	CALL	next
+	CMPL	'num', %eax
+	JNE	_error
+
+	PUSH	%eax			# endptr slot
+	MOVL	%esp, %ecx
+	
+	XORL	%eax, %eax
+	PUSH	%eax			# guess base
+	PUSH	%ecx			# &endptr
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	strtol
+	ADDL	$12, %esp
+	POP	%ecx
+	PUSH	%eax			# store size
+
+	#  %ecx contains the end ptr
+	MOVL	(%ecx), %ecx
+	CMPB	$0, %cl
+	JNE	_error
+
+	CALL	next
+	CMPL	']', %eax
+	JNE	_error
+
+	#  Emit the symbol name
+	PUSH	8(%ebp)
+	MOVL	$.LC4, %eax
+	PUSH	%eax
+	CALL	printf
+	POP	%eax
+	POP	%eax
+
+	#  Do a series of .int decls for the initialisers
+	CALL	next
+	CALL	init_a_decl
+
+	MOVB	$2, %cl			# *= sizeof(int)
+	SHLL	%eax
+	TESTL	%eax, %eax
+	JZ	.L15
+
+	PUSH	%eax
+	MOVL	$.LC6, %eax
+	PUSH	%eax
+	CALL	printf
+	POP	%eax
+	POP	%eax
+
+.L15:
+	LEAVE
+	RET	
+
+
 ####	#  Function:	void int_decl(char* name, bool is_static);
 	#
-	#    constant ::= number | char
+	#    constant ::= number | char | name
 	#
 	#    int_decl ::= ( 'static' )? name ( '=' constant )? ';'
 	#
@@ -64,7 +216,10 @@ int_decl:
 	CMPL	'num', %eax
 	JE	.L3a
 	CMPL	'char', %eax
-	JNE	_error
+	JE	.L3a
+	CMPL	'id', %eax
+	JE	.L3a
+	JMP	_error
 
 .L3a:
 	#  Because the next token is punctuation, value is not set.
@@ -169,7 +324,7 @@ func_decl:
 	#
 	#  Process an external declaration.
 	#
-	#    ext-decl ::= func-decl | int-decl
+	#    ext-decl ::= func-decl | int-decl | array-decl
 	#  
 	#  When called, TOKEN should be the name.
 .local ext_decl
@@ -212,10 +367,15 @@ ext_decl:
 	CALL	next
 	CMPL	'(', %eax
 	JE	.L6
+	CMPL	'[', %eax
+	JE	.L6a
 	CALL	int_decl
 	JMP	.L7
 .L6:	
 	CALL	func_decl
+	JMP	.L7
+.L6a:
+	CALL	array_decl
 .L7:
 	LEAVE
 	RET
@@ -233,6 +393,12 @@ program:
 	JE	.L2
 
 	CALL	ext_decl
+
+	#  Add a blank line 
+	MOVL	'\n', %eax
+	PUSH	%eax
+	CALL	putchar
+	POP	%eax
 	JMP	.L1
 .L2:
 	POP	%ebp
