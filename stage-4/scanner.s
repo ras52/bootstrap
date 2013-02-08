@@ -333,22 +333,31 @@ chk_keyword:
 	RET
 
 
-####	#  Function:	int get_charlit();
+####	#  Function:	int get_qlit();
 	#
-	#  Reads the textual representation of a character literal into VALUE,
-	#  including the single quotation marks, and returns the next byte
-	#  (having ungot it).
-.local get_charlit
-get_charlit:
+	#  Reads the textual representation of a character or string literal 
+	#  into VALUE, including the quotation marks, sets TOKEN to 'chr' or
+	#  'str' (as appropriate) and returns the next byte (having ungot it).
+.local get_qlit
+get_qlit:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
 	#  Skip whitespace and test for the opening '\''
 	CALL	skip_white
+	PUSH	%eax			# -4(%ebp) is the quote character
 	CMPB	'\'', %al
+	JE	.L21a
+	CMPB	'\"', %al
+	JE	.L21b
 	JNE	_error
 
+.L21a:
 	MOVL	'char', %eax		# 'char' for character literal
+	JMP	.L21c
+.L21b:
+	MOVL	'str', %eax		# 'str' for character literal
+.L21c:
 	MOVL	%eax, token
 	MOVL	$value, %eax
 	MOVL	%eax, %edi		# string pointer
@@ -360,14 +369,28 @@ get_charlit:
 	INCL	%edi
 	MOVL	$value, %eax
 	SUBL	%edi, %eax
-	CMPL	$-79, %eax
+	CMPL	$-78, %eax		# 78 to allow for \', etc.
 	JLE	_error
 
 	CALL	getchar
+	CMPL	$-1, %eax
+	JE	_error
 	MOVB	%al, (%edi)
-	CMPB	'\'', %al
+	CMPB	-4(%ebp), %al
+	JE	.L21d
+	CMPB	'\\', %al
 	JNE	.L21
 
+	#  Read an escaped character
+	INCL	%edi
+	CALL	getchar
+	CMPL	$-1, %eax
+	JE	_error
+	MOVB	%al, (%edi)
+	
+	JMP	.L21
+
+.L21d:
 	#  Write null terminator
 	INCL	%edi
 	XORB	%cl, %cl
@@ -379,57 +402,7 @@ get_charlit:
 	CALL	ungetchar
 	POP	%eax
 
-POP	%ebp
-	RET
-
-
-####	#  Function:	int get_strlit();
-	#
-	#  Reads the textual representation of a string literal into VALUE,
-	#  including the quotation marks, and returns the next byte
-	#  (having ungot it).
-.local get_strlit
-get_strlit:
-	PUSH	%ebp
-	MOVL	%esp, %ebp
-
-	#  Skip whitespace and test for the opening '\"'
-	CALL	skip_white
-	CMPB	'\"', %al
-	JNE	_error
-
-	MOVL	'str', %eax		# 'str' for character literal
-	MOVL	%eax, token
-	MOVL	$value, %eax
-	MOVL	%eax, %edi		# string pointer
-
-	CALL	getchar
-	MOVB	%al, (%edi)
-
-.L22:	#  Loop reading characters, and check for buffer overflow
-	INCL	%edi
-	MOVL	$value, %eax
-	SUBL	%edi, %eax
-	CMPL	$-79, %eax
-	JLE	_error
-
-	CALL	getchar
-	MOVB	%al, (%edi)
-	CMPB	'\"', %al
-	JNE	.L22
-
-	#  Write null terminator
-	INCL	%edi
-	XORB	%cl, %cl
-	MOVB	%cl, (%edi)
-
-	#  Peek another character
-	CALL	getchar
-	PUSH	%eax
-	CALL	ungetchar
-	POP	%eax
-
-POP	%ebp
+	LEAVE
 	RET
 
 
@@ -568,7 +541,7 @@ next:
 	CMPB	'\'', %cl
 	JE	.L8b
 	CMPB	'\"', %cl
-	JE	.L8c
+	JE	.L8b
 
 	CALL	getchar
 .L6a:
@@ -585,10 +558,7 @@ next:
 	CALL	get_multiop
 	JMP	.L9
 .L8b:
-	CALL	get_charlit
-	JMP	.L9
-.L8c:
-	CALL	get_strlit
+	CALL	get_qlit
 	JMP	.L9
 .L9:
 	MOVL	token, %eax
