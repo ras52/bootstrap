@@ -99,6 +99,52 @@ if_stmt:
 	RET
 
 
+####	#  Function:	void do_stmt(int brk, int cont, int ret);
+	#
+	#    do-stmt ::= 'do' stmt 'while' brack-expr ';'
+	#
+	#  Current token is 'do'
+.local do_stmt
+do_stmt:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	CALL	new_label
+	PUSH	%eax			# -4(%ebp)  break label, used later
+
+	#  Start of loop
+	CALL	new_label
+	PUSH	%eax			# -8(%ebp)  start of loop label
+	CALL	local_label
+
+	CALL	new_label
+	PUSH	%eax			# -12(%ebp) cont label, used later
+
+	CALL	next
+	PUSH	16(%ebp)		# ret 
+	PUSH	-12(%ebp)		# cont
+	PUSH	-4(%ebp)		# brk
+	CALL	stmt
+	ADDL	$12, %esp
+
+	MOVL	token, %eax
+	CMPL	'whil', %eax
+	JNE	_error
+	CALL	next
+
+	#  End of loop
+	CALL	local_label		# cont label
+	POP	%eax			# -12(%ebp)
+	CALL	brack_expr
+	CALL	branch_ifnz		# jump to start
+	POP	%eax			# -8(%ebp)
+	CALL	local_label		# break label
+	POP	%eax			# -4(%ebp)
+
+	CALL	semicolon
+	POP	%ebp
+	RET
+
 ####	#  Function:	void while_stmt(int brk, int cont, int ret);
 	#
 	#    while-stmt ::= 'while' brack-expr stmt
@@ -109,20 +155,21 @@ while_stmt:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
+	#  Start of loop
 	CALL	new_label
-	PUSH	%eax
+	PUSH	%eax			# -4(%ebp)	cont label
 	CALL	local_label
 
 	CALL	next
 	CALL	brack_expr
 
 	CALL	new_label
-	PUSH	%eax
+	PUSH	%eax			# -8(%ebp)  break label, used later
 	CALL	branch_ifz
 
-	PUSH	16(%ebp)	# ret 
-	PUSH	-4(%ebp)	# cont
-	PUSH	-8(%ebp)	# brk
+	PUSH	16(%ebp)		# ret 
+	PUSH	-4(%ebp)		# cont
+	PUSH	-8(%ebp)		# brk
 	CALL	stmt
 	ADDL	$12, %esp
 
@@ -417,6 +464,8 @@ stmt:
 	JE	.L3
 	CMPL	'whil', %eax
 	JE	.L8
+	CMPL	'do', %eax
+	JE	.L8a
 	CMPL	'retu', %eax
 	JE	.L9
 	CMPL	'brea', %eax
@@ -436,6 +485,9 @@ stmt:
 	JMP	.L6
 .L8:
 	CALL	while_stmt
+	JMP	.L6
+.L8a:
+	CALL	do_stmt
 	JMP	.L6
 .L9:
 	CALL	return_stmt

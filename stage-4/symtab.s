@@ -184,7 +184,7 @@ end_scope:
 
 ####	#  Function:	int lookup_sym(char const* name, int* off);
 	#
-	#  Return the frame offset of the symbol NAME, or 0 if it is 
+	#  Return the lvalue flag for the symbol NAME, or -1 if it is 
 	#  not defined.  (0 is not a valid offset because (%ebp) is the 
 	#  calling frame's base pointer.)
 lookup_sym:
@@ -215,7 +215,7 @@ lookup_sym:
 .L3:
 	#  Symbol not found
 	XORL	%eax, %eax
-	DECL	%eax			# return -1 if not found
+	INCL	%eax			# return +1 (is lvalue) if not found
 	XORL	%edx, %edx		# use 0 frame offset for error
 .L6:
 	# write *off

@@ -156,6 +156,16 @@ array_decl:
 	CMPB	$0, %cl
 	JNE	_error
 
+	MOVB	$2, %cl			# *= sizeof(int)
+	SHLL	%eax
+	PUSH	%eax			# byte size: probably not neeed?
+	XORL	%eax, %eax
+	PUSH	%eax			# not an lvalue
+	PUSH	%eax			# frame offset == 0 (i.e. for linker)
+	PUSH	8(%ebp)			# name
+	CALL	save_sym
+	ADDL	$16, %esp
+	
 	CALL	next
 	CMPL	']', %eax
 	JNE	_error

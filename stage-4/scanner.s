@@ -46,8 +46,8 @@ skip_ccomm:
 
 ####	#  Function:	int skip_white();
 	#
-	#  Skips over any white space characters, and returns the next
-	#  character (having ungot it).
+	#  Skips over any white space characters (including comments), and 
+	#  returns the next character (having ungot it).
 .local skip_white
 skip_white:
 	PUSH	%ebp
@@ -287,6 +287,7 @@ keywords:
 	.string "case"		.align 12	# TODO
         .string "continue"      .align 12
 	.string "default"	.align 12	# TODO
+	.string "do"		.align 12
 	.string "else"		.align 12
 	.string "extern"	.align 12	# TODO
 	.string "goto"		.align 12	# TODO

@@ -95,8 +95,8 @@ maybe_call:
 	POP	%ecx
 	POP	%ecx
 	POP	%ecx
-	CMPL	$-1, %eax
-	JE	.L38a			# lookup_sym returns -1 if not found
+	TESTL	%ecx, %ecx
+	JZ	.L38a			# *offset == 0 if not found
 
 	PUSH	%eax
 	PUSH	%ecx			# frame offset
@@ -106,13 +106,14 @@ maybe_call:
 	JMP	.L39
 
 .L38a:
+	PUSH	%eax			# store lvalue flag
+
 	#  Symbol not found, so leave it as a symbol for the linker to resolve
 	LEA	-16(%ebp), %eax
 	PUSH	%eax
 	CALL	load_var
 	POP	%eax
-	XORL	%eax, %eax
-	INCL	%eax			# It's an lvalue
+	POP	%eax			# restore lvalue flag for return
 	
 .L39:
 	LEAVE

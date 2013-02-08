@@ -25,7 +25,7 @@ rchar:
 	POP	%ebp
 	RET
 
-####	#  Function: char lchar(char const* s, size_t n, char c);
+####	#  Function: char lchar(char* s, size_t n, char c);
 	#  B's lchar function.  Sets S[N] = C, and returns C, zero padded in 
 	#  a word.
 lchar:
