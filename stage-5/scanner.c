@@ -1,4 +1,4 @@
-/* scanner.c  --  code to tokenising C input stream
+/* scanner.c  --  code for tokenising the C input stream
  *
  * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.

@@ -6,6 +6,8 @@
 
 main() {
     auto c;
+    init_symtab();
+
     while ( (c = next()) != -1 ) {
         auto t = token;
         if (t == 'id' || t == 'num' || t == 'str' || t == 'chr') 
