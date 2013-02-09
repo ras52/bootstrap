@@ -66,6 +66,5 @@ the compiler against this to produce a significantly faster compiler.
 TODO
   Switch statements
   Goto and labels
-  Global-scope arrays
-  Function-scope static variables
-  Function pointers
+  Extern declarations (especially for arrays)
+  Function pointers (may need linker & assembler support)

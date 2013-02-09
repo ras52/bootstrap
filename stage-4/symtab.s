@@ -143,7 +143,7 @@ end_scope:
 	MOVL	st_end, %eax
 	MOVL	%eax, %ecx		# %ecx  end
 	MOVL	st_start, %eax
-	SUBL	$28, %eax		# sizeof(entry)a
+	SUBL	$28, %eax		# sizeof(entry)
 	MOVL	%eax, %edx		# %edx  ptr
 .L4:
 	#  Zero %eax in case we jump to the end where %eax is the scope size
@@ -184,9 +184,11 @@ end_scope:
 
 ####	#  Function:	int lookup_sym(char const* name, int* off);
 	#
-	#  Return the lvalue flag for the symbol NAME, or -1 if it is 
-	#  not defined.  (0 is not a valid offset because (%ebp) is the 
-	#  calling frame's base pointer.)
+	#  Return the lvalue flag for the symbol NAME, or 1 if it is 
+	#  not defined (as we assume external symbols are lvalues).  
+	#  Also set *OFF to the symbol table offset of the symbol, or
+	#  0 if it is not defined (as 0 is not a valid offset because 
+	#  0(%ebp) is the calling frame's base pointer.)
 lookup_sym:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
