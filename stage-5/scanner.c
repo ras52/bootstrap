@@ -9,12 +9,17 @@
 static
 skip_ccomm() {
     auto c;
+
     do {
         do c = getchar();
         while ( c != -1 && c != '*' );
         c = getchar();
     } while ( c != -1 && c != '/' );
-    if ( c == -1 ) _error();
+
+    if ( c == -1 ) {
+        fputs("Unexpected EOF during comment\n", stderr);
+        exit(1);
+    }
 }
 
 /* Skips over whitespace, including comments, and returns the next character
@@ -125,7 +130,10 @@ read_number(buf, c) {
         do lchar( buf, i++, c );
         while ( i < 16 && isdigit( c = getchar() ) );
     }
-    if ( i == 16 ) _error();
+    if ( i == 16 ) {
+        fputs("Overflow reading number\n", stderr);
+        exit(1);
+    }
     lchar( buf, i, 0 );
     ungetchar(c);
 }
@@ -141,21 +149,47 @@ get_number(c) {
     read_number( buf, c );
     node[0] = 'num';
     node[1] = strtol( buf, &nptr, 0 );
-    if ( rchar(nptr, 0) ) _error();
+    if ( rchar(nptr, 0) ) {
+        fprintf(stderr, "Unexpected character '%c' in string \"%s\"\n",
+                rchar(nptr, 0), buf);
+        exit(1);
+    }
     return node;
 }
 
-/* Read an operator, starting with character C, and return a node with
- * NODE->type set to the operator as a multicharacter literal. */
-static
-get_multiop(c) {
+/* Test whether the two characters in the multicharacter literal, OP, is a 
+ * valid lexical representation of an operator.  So '[]' does not  */
+static 
+is_2charop(op) {
+    /* TODO: digraphs, trigraphs, and '->' */
     auto mops[19] = { 
         /* 0     1     2     3     4     5     6     7     8     9 */
         '++', '--', '<<', '>>', '<=', '>=', '==', '!=', '&&', '||',
         '*=', '%=', '/=', '+=', '-=', '&=', '|=', '^=',  0 
     };
 
-    auto node = malloc(4); /* struct node { int type; } */
+    /* Search for two-character operator name in the mops[] list, above */
+    auto i = 0;
+    while ( mops[i] && mops[i] != op )
+        ++i;
+
+    return mops[i] ? 1 : 0;
+}
+
+/* Read an operator, starting with character C, and return a node with
+ * NODE->type set to the operator as a multicharacter literal. */
+static
+get_multiop(c) {
+    /* struct node { int type; node* op0; node* op1; node* op2; } 
+     * For binary operators, op0 is the lhs and op1 the rhs; for unary prefix
+     * operators, only op0 is used; and for unary postfix only op1 is used. 
+     * 
+     * The scanner never reads a ternary operator (because ?: has two separate
+     * lexical elements). */
+    auto node = malloc(16);
+
+    /* The operands will get filled in by the parser */
+    node[1] = node[2] = node[3] = 0;
 
     {   /* Fetch the second character */
         auto c2 = getchar();
@@ -163,13 +197,11 @@ get_multiop(c) {
         else lchar( &c, 1, c2 );
     }
 
-    /* Search for two-character operator name in the mops[] list, above */
-    auto i = 0;
-    while ( mops[i] && mops[i] != c )
-        ++i;
-
-    /* Not found: it is a single character operator */
-    if ( mops[i] == 0 ) {
+    /* If it's not a two-character operator, it must be a single character 
+     * operator -- node that the only three-character operators and two-
+     * character operators with an extra character appended.  
+     * TODO: '...' breaks that assumption. */
+    if ( !is_2charop(c) ) {
         ungetchar( rchar( &c, 1 ) );
         node[0] = rchar( &c, 0 );
         return node;
@@ -199,9 +231,14 @@ get_qlit(q) {
         while ( i < len-1 && (c = getchar()) != -1 && c != q ) {
             lchar( str, i++, c );
             if ( i < len-1 && c == '\\' ) {
-                if ( (c = getchar()) == -1 ) _error();
+                if ( (c = getchar()) == -1 ) break;
                 lchar( str, i++, c );
             }
+        }
+        if ( c == -1 ) {
+            fprintf(stderr, "Unexpected EOF during %s literal\n",
+                    q == '"' ? "string" : "character");
+            exit(1);
         }
         if ( i < len-1 )
             break;
@@ -210,24 +247,85 @@ get_qlit(q) {
         str = node + 4;
     }
 
-
-    if ( i == len-1 || c == -1 ) _error();
+    /* We can only reach here if i < len-1, so no need to check for overflow */
     lchar( str, i++, q );
     lchar( str, i++, 0 );
     node[0] = q == '"' ? 'str' : 'chr';
     return node;
 }
 
+/* Contains the token most recently read by next() */
+token = 0;
+
+/* Read the next lexical element as a syntax tree node */
 next() {
     auto c = skip_white();
     if ( c == -1 )
-        return 0;
+        token = 0;
     else if ( isidchar1(c) )
-        return get_word(c);
+        token = get_word(c);
     else if ( isdigit(c) )
-        return get_number(c);
+        token = get_number(c);
     else if ( c == '\'' || c == '"' )
-        return get_qlit(c);
+        token = get_qlit(c);
     else 
-        return get_multiop(c);
+        token = get_multiop(c);
+    return token;
 }
+
+/* Test whether token type OP is an operator in the syntax tree. */
+is_op(op) {
+    /* TODO: '.', ',' */
+    return strnlen(&op, 4) == 1 && strchr("&*+-~!/%<>^|=", op)
+        || is_2charop(op) || op == '?:' || op == '[]' 
+        || op == '>>=' || op == '<<=';
+}
+
+/* Unallocate a node */
+free_node(node) {
+    auto t;
+
+    if (!node) return;
+
+    t = node[0];
+
+    /* As a safety measure, if it's the current node, unset TOKEN. */
+    if ( node == token ) token = 0;
+
+    /* Recurse the syntax tree for an operator freeing its operands. */
+    if ( is_op(t) ) {
+        free_node( node[1] );
+        free_node( node[2] );
+        free_node( node[3] );
+    }
+
+    else if ( t == '()' ) {
+        auto i = 0;
+        while ( i < node[2] )
+            free_node( node[ 3 + i++ ] );
+        free_node( node[1] );
+    }
+
+    free(node);
+}
+
+/* Skip over a piece of syntax, deallocating its node */
+skip_node(type) {
+    if (token[0] != type) {
+        fprintf(stderr, "Error: expected a '%Mc'\n", type);
+        exit(1);
+    }
+    free_node(token);
+    return next();
+}
+
+/* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
+ * Returns P. */
+req_token(p) {
+    if (!p) {
+        fputs("Unexpected EOF\n", stderr);
+        exit(1);
+    }
+    return p;
+}
+

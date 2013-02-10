@@ -30,7 +30,7 @@ $(INIT):
 %.s:	%.c cc0
 	cc0 -S $<
 
-CC_OBJS  = scanner.o symtab.o main.o
+CC_OBJS  = scanner.o symtab.o expr.o main.o
 
 cc:	ld libc.o crt0.o $(CC_OBJS)
 	ld -o cc libc.o crt0.o $(CC_OBJS)
