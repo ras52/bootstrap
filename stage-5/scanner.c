@@ -4,10 +4,6 @@
  * All rights reserved.
  */
 
-token = 0;
-
-static __value[20];  /* 80 bytes */
-value = __value;
 
 /* Skips over a C-style comment (the opening / and * are already read). */
 static
@@ -54,73 +50,103 @@ isidchar(c) {
     return c == '_' || isalnum(c);
 }
 
-/* Check whether the null-terminated string, VALUE, is a keyword, and if so
- * return the keyword token (which is a multicharacter literal containing
- * at most the first four characters of the keyword, e.g. 'whil' for "while"); 
- * otherwise return 'id' for an identifier. */
+/* Check whether the null-terminated string, NODE->str, is a keyword, and 
+ * if so set NODE->type to the keyword token (which is a multicharacter 
+ * literal containing at most the first four characters of the keyword, 
+ * e.g. 'whil' for "while"); otherwise set NODE->type = 'id' for an 
+ * identifier.   Returns NODE. */
 static
-chk_keyword() {
+chk_keyword(node) {
+    /* Argument is:  struct node { int type; char str[]; } */
+    
     auto keywords[15] = {
         "auto", "break", "case", "continue", "default", "do", "else", 
         "extern", "goto", "if", "return", "static", "switch", "while", 0
     };
 
-    auto i = 0;
-    while ( keywords[i] && strcmp(keywords[i], value) != 0 )
+    auto i = 0, str = node + 4;
+    while ( keywords[i] && strcmp(keywords[i], str) != 0 )
         ++i;
 
-    if ( keywords[i] ) return *keywords[i];
-    else return 'id';
+    /* Set node->type; */
+    node[0] = keywords[i] ? *keywords[i] : 'id';
+    return node;
 }
 
-/* Read a word (i.e. identifier or keyword) starting with C (which passes
- * isidchar1(c)) into VALUE, and return the token type ('id' or the 
- * appropriate keyword token, e.g. 'whil'). */
+/* Create a node, NODE, which will be returned; read a word (i.e. identifier 
+ * or keyword) starting with C (which has already been checked by isidchar1) 
+ * into NODE->str, set NODE->type, and return NODE. */
 static
 get_word(c) {
-    auto i = 0;
-    lchar( value, i++, c );
-    while ( i < 80 && isidchar( c = getchar() ) )
-        lchar( value, i++, c );
-    if ( i == 80 ) _error();
-    else lchar( value, i, 0 );
+    auto i = 0, len = 32;
+    auto node = malloc(4 + len);  /* struct node { int type; char str[]; } */
+    auto str = node + 4;
+
+    lchar( str, i++, c );
+    while (1) { 
+        while ( i < len && isidchar( c = getchar() ) )
+            lchar( str, i++, c );
+        if ( i < len )
+            break;
+        len *= 2;
+        node = realloc( node, 4 + len );
+        str = node + 4;
+    } 
+
+    lchar( str, i, 0 );
     ungetchar(c);
-    return chk_keyword();
+    return chk_keyword( node );
 }
 
-/* Read a number (in octal, hex or decimal) starting with digit C into VALUE, 
- * and return the token type, 'num'. */
+
+/* Read a number (in octal, hex or decimal) starting with digit C into BUF, 
+ * which must be 16 bytes long (or longer). */
 static
-get_number(c) {
+read_number(buf, c) {
     auto i = 0;
     if ( c == '0' ) {
-        lchar( value, i++, c );
+        lchar( buf, i++, c );
         c = getchar();
         /* Is it hex? */
         if ( c == 'x' ) {
-            lchar( value, i++, c );
-            do lchar( value, i++, c );
-            while ( isxdigit( c = getchar() ) );
+            lchar( buf, i++, c );
+            do lchar( buf, i++, c );
+            while ( i < 16 && isxdigit( c = getchar() ) );
         }
         /* Is it octal? */
         else if ( isdigit(c) ) {
-            do lchar( value, i++, c );
-            while ( isdigit( c = getchar() ) );
+            do lchar( buf, i++, c );
+            while ( i < 16 && isdigit( c = getchar() ) );
         }
         /* else it's a literal zero */
     }
     /* It must be a decimal */
     else {
-        do lchar( value, i++, c );
-        while ( isdigit( c = getchar() ) );
+        do lchar( buf, i++, c );
+        while ( i < 16 && isdigit( c = getchar() ) );
     }
-    lchar( value, i, 0 );
+    if ( i == 16 ) _error();
+    lchar( buf, i, 0 );
     ungetchar(c);
-    return 'num';   
 }
 
-/* Read an operator, starting with C, and return it as a multicharacter 
- * literal */
+/* Create a node, NODE, which will be returned; read a number (oct / hex / dec)
+ * starting with character C (which has already been checked by isdigit), 
+ * parse it into NODE->val, set NODE->type, and return NODE. */
+static
+get_number(c) {
+    auto buf[16], nptr;
+    auto node = malloc(8); /* struct node { int type; int val; }; */
+
+    read_number( buf, c );
+    node[0] = 'num';
+    node[1] = strtol( buf, &nptr, 0 );
+    if ( rchar(nptr, 0) ) _error();
+    return node;
+}
+
+/* Read an operator, starting with character C, and return a node with
+ * NODE->type set to the operator as a multicharacter literal. */
 static
 get_multiop(c) {
     auto mops[19] = { 
@@ -129,12 +155,15 @@ get_multiop(c) {
         '*=', '%=', '/=', '+=', '-=', '&=', '|=', '^=',  0 
     };
 
+    auto node = malloc(4); /* struct node { int type; } */
+
+    {   /* Fetch the second character */
+        auto c2 = getchar();
+        if ( c2 == -1 ) return c;
+        else lchar( &c, 1, c2 );
+    }
 
     /* Search for two-character operator name in the mops[] list, above */
-    auto c2 = getchar();
-    if ( c2 == -1 ) return c;
-    else lchar( &c, 1, c2 );
-
     auto i = 0;
     while ( mops[i] && mops[i] != c )
         ++i;
@@ -142,49 +171,63 @@ get_multiop(c) {
     /* Not found: it is a single character operator */
     if ( mops[i] == 0 ) {
         ungetchar( rchar( &c, 1 ) );
-        return rchar( &c, 0 );
+        node[0] = rchar( &c, 0 );
+        return node;
     }
 
+    /* Is it a <<= or >>= operator? */
     if ( c == '<<' || c == '>>' ) {
         auto c2 = getchar();
         if ( c2 == '=' ) lchar( &c, 2, c2 );
         else ungetchar(c2);
     }
 
-    return c;
+    node[0] = c;
+    return node;
 }
 
 /* Read a string or character literal into VALUE, beginning with quote mark, 
  * Q, and return the appropriate token type ('str' or 'chr'). */
 static
 get_qlit(q) {
-    auto i = 0, c;
-    lchar( value, i++, q );
-    while ( i < 79 && (c = getchar()) != -1 && c != q ) {
-        lchar( value, i++, c );
-        if ( i < 79 && c == '\\' ) {
-            if ( (c = getchar()) == -1 ) _error();
-            lchar( value, i++, c );
+    auto i = 0, len = 32, c;
+    auto node = malloc(4 + len); /* struct node { int type; char str[]; } */
+    auto str = node + 4;
+
+    lchar( str, i++, q );
+    while (1) {
+        while ( i < len-1 && (c = getchar()) != -1 && c != q ) {
+            lchar( str, i++, c );
+            if ( i < len-1 && c == '\\' ) {
+                if ( (c = getchar()) == -1 ) _error();
+                lchar( str, i++, c );
+            }
         }
+        if ( i < len-1 )
+            break;
+        len *= 2;
+        node = realloc( node, 4 + len );
+        str = node + 4;
     }
 
-    if ( i == 79 || c == -1 ) _error();
-    lchar( value, i++, q );
-    lchar( value, i++, 0 );
-    return q == '"' ? 'str' : 'chr';
+
+    if ( i == len-1 || c == -1 ) _error();
+    lchar( str, i++, q );
+    lchar( str, i++, 0 );
+    node[0] = q == '"' ? 'str' : 'chr';
+    return node;
 }
 
 next() {
     auto c = skip_white();
     if ( c == -1 )
-        token = c;
+        return 0;
     else if ( isidchar1(c) )
-        token = get_word(c);
+        return get_word(c);
     else if ( isdigit(c) )
-        token = get_number(c);
+        return get_number(c);
     else if ( c == '\'' || c == '"' )
-        token = get_qlit(c);
+        return get_qlit(c);
     else 
-        token = get_multiop(c);
-    return token;
+        return get_multiop(c);
 }

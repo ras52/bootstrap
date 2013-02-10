@@ -5,15 +5,18 @@
  */
 
 main() {
-    auto c;
+    auto node;
     init_symtab();
 
-    while ( (c = next()) != -1 ) {
-        auto t = token;
-        if (t == 'id' || t == 'num' || t == 'str' || t == 'chr') 
-            printf( "%c: %s\n", token, value );
+    while ( node = next() ) {
+        auto t = node[0];
+        if (t == 'id' || t == 'str' || t == 'chr') 
+            printf( "%Mc: %s\n", t, &node[1] );
+        else if (t == 'num')
+            printf( "%Mc: %d\n", t, node[1] );
         else
-            printf( "%c\n", c );
+            printf( "%Mc\n", t );
+        free(node);
     }
     return 0;
 }
