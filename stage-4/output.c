@@ -160,19 +160,41 @@ vfprintf( stream, fmt, ap ) {
         }
 
         c = rchar(fmt++, 0);
-        
-        if (c == 'c') {
+
+        /* This is our extension:  %Mc prints a multicharacter constant */
+        if (c == 'M') {
+            c = rchar(fmt++, 0);
+            if (c == 'c') {
+                ap += 4;
+                n = strnlen(ap, 4);
+                if ( _fputsn(ap, n, stream) != n )
+                    return -1; 
+                written += n;
+            }
+            /* %MX for any other X prints a literal 'M', and backtracks for 
+             * the 'X' */
+            else {
+                c = rchar(--fmt, 0);
+                if ( fputc(c, stream) == -1 )
+                    return -1;
+                ++written;
+            }
+        }
+        /* %c prints a normal character */
+        else if (c == 'c') {
             ap += 4;
             if ( fputc(*ap, stream) == -1 )
                 return -1;
             ++written;
         }
+        /* %s prints a null-terminated character string */
         else if (c == 's') {
             ap += 4;
             if ( ( n = fputs(*ap, stream) ) == -1 )
                 return -1; 
             written += n;
         }
+        /* %d prints a decimal number  */
         else if (c == 'd') {
             ap += 4;
             if (*ap == 0) { 
@@ -201,6 +223,7 @@ vfprintf( stream, fmt, ap ) {
                 written += n;
             }
         }
+        /* %x prints a hexdecimal number  */
         else if (c == 'x') {
             ap += 4;
             if (*ap == 0) { 
@@ -224,6 +247,7 @@ vfprintf( stream, fmt, ap ) {
                 written += n;
             }
         }
+        /* %X for any other X prints a literal 'X' */
         else {
             if ( fputc(c, stream) == -1 )
                 return -1;

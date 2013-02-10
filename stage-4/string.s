@@ -3,6 +3,7 @@
 # Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
+
 ####	#  Function:	size_t strlen(char* s);
 strlen:
 	PUSH	%ebp
@@ -20,6 +21,26 @@ strlen:
 	POP	%edi
 	POP	%ebp
 	RET
+
+
+####	#  Function:	size_t strnlen(char* s, size_t maxlen);
+strnlen:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%edi
+
+	MOVL	8(%ebp), %edi
+	XORL	%eax, %eax
+	MOVL	12(%ebp), %ecx
+	INCL	%ecx
+	REPNE SCASB
+	SUBL	8(%ebp), %edi
+	LEA	-1(%edi), %eax		# DEC %edi; MOVL %edi, %eax
+
+	POP	%edi
+	POP	%ebp
+	RET
+
 
 ####	#  Function:	int strcmp(char const* a, char const* b);
 strcmp:
