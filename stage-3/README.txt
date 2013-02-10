@@ -70,7 +70,7 @@ The .string directive allows for strings in double quotes with
 a maximum length of 78 characters.  They are automatically null 
 terminated, and the following escapes understood:
 
-  \n \t \" \\
+  \n \t \" \\ \0
 
 The use of symbols as address immediates with a $ prefix (e.g. ADDL foo,
 %eax) is deprecated.  In the stage-2 assembler, this stores the address 

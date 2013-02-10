@@ -1762,6 +1762,9 @@ read_esc:
 	MOVB	$0x09, %al		# '\t'
 	CMPB	$0x74, %cl		# 't'
 	JE	.L37
+	MOVB	$0x00, %al		# '\0'
+	CMPB	$0x30, %cl		# '0'
+	JE	.L37
 
 	#  Default '\?' to '?', e.g. for '\'', '\\' and '\"'.
 	XORL	%eax, %eax
