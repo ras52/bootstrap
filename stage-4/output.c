@@ -8,10 +8,12 @@
 static __buf1[32];
 static __buf2[32];
 
-/*                    0     1       2       3       4       5
- * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode } */
-static __file1[6] = { 1,    128,    __buf1, __buf1, __buf1, 2    };
-static __file2[6] = { 2,    128,    __buf2, __buf2, __buf2, 2    };
+/*                    0     1       2       3       4       5       6
+ * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode    bmode } */
+static __file1[7] = { 1,    128,    __buf1, __buf1, __buf1, 2,      0     };
+static __file2[7] = { 2,    128,    __buf2, __buf2, __buf2, 2,      2     };
+/* MODE is as per the third argument to open(2).  
+ * BMODE is an _IO?BF flag */
 
 /* The stdio objects themselves.  
  * We can't just use the arrays themselves because we need to force make 
@@ -254,6 +256,11 @@ vfprintf( stream, fmt, ap ) {
             ++written;
         }
     }
+
+    /* XXX  This isn't really right: we should handle line buffering 
+     * distinctly from unbuffered, and also do similarly in the other ouput
+     * functions. */
+    if ( stream[6] ) fflush(stream);
 
     return written;
 }

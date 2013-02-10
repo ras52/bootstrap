@@ -202,7 +202,7 @@ make_rvalue:
 
 ####	#  Function:	type_t postfx_expr();
 	#
-	#    postfx-expr ::= primary-expr ( '[' expr '] )?
+	#    postfx-expr ::= primary-expr ( '[' expr '] | '++' | '--' )?
 	#
 .local postfx_expr
 postfx_expr:

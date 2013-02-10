@@ -80,10 +80,12 @@ malloc( size ) {
 
 /* The C library free() */
 free( ptr ) {
-    auto p = ptr - 16;
-    if (p[1]) _error(); /* Double free */
-    p[1] = 1;
-    __defrag( p );
+    if (ptr) {
+        auto p = ptr - 16;
+        if (p[1]) _error(); /* Double free */
+        p[1] = 1;
+        __defrag( p );
+    }
 }
 
 /* The C library realloc() */
