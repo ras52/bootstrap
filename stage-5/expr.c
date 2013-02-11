@@ -9,42 +9,53 @@
 static
 primry_expr() {
     auto n, t = token[0];
-    if ( t == 'num' || t == 'chr' || t == 'id' | t == 'str' ) {
-        n = token;
-        next();
-    }
-    else {
+    if ( t == 'num' || t == 'chr' || t == 'id' | t == 'str' )
+        n = take_node();
+
+    else if ( t == '(' ) {
         skip_node('(');
         n = expr(); 
         skip_node(')');
     }
+    else
+        error("Unexpected token '%Mc' while parsing expression\n", t);
+    
     return n;
+}
+
+/* struct node { int type; node* fn; int nargs; node* args[]; } */
+vnode_new( type, fn, sz ) {
+    auto p = malloc( (3 + sz) * 4 );
+    p[0] = type;
+    p[1] = fn;
+    p[2] = 0;
+    return p;
+}
+
+/* Append node N to the vector node N, which is of size *SZ_PTR, growing
+ * the vector if necessary, and returning the (possibly reallocated) vector. */
+vnode_app( v, n, sz_ptr ) {
+    if ( v[2] == *sz_ptr ) {
+        *sz_ptr *= 2;
+        v = realloc( v, (3 + *sz_ptr) * 4 );
+    }
+
+    v[ 3 + v[2]++ ] = n;
+
+    return v;
 }
 
 /*  arg-list ::= ( expr ( ',' expr )* )? */
 static
 arg_list(fn) {
-    auto sz = 4;
-
-    /* struct node { int type; node* fn; int nargs; node* args[]; } */
-    auto p = malloc( (3 + sz) * 4 );
-    p[0] = '()';
-    p[1] = fn;
-    p[2] = 0;
+    auto sz = 4, p = vnode_new( '()', fn, sz );
 
     if ( token && token[0] == ')' ) 
         return p;
 
     while (1) {
         req_token( token );
-
-        /* Grow the node if necessary. */
-        if ( p[2] == sz ) {
-            sz *= 2;
-            p = realloc( p, (3 + sz) * 4 );
-        }
-
-        p[ 3 + p[2]++ ] = expr();
+        p = vnode_app( p, expr(), &sz );
 
         /* It would be easier to code for an optional ',' at the end, but
          * the standard doesn't allow for that. */
@@ -81,8 +92,7 @@ postfx_expr() {
 
         if ( t == '++' || t == '--' ) {
             token[2] = p;
-            p = token;
-            next();
+            p = take_node();
         }
     
         else if ( t == '[' ) {
@@ -113,8 +123,8 @@ unary_expr() {
 
     if ( strnlen(&t, 4) == 1 && strchr("+-~!*&", t) 
          || t == '++' || t == '--' ) {
-        auto p = token;
-        req_token( next() );
+        auto p = take_node();
+        req_token(token);
         p[1] = unary_expr();
         return p;
     }

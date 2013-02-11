@@ -4,6 +4,21 @@
  * All rights reserved.
  */
 
+static line = 1;
+
+error(fmt) {
+    fprintf(stderr, "%d: ", line);
+    vfprintf(stderr, fmt, &fmt);
+    exit(1);
+}
+
+/* A version of getchar() that increments LINE if a '\n' is found */
+static
+getcharl() {
+    auto c = getchar();
+    if ( c == '\n' ) ++line;
+    return c;
+}
 
 /* Skips over a C-style comment (the opening / and * are already read). */
 static
@@ -11,15 +26,13 @@ skip_ccomm() {
     auto c;
 
     do {
-        do c = getchar();
+        do c = getcharl();
         while ( c != -1 && c != '*' );
-        c = getchar();
+        c = getcharl();
     } while ( c != -1 && c != '/' );
 
-    if ( c == -1 ) {
-        fputs("Unexpected EOF during comment\n", stderr);
-        exit(1);
-    }
+    if ( c == -1 )
+        error("Unexpected EOF during comment\n");
 }
 
 /* Skips over whitespace, including comments, and returns the next character
@@ -28,7 +41,7 @@ static
 skip_white() {
     auto c;
     while (1) {
-        do c = getchar();
+        do c = getcharl();
         while ( isspace(c) ); 
 
         if (c == '/') {
@@ -65,16 +78,22 @@ chk_keyword(node) {
     /* Argument is:  struct node { int type; char str[]; } */
     
     auto keywords[15] = {
-        "auto", "break", "case", "continue", "default", "do", "else", 
-        "extern", "goto", "if", "return", "static", "switch", "while", 0
+        /* 'do' and 'if' have an extra NUL character to pad them to 4 bytes
+         * for casting to an int (i.e. a multicharacter literal). */
+        "auto", "break", "case", "continue", "default", "do\0", "else", 
+        "extern", "goto", "if\0", "return", "static", "switch", "while", 0
     };
 
     auto i = 0, str = node + 4;
     while ( keywords[i] && strcmp(keywords[i], str) != 0 )
         ++i;
 
-    /* Set node->type; */
-    node[0] = keywords[i] ? *keywords[i] : 'id';
+    if ( keywords[i] ) {
+        /* Change the id node to an op node. */
+        node[0] = *keywords[i];
+        node[1] = node[2] = node[3] = node[4] = 0;
+    }
+    
     return node;
 }
 
@@ -83,10 +102,11 @@ chk_keyword(node) {
  * into NODE->str, set NODE->type, and return NODE. */
 static
 get_word(c) {
-    auto i = 0, len = 32;
+    auto i = 0, len = 32;  /* Len must be >= 16, which is the op node size */
     auto node = malloc(4 + len);  /* struct node { int type; char str[]; } */
     auto str = node + 4;
 
+    node[0] = 'id';
     lchar( str, i++, c );
     while (1) { 
         while ( i < len && isidchar( c = getchar() ) )
@@ -130,10 +150,9 @@ read_number(buf, c) {
         do lchar( buf, i++, c );
         while ( i < 16 && isdigit( c = getchar() ) );
     }
-    if ( i == 16 ) {
-        fputs("Overflow reading number\n", stderr);
-        exit(1);
-    }
+    if ( i == 16 )
+        error("Overflow reading number\n");
+    
     lchar( buf, i, 0 );
     ungetchar(c);
 }
@@ -149,11 +168,10 @@ get_number(c) {
     read_number( buf, c );
     node[0] = 'num';
     node[1] = strtol( buf, &nptr, 0 );
-    if ( rchar(nptr, 0) ) {
-        fprintf(stderr, "Unexpected character '%c' in string \"%s\"\n",
-                rchar(nptr, 0), buf);
-        exit(1);
-    }
+    if ( rchar(nptr, 0) )
+        error("Unexpected character '%c' in string \"%s\"\n",
+              rchar(nptr, 0), buf);
+    
     return node;
 }
 
@@ -176,26 +194,33 @@ is_2charop(op) {
     return mops[i] ? 1 : 0;
 }
 
+/* struct node { int type; node* op0; node* op1; node* op2; node* op3 } */
+node_new(type) {
+    /* For binary operators, op0 is the lhs and op1 the rhs; for unary prefix
+     * operators, only op0 is used; and for unary postfix only op1 is used. 
+     * 
+     * The scanner never reads a ternary operator (because ?: has two separate
+     * lexical elements), but we generate '?:' nodes in the expression parser
+     * and want a uniform interface.  Similarly, the 'for' node is a quaternary
+     * "operator" (init, test, incr, stmt). */
+    auto n = malloc(20);
+
+    n[0] = type;
+
+    /* The operands will get filled in by the parser */
+    n[1] = n[2] = n[3] = n[4] = 0;
+
+    return n;
+}
+
 /* Read an operator, starting with character C, and return a node with
  * NODE->type set to the operator as a multicharacter literal. */
 static
 get_multiop(c) {
-    /* struct node { int type; node* op0; node* op1; node* op2; } 
-     * For binary operators, op0 is the lhs and op1 the rhs; for unary prefix
-     * operators, only op0 is used; and for unary postfix only op1 is used. 
-     * 
-     * The scanner never reads a ternary operator (because ?: has two separate
-     * lexical elements). */
-    auto node = malloc(16);
-
-    /* The operands will get filled in by the parser */
-    node[1] = node[2] = node[3] = 0;
-
-    {   /* Fetch the second character */
-        auto c2 = getchar();
-        if ( c2 == -1 ) return c;
-        else lchar( &c, 1, c2 );
-    }
+    /* Fetch the second character */
+    auto c2 = getchar();
+    if ( c2 == -1 ) return c;
+    else lchar( &c, 1, c2 );
 
     /* If it's not a two-character operator, it must be a single character 
      * operator -- node that the only three-character operators and two-
@@ -203,19 +228,17 @@ get_multiop(c) {
      * TODO: '...' breaks that assumption. */
     if ( !is_2charop(c) ) {
         ungetchar( rchar( &c, 1 ) );
-        node[0] = rchar( &c, 0 );
-        return node;
+        return node_new( rchar( &c, 0 ) );
     }
 
     /* Is it a <<= or >>= operator? */
     if ( c == '<<' || c == '>>' ) {
-        auto c2 = getchar();
+        c2 = getchar();
         if ( c2 == '=' ) lchar( &c, 2, c2 );
         else ungetchar(c2);
     }
 
-    node[0] = c;
-    return node;
+    return node_new(c);
 }
 
 /* Read a string or character literal into VALUE, beginning with quote mark, 
@@ -235,11 +258,11 @@ get_qlit(q) {
                 lchar( str, i++, c );
             }
         }
-        if ( c == -1 ) {
-            fprintf(stderr, "Unexpected EOF during %s literal\n",
-                    q == '"' ? "string" : "character");
-            exit(1);
-        }
+
+        if ( c == -1 )
+            error("Unexpected EOF during %s literal\n",
+                  q == '"' ? "string" : "character");
+
         if ( i < len-1 )
             break;
         len *= 2;
@@ -281,25 +304,26 @@ is_op(op) {
         || op == '>>=' || op == '<<=';
 }
 
+is_stmt_op(op) {
+    return op == 'if' || op == 'do' || op == 'whil' || op == 'retu' 
+        || op == 'brea' || op == 'cont';
+}
+
 /* Unallocate a node */
 free_node(node) {
-    auto t;
-
     if (!node) return;
-
-    t = node[0];
 
     /* As a safety measure, if it's the current node, unset TOKEN. */
     if ( node == token ) token = 0;
 
     /* Recurse the syntax tree for an operator freeing its operands. */
-    if ( is_op(t) ) {
-        free_node( node[1] );
-        free_node( node[2] );
-        free_node( node[3] );
+    if ( is_op( node[0] ) || is_stmt_op( node[0] ) ) {
+        auto i = 0;
+        while ( i < 4 )
+            free_node( node[ 1 + i++ ] );
     }
 
-    else if ( t == '()' ) {
+    else if ( node[0] == '()' || node[0] == '{}' ) {
         auto i = 0;
         while ( i < node[2] )
             free_node( node[ 3 + i++ ] );
@@ -311,21 +335,27 @@ free_node(node) {
 
 /* Skip over a piece of syntax, deallocating its node */
 skip_node(type) {
-    if (token[0] != type) {
-        fprintf(stderr, "Error: expected a '%Mc'\n", type);
-        exit(1);
-    }
+    if (!token)
+        error("Unexpected EOF when expecting '%Mc'\n", type);
+
+    else if (token[0] != type)
+        error("Expected a '%Mc'\n", type);
+    
     free_node(token);
     return next();
+}
+
+/* Take ownership of the current node, and call next() */
+take_node() {
+    auto node = token;
+    next();
+    return node;
 }
 
 /* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
  * Returns P. */
 req_token(p) {
-    if (!p) {
-        fputs("Unexpected EOF\n", stderr);
-        exit(1);
-    }
+    if (!p) error("Unexpected EOF\n");
     return p;
 }
 
