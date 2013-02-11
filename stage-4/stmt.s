@@ -51,7 +51,7 @@ brack_expr:
 
 ####	#  Function:	void if_stmt(int brk, int cont, int ret);
 	#
-	#    if-stmt ::= 'if' brack-expr stmt
+	#    if-stmt ::= 'if' brack-expr stmt ( 'else' stmt )?
 	# 
 	#  Current token is 'if'
 .local if_stmt
