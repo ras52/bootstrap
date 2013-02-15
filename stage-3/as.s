@@ -1367,12 +1367,8 @@ read_rm:
 	POP	%eax		# ret val
 	ORB	%dl, %al
 
-	#  0x04 == (%esp), 0x05 == (%ebp) and 0x84 == DISP(%esp) are invalid
-	CMPB	$0x04, %al
-	JE	error
+	#  0x05 == (%ebp) is not supported
 	CMPB	$0x05, %al
-	JE	error
-	CMPB	$0x84, %al
 	JE	error
 
 	POP	%ebp
@@ -2418,6 +2414,25 @@ write_mrm:
 	CALL	writebyte
 	POP	%eax
 
+	#  Do we have (%esp) or DISP(%esp)?
+	CMPB	$0x04, %al
+	JE	.L20b
+	CMPB	$0x84, %al
+	JE	.L20b
+	JMP	.L20a
+
+.L20b:
+	#  Yes.  Write an 0x24 SIB byte
+	PUSH	%eax
+	PUSH	20(%ebp)	# ofile
+	MOVB	$0x24, %cl
+	PUSH	%ecx
+	CALL	writebyte
+	POP	%ecx
+	POP	%ecx
+	POP	%eax
+
+.L20a:
 	#  Do we have a disp32?  NB: We don't support disp8s
 	CMPB 	$0x80, %al
 	JB	.L20
