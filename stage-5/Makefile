@@ -30,7 +30,7 @@ $(INIT):
 %.s:	%.c cc0
 	cc0 -S $<
 
-CC_OBJS  = scanner.o symtab.o expr.o stmt.o main.o
+CC_OBJS  = scanner.o symtab.o expr.o stmt.o i386.o codegen.o main.o
 
 cc:	ld libc.o crt0.o $(CC_OBJS)
 	ld -o cc libc.o crt0.o $(CC_OBJS)
@@ -40,7 +40,7 @@ cc:	ld libc.o crt0.o $(CC_OBJS)
 clean:
 	$(RM) -f $(INIT)
 	$(RM) -f $(CC_OBJS) cc
-	$(RM) -f scanner.s main.s symtab.s
+	$(RM) -f $(CC_OBJS:%.o:%.s)
 
 check:
 

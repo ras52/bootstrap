@@ -6,9 +6,19 @@
 
 static line = 1;
 
-error(fmt) {
+static
+print_msg(fmt, ap) {
     fprintf(stderr, "%d: ", line);
-    vfprintf(stderr, fmt, &fmt);
+    vfprintf(stderr, fmt, ap);
+    fputc('\n', stderr);
+}
+
+warning(fmt) {
+    print_msg(fmt, &fmt);
+}
+
+error(fmt) {
+    print_msg(fmt, &fmt);
     exit(1);
 }
 
@@ -32,7 +42,7 @@ skip_ccomm() {
     } while ( c != -1 && c != '/' );
 
     if ( c == -1 )
-        error("Unexpected EOF during comment\n");
+        error("Unexpected EOF during comment");
 }
 
 /* Skips over whitespace, including comments, and returns the next character
@@ -151,7 +161,7 @@ read_number(buf, c) {
         while ( i < 16 && isdigit( c = getchar() ) );
     }
     if ( i == 16 )
-        error("Overflow reading number\n");
+        error("Overflow reading number");
     
     lchar( buf, i, 0 );
     ungetchar(c);
@@ -169,7 +179,7 @@ get_number(c) {
     node[0] = 'num';
     node[1] = strtol( buf, &nptr, 0 );
     if ( rchar(nptr, 0) )
-        error("Unexpected character '%c' in string \"%s\"\n",
+        error("Unexpected character '%c' in string \"%s\"",
               rchar(nptr, 0), buf);
     
     return node;
@@ -260,7 +270,7 @@ get_qlit(q) {
         }
 
         if ( c == -1 )
-            error("Unexpected EOF during %s literal\n",
+            error("Unexpected EOF during %s literal",
                   q == '"' ? "string" : "character");
 
         if ( i < len-1 )
@@ -336,10 +346,10 @@ free_node(node) {
 /* Skip over a piece of syntax, deallocating its node */
 skip_node(type) {
     if (!token)
-        error("Unexpected EOF when expecting '%Mc'\n", type);
+        error("Unexpected EOF when expecting '%Mc'", type);
 
     else if (token[0] != type)
-        error("Expected a '%Mc'\n", type);
+        error("Expected a '%Mc'", type);
     
     free_node(token);
     return next();
@@ -355,7 +365,7 @@ take_node() {
 /* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
  * Returns P. */
 req_token(p) {
-    if (!p) error("Unexpected EOF\n");
+    if (!p) error("Unexpected EOF");
     return p;
 }
 

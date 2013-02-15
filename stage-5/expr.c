@@ -18,7 +18,7 @@ primry_expr() {
         skip_node(')');
     }
     else
-        error("Unexpected token '%Mc' while parsing expression\n", t);
+        error("Unexpected token '%Mc' while parsing expression", t);
     
     return n;
 }
@@ -293,6 +293,12 @@ cond_expr() {
     return p;
 }
 
+is_assop(t) {
+    return t == '='  || t == '+=' || t == '-=' || t == '*=' || t == '/=' || 
+           t == '%=' || t == '&=' || t == '|=' || t == '^=' || t == '<<=' || 
+           t == '>>=';
+} 
+
 /* assign-op   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%=' 
  *                     | '&=' | '|=' | '^=' | '<<=' | '>>='
  * assign-expr ::= cond-expr ( assign-op assign-expr )?  */
@@ -314,9 +320,7 @@ assign_expr() {
 
     if ( token ) {
         auto t = token[0];
-        if ( t == '='  || t == '+=' || t == '-=' || t == '*=' || t == '/=' || 
-             t == '%=' || t == '&=' || t == '|=' || t == '^=' || t == '<<=' || 
-             t == '>>=' ) {
+        if ( is_assop(t) ) {
             p = do_binop( p, token );
             p[2] = assign_expr();
         }

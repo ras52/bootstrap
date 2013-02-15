@@ -63,7 +63,8 @@ main() {
     next();
     
     while ( token && (node = block()) ) {
-        print_node( stdout, node );
+        /* print_node( stderr, node ); */
+        codegen( stdout, node, 0 );
         free_node( node );
     }
     return 0;
