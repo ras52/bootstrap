@@ -62,9 +62,9 @@ main() {
     init_symtab();
     next();
     
-    while ( token && (node = block()) ) {
+    while ( token && (node = block(0)) ) {
         /* print_node( stderr, node ); */
-        codegen( stdout, node, 0 );
+        codegen( stdout, node );
         free_node( node );
     }
     return 0;

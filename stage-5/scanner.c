@@ -22,6 +22,13 @@ error(fmt) {
     exit(1);
 }
 
+int_error(fmt) {
+    fputs("Internal error: ", stderr);
+    vfprintf(stderr, fmt, &fmt);
+    fputc('\n', stderr);
+    exit(2);
+}
+
 /* A version of getchar() that increments LINE if a '\n' is found */
 static
 getcharl() {
