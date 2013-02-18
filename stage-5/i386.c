@@ -147,10 +147,14 @@ pop_assign(stream) {
     fputs("\tMOVL\t%ecx,(%eax)\n", stream);
 }
 
+clear_stack(stream, sz) {
+    if (sz)
+        fprintf(stream, "\tADDL\t$%d, %%esp\n", sz);
+}
+
 asm_call(stream, fn_name, nargs) {
     fprintf(stream, "\tCALL\t%s\n", fn_name);
-    if (nargs)
-        fprintf(stream, "\tADDL\t$%d, %%esp\n", nargs*4);
+    clear_stack( stream, nargs*4 );
 }
 
 static
@@ -177,4 +181,28 @@ emit_label(stream, label_num) {
 
 cast_bool(stream) {
     fputs("\tTESTL\t%eax, %eax\n\tSETNZ\t%al\n\tMOVZBL\t%al, %eax\n", stream);
+}
+
+globl_decl(stream, name) {
+    fprintf(stream, ".globl\t%s\n", name);
+}
+
+local_decl(stream, name) {
+    fprintf(stream, ".local\t%s\n", name);
+}
+
+prolog(stream, name) {
+    fprintf(stream, ".text\n%s:\n\tPUSH\t%%ebp\n\tMOVL\t%%esp, %%ebp\n", name);
+}
+
+epilog(stream) {
+    fputs("\tLEAVE\n\tRET\n\n", stream);
+}
+
+int_decl_n(stream, name, num) {
+    fprintf(stream, ".data\n%s:\n\t.int %d\n", name, num);
+}
+
+int_decl_s(stream, name, str) {
+    fprintf(stream, ".data\n%s:\n\t.int %s\n", name, str);
 }

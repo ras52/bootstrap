@@ -92,7 +92,7 @@ isidchar(c) {
  * identifier.   Returns NODE. */
 static
 chk_keyword(node) {
-    /* Argument is:  struct node { int type; char str[]; } */
+    /* Argument is:  struct node { int type; int dummy; char str[]; } */
     
     auto keywords[15] = {
         /* 'do' and 'if' have an extra NUL character to pad them to 4 bytes
@@ -101,14 +101,14 @@ chk_keyword(node) {
         "extern", "goto", "if\0", "return", "static", "switch", "while", 0
     };
 
-    auto i = 0, str = node + 4;
+    auto i = 0, str = &node[2];
     while ( keywords[i] && strcmp(keywords[i], str) != 0 )
         ++i;
 
     if ( keywords[i] ) {
         /* Change the id node to an op node. */
         node[0] = *keywords[i];
-        node[1] = node[2] = node[3] = node[4] = 0;
+        node[2] = node[3] = node[4] = node[5] = 0;
     }
     
     return node;
@@ -120,10 +120,11 @@ chk_keyword(node) {
 static
 get_word(c) {
     auto i = 0, len = 32;  /* Len must be >= 16, which is the op node size */
-    auto node = malloc(4 + len);  /* struct node { int type; char str[]; } */
-    auto str = node + 4;
+    /* struct node { int type; int dummy; char str[]; } */
+    auto node = malloc(8 + len);
+    auto str = &node[2];
 
-    node[0] = 'id';
+    node[0] = 'id';  node[1] = 0;
     lchar( str, i++, c );
     while (1) { 
         while ( i < len && isidchar( c = getchar() ) )
@@ -131,8 +132,8 @@ get_word(c) {
         if ( i < len )
             break;
         len *= 2;
-        node = realloc( node, 4 + len );
-        str = node + 4;
+        node = realloc( node, 8 + len );
+        str = &node[2];
     } 
 
     lchar( str, i, 0 );
@@ -180,11 +181,12 @@ read_number(buf, c) {
 static
 get_number(c) {
     auto buf[16], nptr;
-    auto node = malloc(8); /* struct node { int type; int val; }; */
+    /* struct node { int type; int dummy; int val; }; */
+    auto node = malloc(12);
 
     read_number( buf, c );
-    node[0] = 'num';
-    node[1] = strtol( buf, &nptr, 0 );
+    node[0] = 'num';  node[1] = 0;
+    node[2] = strtol( buf, &nptr, 0 );
     if ( rchar(nptr, 0) )
         error("Unexpected character '%c' in string \"%s\"",
               rchar(nptr, 0), buf);
@@ -211,21 +213,22 @@ is_2charop(op) {
     return mops[i] ? 1 : 0;
 }
 
-/* struct node { int type; node* op0; node* op1; node* op2; node* op3 } */
+/* struct node { int type; int nops; node* op[4]; } */
 node_new(type) {
-    /* For binary operators, op0 is the lhs and op1 the rhs; for unary prefix
-     * operators, only op0 is used; and for unary postfix only op1 is used. 
+    /* For binary operators, op[0] is the lhs and op[1] the rhs; for unary 
+     * prefix operators, only op[0] is used; and for unary postfix only 
+     * op[1] is used. 
      * 
      * The scanner never reads a ternary operator (because ?: has two separate
      * lexical elements), but we generate '?:' nodes in the expression parser
      * and want a uniform interface.  Similarly, the 'for' node is a quaternary
      * "operator" (init, test, incr, stmt). */
-    auto n = malloc(20);
+    auto n = malloc(24);
 
-    n[0] = type;
+    n[0] = type; n[1] = 0;
 
     /* The operands will get filled in by the parser */
-    n[1] = n[2] = n[3] = n[4] = 0;
+    n[2] = n[3] = n[4] = n[5] = 0;
 
     return n;
 }
@@ -263,8 +266,9 @@ get_multiop(c) {
 static
 get_qlit(q) {
     auto i = 0, len = 32, c;
-    auto node = malloc(4 + len); /* struct node { int type; char str[]; } */
-    auto str = node + 4;
+    /* struct node { int type; int dummy; char str[]; } */
+    auto node = malloc(8 + len);
+    auto str = &node[2];
 
     lchar( str, i++, q );
     while (1) {
@@ -283,8 +287,8 @@ get_qlit(q) {
         if ( i < len-1 )
             break;
         len *= 2;
-        node = realloc( node, 4 + len );
-        str = node + 4;
+        node = realloc( node, 8 + len );
+        str = &node[2];
     }
 
     /* We can only reach here if i < len-1, so no need to check for overflow */
@@ -328,24 +332,16 @@ is_stmt_op(op) {
 
 /* Unallocate a node */
 free_node(node) {
+    auto i = 0;
+
     if (!node) return;
 
     /* As a safety measure, if it's the current node, unset TOKEN. */
     if ( node == token ) token = 0;
 
-    /* Recurse the syntax tree for an operator freeing its operands. */
-    if ( is_op( node[0] ) || is_stmt_op( node[0] ) ) {
-        auto i = 0;
-        while ( i < 4 )
-            free_node( node[ 1 + i++ ] );
-    }
-
-    else if ( node[0] == '()' || node[0] == '{}' ) {
-        auto i = 0;
-        while ( i < node[2] )
-            free_node( node[ 3 + i++ ] );
-        free_node( node[1] );
-    }
+    auto i = 0;
+    while ( i < node[1] )
+        free_node( node[ 2 + i++ ] );
 
     free(node);
 }
@@ -363,8 +359,9 @@ skip_node(type) {
 }
 
 /* Take ownership of the current node, and call next() */
-take_node() {
+take_node(arity) {
     auto node = token;
+    node[1] = arity;
     next();
     return node;
 }

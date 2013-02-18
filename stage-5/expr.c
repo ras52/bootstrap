@@ -10,7 +10,7 @@ static
 primry_expr() {
     auto n, t = token[0];
     if ( t == 'num' || t == 'chr' || t == 'id' | t == 'str' )
-        n = take_node();
+        n = take_node(0);
 
     else if ( t == '(' ) {
         skip_node('(');
@@ -23,24 +23,15 @@ primry_expr() {
     return n;
 }
 
-/* struct node { int type; node* fn; int nargs; node* args[]; } */
-vnode_new( type, fn, sz ) {
-    auto p = malloc( (3 + sz) * 4 );
-    p[0] = type;
-    p[1] = fn;
-    p[2] = 0;
-    return p;
-}
-
 /* Append node N to the vector node N, which is of size *SZ_PTR, growing
  * the vector if necessary, and returning the (possibly reallocated) vector. */
 vnode_app( v, n, sz_ptr ) {
-    if ( v[2] == *sz_ptr ) {
+    if ( v[1] == *sz_ptr ) {
         *sz_ptr *= 2;
-        v = realloc( v, (3 + *sz_ptr) * 4 );
+        v = realloc( v, (2 + *sz_ptr) * 4 );
     }
 
-    v[ 3 + v[2]++ ] = n;
+    v[ 2 + v[1]++ ] = n;
 
     return v;
 }
@@ -48,7 +39,8 @@ vnode_app( v, n, sz_ptr ) {
 /*  arg-list ::= ( expr ( ',' expr )* )? */
 static
 arg_list(fn) {
-    auto sz = 4, p = vnode_new( '()', fn, sz );
+    auto sz = 4, p = node_new('()');
+    vnode_app( p, fn, &sz );
 
     if ( token && token[0] == ')' ) 
         return p;
@@ -73,7 +65,8 @@ arg_list(fn) {
  * by calling next(). Return OP.  */
 static
 do_binop(lhs, op) {
-    op[1] = lhs;
+    op[1] = 2;
+    op[2] = lhs;
     req_token( next() );
     return op;
 }
@@ -91,18 +84,25 @@ postfx_expr() {
         t = token[0];
 
         if ( t == '++' || t == '--' ) {
+            /* Postfix ++ and -- are marked as binary operators.  This is 
+             * what distinguishes them from the prefix versions which are 
+             * marked as unary.  This is inspired by C++'s idea of
+             * T operator++(T&, int) vs. T& operator++(T&). */
             token[2] = p;
-            p = take_node();
+            p = take_node(2);
         }
     
         else if ( t == '[' ) {
             p = do_binop(p, token);
             p[0] = '[]';
-            p[2] = expr();
+            p[3] = expr();
             skip_node(']');
         }
     
         else if ( t == '(' ) {
+            /* We don't currently support function pointers */
+            if ( p[0] != 'id' )
+                error( "Expression found where function name was expected" );
             skip_node('(');
             p = arg_list(p);
             skip_node(')');
@@ -123,9 +123,9 @@ unary_expr() {
 
     if ( strnlen(&t, 4) == 1 && strchr("+-~!*&", t) 
          || t == '++' || t == '--' ) {
-        auto p = take_node();
+        auto p = take_node(1);
         req_token(token);
-        p[1] = unary_expr();
+        p[2] = unary_expr();
         return p;
     }
 
@@ -148,7 +148,7 @@ mult_expr() {
     while ( token 
             && ( token[0] == '*' || token[0] == '/' || token[0] == '%' ) ) {
         p = do_binop( p, token );
-        p[2] = cast_expr();
+        p[3] = cast_expr();
     }
 
     return p;
@@ -162,7 +162,7 @@ add_expr() {
 
     while ( token && ( token[0] == '+' || token[0] == '-' ) ) {
         p = do_binop( p, token );
-        p[2] = mult_expr();
+        p[3] = mult_expr();
     }
 
     return p;
@@ -176,7 +176,7 @@ shift_expr() {
 
     while ( token && ( token[0] == '<<' || token[0] == '>>' ) ) {
         p = do_binop( p, token );
-        p[2] = add_expr();
+        p[3] = add_expr();
     }
 
     return p;
@@ -191,7 +191,7 @@ rel_expr() {
     while ( token && ( token[0] == '<' || token[0] == '<=' || 
                        token[0] == '>' || token[0] == '>=' ) ) {
         p = do_binop( p, token );
-        p[2] = shift_expr();
+        p[3] = shift_expr();
     }
 
     return p;
@@ -205,7 +205,7 @@ eq_expr() {
 
     while ( token && ( token[0] == '==' || token[0] == '!=' ) ) {
         p = do_binop( p, token );
-        p[2] = rel_expr();
+        p[3] = rel_expr();
     }
 
     return p;
@@ -218,7 +218,7 @@ bitand_expr() {
 
     while ( token && token[0] == '&' ) {
         p = do_binop( p, token );
-        p[2] = eq_expr();
+        p[3] = eq_expr();
     }
 
     return p;
@@ -231,7 +231,7 @@ bitxor_expr() {
 
     while ( token && token[0] == '^' ) {
         p = do_binop( p, token );
-        p[2] = bitand_expr();
+        p[3] = bitand_expr();
     }
 
     return p;
@@ -244,7 +244,7 @@ bitor_expr() {
 
     while ( token && token[0] == '|' ) {
         p = do_binop( p, token );
-        p[2] = bitxor_expr();
+        p[3] = bitxor_expr();
     }
 
     return p;
@@ -257,7 +257,7 @@ logand_expr() {
 
     while ( token && token[0] == '&&' ) {
         p = do_binop( p, token );
-        p[2] = bitor_expr();
+        p[3] = bitor_expr();
     }
 
     return p;
@@ -270,7 +270,7 @@ logor_expr() {
 
     while ( token && token[0] == '||' ) {
         p = do_binop( p, token );
-        p[2] = logand_expr();
+        p[3] = logand_expr();
     }
 
     return p;
@@ -283,11 +283,11 @@ cond_expr() {
 
     if ( token && token[0] == '?' ) {
         p = do_binop( p, token );
-        p[0] = '?:';
-        p[2] = expr();
+        p[0] = '?:';  p[1] = 3;
+        p[3] = expr();
         skip_node(':');
         req_token( token );
-        p[3] = assign_expr();
+        p[4] = assign_expr();
     }
 
     return p;
@@ -322,7 +322,7 @@ assign_expr() {
         auto t = token[0];
         if ( is_assop(t) ) {
             p = do_binop( p, token );
-            p[2] = assign_expr();
+            p[3] = assign_expr();
         }
     }
 
