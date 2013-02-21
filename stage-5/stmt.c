@@ -81,26 +81,64 @@ keywd_stmt(in_loop, keyword) {
     return node;
 }
 
+static
+init_array(elts, req_const) {
+    auto init, sz = 4;
+    if (!token || token[0] != '{')
+        error("Expected array initialiser");
+    
+    init = take_node(0);
+    init[0] = '{}';
+    while (1) {
+        if (!elts--) 
+            error("Too many array initialisers");
+        vnode_app( init,  req_const ? constant() : assign_expr(),  &sz );
+        if (token && token[0] == '}')
+            break;
+        skip_node(',');
+    }
+
+    skip_node('}');
+    return init;
+}
+
+static
+obj_decl(decl, req_const) {
+    if (token && token[0] == '[') {
+        auto array = take_node(2);
+        array[0] = '[]';
+        if (token[0] != 'num')
+            error("Expected number as array size");
+        array[3] = take_node(0);
+        decl[2] = array;
+        skip_node(']');
+    }
+
+    if (token && token[0] == '=') {
+        auto type = decl[2];
+        skip_node('=');
+        if ( type && type[0] == '[]' )
+            decl[4] = init_array( type[3][2], req_const );
+        else
+            decl[4] = req_const ? constant() : assign_expr();
+    }
+}
+
 /*  init-decl ::= name ( init-int | '[' number ']' init-array )
  *  auto-stmt ::= 'auto' init-decl ( ',' init-decl )* ';' */
 static
 auto_stmt() {
     /* The 'auto' node is a wrapper vnode, and each element is an assignment */
     auto sz = 4, vnode = take_node(0);
+
     while (1) {
         auto decl = node_new('decl');   
-        decl[1] = 2; /* args are name, init */
+        decl[1] = 3; /* args are type, name, init */
 
-        decl[2] = take_node(0);
-        if (decl[2][0] != 'id') error("Expected identifier in declaration");
+        decl[3] = take_node(0);
+        if (decl[3][0] != 'id') error("Expected identifier in declaration");
 
-        /* TODO: arrays */
-
-        if (token && token[0] == '=') {
-            skip_node('=');
-            decl[3] = assign_expr();
-        }
-
+        obj_decl(decl, 0);
         vnode_app(vnode, decl, &sz);
         if (token && token[0] == ';')
             break;
@@ -141,9 +179,9 @@ block(in_loop) {
 
 /*  param-list ::= ( identifier ( ',' identifier )* )? */
 static
-param_list(fn) {
+param_list() {
     auto sz = 4, p = node_new('()');
-    vnode_app( p, fn, &sz );
+    vnode_app( p, 0, &sz );  /* Place holder for return type */
 
     if ( token && token[0] == ')' ) 
         return p;
@@ -174,10 +212,25 @@ constant() {
         error("Unexpected token '%Mc' while parsing expression", t);
 }
 
-top_level() {
-    /* Set mode = 1 if we're parsing a function definition, and 2 otherwise. */
-    auto mode = 0;
+static
+fn_decl( vnode, decl ) {
+    /* The standard doesn't allow things like:  int i, f() { }  
+     * From a grammar point of view, this is an arbitrary restriction. */
+    if ( vnode[1] )
+        error("Function definition not allowed here");
 
+    skip_node('(');
+    decl[2] = param_list();
+    skip_node(')');
+
+    decl[4] = block(0);
+    
+    vnode[1] = 1;
+    vnode[2] = decl;
+    return vnode;
+}
+
+top_level() {
     /* We use an 'exte' or 'stat' declaration, depending on whether it's 
      * internal (declared "static") or external (the default).  The parse
      * tree is compatible with the parse tree for 'auto'. */
@@ -189,39 +242,21 @@ top_level() {
 
     while (1) {
         auto decl = node_new('decl');
-        decl[1] = 2; /* args are fn or name, init.  fn type is '()' */
+        decl[1] = 3; /* args are type, fn or name, init.  fn type is '()' */
 
-        decl[2] = take_node(0);
-        if (decl[2][0] != 'id') error("Expected identifier in declaration");
+        decl[3] = take_node(0);
+        if (decl[3][0] != 'id') error("Expected identifier in declaration");
 
-        /* TODO: arrays */
+        if (token[0] == '(') 
+            return fn_decl( vnode, decl );
 
-        if (token[0] == '(') {
-            skip_node('(');
-            decl[2] = param_list( decl[2] );
-            skip_node(')');
-
-            if (mode == 2 && token && token[0] == '{')
-                error("Function definition not allowed here");
-
-            decl[3] = block(0);
-            mode = 1;
-        }
-    
-        else if (token[0] == '=') {
-            skip_node('=');
-            decl[3] = constant();
-        }
-
-        if (!mode) mode = 2;  /* Not a function definition */
-
+        obj_decl(decl, 1);
         vnode_app(vnode, decl, &sz);
-        if (mode == 1 || token && token[0] == ';')
+        if (token && token[0] == ';')
             break;
         skip_node(',');
     }
 
-    if (mode == 2)
-        skip_node(';'); 
+    skip_node(';'); 
     return vnode;
 }

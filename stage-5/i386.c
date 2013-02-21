@@ -17,13 +17,13 @@ load_str(stream, str, clabel) {
             clabel, str, clabel);
 }
 
-load_local(stream, offset, need_lval) {
-    fprintf(stream, "\t%s\t%d(%%ebp), %%eax)\n", 
-            need_lval ? "LEAL" : "MOVL", offset);
+load_local(stream, offset, need_addr) {
+    fprintf(stream, "\t%s\t%d(%%ebp), %%eax\n", 
+            need_addr ? "LEA" : "MOVL", offset);
 }
 
-load_symbol(stream, name, need_lval) {
-    fprintf(stream, "\tMOVL\t%s%s, %%eax\n", need_lval ? "$" : "", name);
+load_symbol(stream, name, need_addr) {
+    fprintf(stream, "\tMOVL\t%s%s, %%eax\n", need_addr ? "$" : "", name);
 }
 
 asm_push(stream) {
@@ -47,11 +47,11 @@ dereference(stream, need_lval) {
 }
 
 increment(stream) {
-    fputs("\tINCL\t(%eax)\n", stream);
+    fputs("\tINCL\t(%eax)\n\tMOVL\t(%eax), %eax\n", stream);
 }
 
 decrement(stream) {
-    fputs("\tDECL\t(%eax)\n", stream);
+    fputs("\tDECL\t(%eax)\n\tMOVL\t(%eax), %eax\n", stream);
 }
 
 postfix_inc(stream) {
@@ -147,6 +147,15 @@ pop_assign(stream) {
     fputs("\tMOVL\t%ecx,(%eax)\n", stream);
 }
 
+push_n_zero(stream, n) {
+    fputs("\tXORL\t%eax, %eax\n", stream);
+    while (n--) asm_push(stream);
+}
+
+alloc_stack(stream, sz) {
+    fprintf(stream, "\tSUBL\t$%d, %%esp\n", sz);
+}
+
 clear_stack(stream, sz) {
     if (sz)
         fprintf(stream, "\tADDL\t$%d, %%esp\n", sz);
@@ -199,10 +208,19 @@ epilog(stream) {
     fputs("\tLEAVE\n\tRET\n\n", stream);
 }
 
-int_decl_n(stream, name, num) {
-    fprintf(stream, ".data\n%s:\n\t.int %d\n", name, num);
+data_decl(stream, name) {
+    fprintf(stream, ".data\n%s:\n", name);
 }
 
-int_decl_s(stream, name, str) {
-    fprintf(stream, ".data\n%s:\n\t.int %s\n", name, str);
+int_decl_n(stream, num) {
+    fprintf(stream, "\t.int %d\n", num);
 }
+
+int_decl_s(stream, str) {
+    fprintf(stream, "\t.int %s\n", str);
+}
+
+zero_direct(stream, n) {
+    fprintf(stream, "\t.zero %d\n", n);
+}
+

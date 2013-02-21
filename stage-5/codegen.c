@@ -38,11 +38,14 @@ leaf_code(stream, node, need_lval) {
 
     else if ( node[0] == 'id' ) {
         auto off, is_lval = lookup_sym( &node[2], &off );
+        auto need_addr = (is_lval == need_lval);
         if (need_lval && !is_lval) 
             error("Non-lvalue identifier where lvalue is required");
-        if (!off) load_symbol(stream, &node[2], need_lval);
-        else load_local(stream, off, need_lval);
+        if (!off) load_symbol(stream, &node[2], need_addr);
+        else load_local(stream, off, need_addr);
     }
+
+    else int_error("Unknown token '%Mc' in parse tree", node[0]);
 }
 
 static
@@ -256,14 +259,50 @@ do_stmt(stream, node, brk, cont, ret) {
 }
 
 static
+type_size(type) {
+    if (type && type[0] == '[]')
+        return 4 * type[3][2];
+    else
+        return 4;
+}
+
+static
 auto_stmt(stream, node) {
     auto i = 0;
     while ( i < node[1] ) {
         auto decl = node[ 2 + i++ ];
-        frame_size += 4;
-        save_sym( &decl[2][2], -frame_size, 1, 4 );
-        if (decl[3]) expr_code( stream, decl[3], 0 );
-        asm_push( stream );
+        auto sz = type_size( decl[2] );
+
+        /* Arrays are currently the only object that's not an lvalue */
+        auto is_lval = !( decl[2] && decl[2][0] == '[]' );
+
+        frame_size += sz;
+        if ( decl[3][0] != 'id' ) int_error("Expected identifier in auto decl");
+        save_sym( &decl[3][2], -frame_size, is_lval, sz );
+
+        if ( decl[4] ) {
+            auto init = decl[4];
+            if ( init[0] == '{}' ) {
+                /* Check for an initialisation list that's not long enough.
+                 * If it's not, the standard requires zero initialisation of
+                 * the extra members. C99:6.7.8/21 */
+                if ( 4 * init[1] < sz )
+                    push_n_zero( stream, sz/4 - init[1] );
+
+                auto j = init[1];
+                while ( j ) {
+                    expr_code( stream, init[ 2 + --j ], 0 );
+                    asm_push( stream );
+                }
+            }
+            /* Scalar initialisation */
+            else {
+                expr_code( stream, init, 0 );
+                asm_push( stream );
+            }
+        }
+        /* If no intialiser, then just allocate memory */
+        else alloc_stack( stream, sz );
     }
 }
 
@@ -308,11 +347,10 @@ storage(stream, storage, name) {
 }
 
 static
-fn_decl(stream, storage, decl, block) {
+fn_decl(stream, name, decl, block) {
     auto ret = new_label();
 
     frame_size = 0;
-    storage(stream, storage[0], &decl[2][2]);
     new_scope();
 
     /* Inject the parameters into the scope */
@@ -322,7 +360,7 @@ fn_decl(stream, storage, decl, block) {
         save_sym( &n[2], 4*i, 1, 4 );
     }
 
-    prolog(stream, &decl[2][2]);
+    prolog(stream, name);
     do_block(stream, block, -1, -1, ret);
     emit_label( stream, ret );
     epilog(stream);
@@ -331,26 +369,51 @@ fn_decl(stream, storage, decl, block) {
 }
 
 static
-int_decl(stream, storage, name, init ) {
-    storage(stream, storage[0], &name[2]);
+int_decl(stream, name, init ) {
+    data_decl(stream, name);
     if (!init)
-        int_decl_n(stream, name, 0);
+        int_decl_n(stream, 0);
     else if (init[0] == 'num')
-        int_decl_n(stream, name, init[2]);
+        int_decl_n(stream, init[2]);
     else
-        int_decl_s(stream, name, &init[2]);
+        int_decl_s(stream, &init[2]);
+}
+
+static
+array_decl(stream, name, type, init) {
+    auto sz = type_size( type );
+    data_decl(stream, name);
+
+    if (init) {
+        auto i = 0;
+        while ( i < init[1] ) {
+            auto ival = init[ 2 + i++ ];
+            if (ival[0] == 'num')
+                int_decl_n(stream, ival[2]);
+            else
+                int_decl_s(stream, &ival[2]);
+        }
+
+        if ( 4 * init[1] < sz )
+            zero_direct( stream, sz - 4*init[1] );
+    }
 }
 
 codegen(stream, node) {
     auto i = 0;
     while ( i < node[1] ) {
         auto decl = node[ 2 + i++ ];
-        if (decl[2][0] == '()')
-            fn_decl( stream, node, decl[2], decl[3] );
-        else if (decl[2][0] == 'id')
-            int_decl( stream, node, &decl[2][2], decl[3] );
+        auto type = decl[2], name = &decl[3][2], init = decl[4];
+
+        storage(stream, node[0], name);
+
+        if (!type) /* all scalars and only scalars are currently typeless */
+            int_decl( stream, name, init );
+        else if (type[0] == '()')
+            fn_decl( stream, name, type, init );
+        else if (type[0] == '[]')
+            array_decl( stream, name, type, init );
         else 
             int_error("Unexpected node in declaration");
     }
-
 }
