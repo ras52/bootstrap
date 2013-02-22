@@ -2415,6 +2415,8 @@ write_mrm:
 	POP	%eax
 
 	#  Do we have (%esp) or DISP(%esp)?
+	MOVB	$0xC7, %cl
+	ANDB	%cl, %al
 	CMPB	$0x04, %al
 	JE	.L20b
 	CMPB	$0x84, %al
