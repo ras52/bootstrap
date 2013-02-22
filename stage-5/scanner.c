@@ -5,10 +5,11 @@
  */
 
 static line = 1;
+static filename;
 
 static
 print_msg(fmt, ap) {
-    fprintf(stderr, "%d: ", line);
+    fprintf(stderr, "%s:%d: ", filename, line);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
 }
@@ -29,23 +30,24 @@ int_error(fmt) {
     exit(2);
 }
 
-/* A version of getchar() that increments LINE if a '\n' is found */
+
+/* A version of fgetc() that increments LINE if a '\n' is found */
 static
-getcharl() {
-    auto c = getchar();
+fgetcl(stream) {
+    auto c = fgetc(stream);
     if ( c == '\n' ) ++line;
     return c;
 }
 
 /* Skips over a C-style comment (the opening / and * are already read). */
 static
-skip_ccomm() {
+skip_ccomm(stream) {
     auto c;
 
     do {
-        do c = getcharl();
+        do c = fgetcl(stream);
         while ( c != -1 && c != '*' );
-        c = getcharl();
+        c = fgetcl(stream);
     } while ( c != -1 && c != '/' );
 
     if ( c == -1 )
@@ -55,19 +57,19 @@ skip_ccomm() {
 /* Skips over whitespace, including comments, and returns the next character
  * without ungetting it. */
 static
-skip_white() {
+skip_white(stream) {
     auto c;
     while (1) {
-        do c = getcharl();
+        do c = fgetcl(stream);
         while ( isspace(c) ); 
 
         if (c == '/') {
-            auto c2 = getchar();
+            auto c2 = fgetc(stream);
             if ( c2 != '*' ) {
-                ungetchar(c2);
+                ungetc(c2, stream);
                 return c;
             }
-            skip_ccomm();
+            skip_ccomm(stream);
         }
         else return c;
     }
@@ -118,7 +120,7 @@ chk_keyword(node) {
  * or keyword) starting with C (which has already been checked by isidchar1) 
  * into NODE->str, set NODE->type, and return NODE. */
 static
-get_word(c) {
+get_word(stream, c) {
     auto i = 0, len = 32;  /* Len must be >= 16, which is the op node size */
     /* struct node { int type; int dummy; char str[]; } */
     auto node = malloc(8 + len);
@@ -127,7 +129,7 @@ get_word(c) {
     node[0] = 'id';  node[1] = 0;
     lchar( str, i++, c );
     while (1) { 
-        while ( i < len && isidchar( c = getchar() ) )
+        while ( i < len && isidchar( c = fgetc(stream) ) )
             lchar( str, i++, c );
         if ( i < len )
             break;
@@ -137,7 +139,7 @@ get_word(c) {
     } 
 
     lchar( str, i, 0 );
-    ungetchar(c);
+    ungetc(c, stream);
     return chk_keyword( node );
 }
 
@@ -145,46 +147,46 @@ get_word(c) {
 /* Read a number (in octal, hex or decimal) starting with digit C into BUF, 
  * which must be 16 bytes long (or longer). */
 static
-read_number(buf, c) {
+read_number(stream, buf, c) {
     auto i = 0;
     if ( c == '0' ) {
         lchar( buf, i++, c );
-        c = getchar();
+        c = fgetc(stream);
         /* Is it hex? */
         if ( c == 'x' ) {
             lchar( buf, i++, c );
             do lchar( buf, i++, c );
-            while ( i < 16 && isxdigit( c = getchar() ) );
+            while ( i < 16 && isxdigit( c = fgetc(stream) ) );
         }
         /* Is it octal? */
         else if ( isdigit(c) ) {
             do lchar( buf, i++, c );
-            while ( i < 16 && isdigit( c = getchar() ) );
+            while ( i < 16 && isdigit( c = fgetc(stream) ) );
         }
         /* else it's a literal zero */
     }
     /* It must be a decimal */
     else {
         do lchar( buf, i++, c );
-        while ( i < 16 && isdigit( c = getchar() ) );
+        while ( i < 16 && isdigit( c = fgetc(stream) ) );
     }
     if ( i == 16 )
         error("Overflow reading number");
     
     lchar( buf, i, 0 );
-    ungetchar(c);
+    ungetc(c, stream);
 }
 
 /* Create a node, NODE, which will be returned; read a number (oct / hex / dec)
  * starting with character C (which has already been checked by isdigit), 
  * parse it into NODE->val, set NODE->type, and return NODE. */
 static
-get_number(c) {
+get_number(stream,c) {
     auto buf[16], nptr;
     /* struct node { int type; int dummy; int val; }; */
     auto node = malloc(12);
 
-    read_number( buf, c );
+    read_number( stream, buf, c );
     node[0] = 'num';  node[1] = 0;
     node[2] = strtol( buf, &nptr, 0 );
     if ( rchar(nptr, 0) )
@@ -236,9 +238,9 @@ node_new(type) {
 /* Read an operator, starting with character C, and return a node with
  * NODE->type set to the operator as a multicharacter literal. */
 static
-get_multiop(c) {
+get_multiop(stream, c) {
     /* Fetch the second character */
-    auto c2 = getchar();
+    auto c2 = fgetc(stream);
     if ( c2 == -1 ) return c;
     else lchar( &c, 1, c2 );
 
@@ -247,15 +249,15 @@ get_multiop(c) {
      * character operators with an extra character appended.  
      * TODO: '...' breaks that assumption. */
     if ( !is_2charop(c) ) {
-        ungetchar( rchar( &c, 1 ) );
+        ungetc( rchar( &c, 1 ), stream );
         return node_new( rchar( &c, 0 ) );
     }
 
     /* Is it a <<= or >>= operator? */
     if ( c == '<<' || c == '>>' ) {
-        c2 = getchar();
+        c2 = fgetc(stream);
         if ( c2 == '=' ) lchar( &c, 2, c2 );
-        else ungetchar(c2);
+        else ungetc(c2, stream);
     }
 
     return node_new(c);
@@ -264,7 +266,7 @@ get_multiop(c) {
 /* Read a string or character literal into VALUE, beginning with quote mark, 
  * Q, and return the appropriate token type ('str' or 'chr'). */
 static
-get_qlit(q) {
+get_qlit(stream, q) {
     auto i = 0, len = 32, c;
     /* struct node { int type; int dummy; char str[]; } */
     auto node = malloc(8 + len);
@@ -272,10 +274,10 @@ get_qlit(q) {
 
     lchar( str, i++, q );
     while (1) {
-        while ( i < len-1 && (c = getchar()) != -1 && c != q ) {
+        while ( i < len-1 && (c = fgetc(stream)) != -1 && c != q ) {
             lchar( str, i++, c );
             if ( i < len-1 && c == '\\' ) {
-                if ( (c = getchar()) == -1 ) break;
+                if ( (c = fgetc(stream)) == -1 ) break;
                 lchar( str, i++, c );
             }
         }
@@ -298,23 +300,33 @@ get_qlit(q) {
     return node;
 }
 
+static input_strm;
+
 /* Contains the token most recently read by next() */
 token = 0;
 
 /* Read the next lexical element as a syntax tree node */
 next() {
-    auto c = skip_white();
+    auto stream = input_strm;
+    auto c = skip_white(stream);
     if ( c == -1 )
         token = 0;
     else if ( isidchar1(c) )
-        token = get_word(c);
+        token = get_word(stream, c);
     else if ( isdigit(c) )
-        token = get_number(c);
+        token = get_number(stream, c);
     else if ( c == '\'' || c == '"' )
-        token = get_qlit(c);
+        token = get_qlit(stream, c);
     else 
-        token = get_multiop(c);
+        token = get_multiop(stream, c);
     return token;
+}
+
+init_scan(in_filename) {
+    freopen( in_filename, "r", stdin );
+    filename = in_filename;
+    input_strm = stdin;
+    next();
 }
 
 /* Test whether token type OP is an operator in the syntax tree. */
@@ -339,10 +351,8 @@ free_node(node) {
     /* As a safety measure, if it's the current node, unset TOKEN. */
     if ( node == token ) token = 0;
 
-    auto i = 0;
     while ( i < node[1] )
         free_node( node[ 2 + i++ ] );
-
     free(node);
 }
 

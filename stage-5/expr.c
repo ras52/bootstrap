@@ -40,7 +40,7 @@ vnode_app( v, n, sz_ptr ) {
 static
 arg_list(fn) {
     auto sz = 4, p = node_new('()');
-    vnode_app( p, fn, &sz );
+    p = vnode_app( p, fn, &sz );
 
     if ( token && token[0] == ')' ) 
         return p;

@@ -90,9 +90,10 @@ init_array(elts, req_const) {
     init = take_node(0);
     init[0] = '{}';
     while (1) {
+        auto elt = req_const ? constant() : assign_expr();
         if (!elts--) 
             error("Too many array initialisers");
-        vnode_app( init,  req_const ? constant() : assign_expr(),  &sz );
+        init = vnode_app( init, elt, &sz );
         if (token && token[0] == '}')
             break;
         skip_node(',');
@@ -132,14 +133,15 @@ auto_stmt() {
     auto sz = 4, vnode = take_node(0);
 
     while (1) {
-        auto decl = node_new('decl');   
+        auto decl = node_new('decl');
+        if ( decl == vnode ) _exit();
         decl[1] = 3; /* args are type, name, init */
 
         decl[3] = take_node(0);
         if (decl[3][0] != 'id') error("Expected identifier in declaration");
 
         obj_decl(decl, 0);
-        vnode_app(vnode, decl, &sz);
+        vnode = vnode_app(vnode, decl, &sz);
         if (token && token[0] == ';')
             break;
         skip_node(',');
@@ -181,7 +183,7 @@ block(in_loop) {
 static
 param_list() {
     auto sz = 4, p = node_new('()');
-    vnode_app( p, 0, &sz );  /* Place holder for return type */
+    p = vnode_app( p, 0, &sz );  /* Place holder for return type */
 
     if ( token && token[0] == ')' ) 
         return p;
@@ -251,7 +253,7 @@ top_level() {
             return fn_decl( vnode, decl );
 
         obj_decl(decl, 1);
-        vnode_app(vnode, decl, &sz);
+        vnode = vnode_app(vnode, decl, &sz);
         if (token && token[0] == ';')
             break;
         skip_node(',');

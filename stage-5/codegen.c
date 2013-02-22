@@ -32,7 +32,7 @@ leaf_code(stream, node, need_lval) {
         if (need_lval) error("Literal used as an lvalue");
 
         if (node[0] == 'num') load_num(stream, node[2]);
-        else if (node[0] == 'chr') load_chr(stream, node[2]);
+        else if (node[0] == 'chr') load_chr(stream, &node[2]);
         else if (node[0] == 'str') load_str(stream, &node[2], new_clabel());
     }
 
@@ -40,7 +40,8 @@ leaf_code(stream, node, need_lval) {
         auto off, is_lval = lookup_sym( &node[2], &off );
         auto need_addr = (is_lval == need_lval);
         if (need_lval && !is_lval) 
-            error("Non-lvalue identifier where lvalue is required");
+            error("Non-lvalue identifier '%s' where lvalue is required",
+                  &node[2]);
         if (!off) load_symbol(stream, &node[2], need_addr);
         else load_local(stream, off, need_addr);
     }
@@ -105,8 +106,7 @@ conditional(stream, node) {
 static
 binary_op(stream, node, need_lval) {
     auto op = node[0];
-    auto op_needs_lv = is_assop(op) || op == '[]';
-    expr_code( stream, node[2], op_needs_lv );
+    expr_code( stream, node[2], is_assop(op) );
 
     asm_push( stream );
     expr_code( stream, node[3], 0);
@@ -216,13 +216,13 @@ if_stmt(stream, node, brk, cont, ret) {
     expr_code( stream, node[2], 0 );
     
     branch_ifz( stream, l1 );
-    expr_code( stream, node[3], 0 );
+    stmt_code( stream, node[3], brk, cont, ret );
 
     if ( node[4] ) {
         l2 = new_label();
         branch( stream, l2 );
         emit_label( stream, l1 );
-        expr_code( stream, node[4], 0 );
+        stmt_code( stream, node[4], brk, cont, ret );
     }
 
     emit_label( stream, l2 );
@@ -379,6 +379,7 @@ int_decl(stream, name, init ) {
         int_decl_s(stream, &init[2]);
 }
 
+/* Global-scope array declaration */
 static
 array_decl(stream, name, type, init) {
     auto sz = type_size( type );
@@ -397,6 +398,8 @@ array_decl(stream, name, type, init) {
         if ( 4 * init[1] < sz )
             zero_direct( stream, sz - 4*init[1] );
     }
+
+    save_sym( name, 0, 0, sz );
 }
 
 codegen(stream, node) {

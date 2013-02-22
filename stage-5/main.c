@@ -4,69 +4,57 @@
  * All rights reserved.
  */
 
-print_node(stream, node) {
-    if (!node)
-        fputs("null", stream);
-
-    else if ( is_op(node[0]) ) {
-        auto i = 0;
-        fprintf(stream, "(%Mc", node[0]);
-        while ( i < node[1] ) {
-            fputc(' ', stream);
-            print_node(stream, node[2 + i++]); 
-        }
-        fputc(')', stream);
-    }
-
-    else if ( is_stmt_op(node[0]) ) {
-        auto i = 0;
-        fprintf(stream, "(%Mc\n", node[0]);
-        while ( i < node[1] ) {
-            print_node(stream, node[2 + i++]);
-            fputc('\n', stream);
-        }
-        fputs(")\n", stream);
-    }
-
-    else if ( node[0] == '()' ) {
-        auto i = 0;
-        fputs("(call ", stream);
-        while ( i < node[1] ) {
-            fputc(' ', stream);
-            print_node(stream, node[2 + i++]); 
-        }
-        fputc(')', stream);
-    }
-
-    else if ( node[0] == 'id' || node[0] == 'str' || node[0] == 'chr' )
-        fprintf( stream, "(%Mc %s)", node[0], &node[2] );
-
-    else if ( node[0] == 'num' )
-        fprintf( stream, "(%Mc %d)", node[0], node[2] );
-    
-    else if ( node[0] == '{}' ) {
-        auto i = 0;
-        fputs("(block\n", stream);
-        while ( i < node[1] ) {
-            print_node( stream, node[2 + i++] );
-            fputc( '\n', stream );
-        }
-        fputs(")\n", stream);
-    }
-
-    else
-        fputs( "(unknown)", stream );
-}
-
-main() {
+static
+compile(output) {
     auto node;
-    init_symtab();
-    next();
-    
     while ( token && (node = top_level()) ) {
-        /* print_node( stderr, node ); */
-        codegen( stdout, node );
+        codegen( output, node );
         free_node( node );
     }
+}
+
+static
+cli_error(fmt) {
+    vfprintf(stderr, fmt, &fmt);
+    exit(1);
+}
+
+usage() {
+    cli_error("Usage: cc -S [-o filename.o] filename.c\n");
+}
+
+main(argc, argv) {
+    auto filename, l, outname = 0, freeout = 0;
+
+    if ( argc < 3 ) usage();
+
+    if ( strcmp( argv[1], "-S" ) )
+        cli_error("cc: the -S option is mandatory\n");
+
+    if ( strcmp( argv[2], "-o" ) == 0 ) {
+        if ( argc != 5 ) usage();
+        outname = argv[3];
+        filename = argv[4];
+    }
+    else {
+        if ( argc != 3 ) usage();
+        filename = argv[2];
+    }
+
+    l = strlen(filename);
+    if ( rchar( filename, l-1 ) != 'c' || rchar( filename, l-2 ) != '.' )
+        cli_error("cc: input filename must have .c extension\n");
+    init_scan(filename);
+
+    if (!outname) {
+        outname = strdup( filename );
+        freeout = 1;
+        lchar( outname, l-1, 's' );
+    }
+    freopen( outname, "w", stdout );
+    if (freeout) free(outname);
+
+    init_symtab();
+    compile(stdout);
     return 0;
 }

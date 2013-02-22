@@ -69,32 +69,30 @@ start_binop(stream, is_assign, is_sym) {
 }
 
 pop_mult(stream, is_assign) {
+    fputs("\tPOP\t%ecx\n", stream);
+    fprintf(stream, "\tIMULL\t%s\n", is_assign ? "(%ecx)" : "%ecx");
     if (is_assign)
-        fputs("\tMOVL\t(%esp), %ecx\n", stream);
-    else
-        fputs("\tPOP\t%ecx\n", stream);
-    fputs("\tIMULL\t%ecx\n", stream);
-    if (is_assign)
-        fputs("\tPOP\t%ecx\n\tMOVL\t%eax, (%ecx)\n\tMOVL\t%ecx, %eax\n", 
-              stream);
+        fputs("\tMOVL\t%eax, (%ecx)\n\tMOVL\t%ecx, %eax\n", stream);
 }
 
-pop_div(stream, is_assign) {
+static
+common_div(stream, is_assign) {
     if (is_assign)
-        fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%esp), %eax\n", stream);
+        fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%esp), %eax\nMOVL\t(%eax), %eax\n", 
+              stream);
     else
         fputs("\tMOVL\t%eax, %ecx\n\tPOP\t%eax\n", stream);
     fputs("\tXORL\t%edx, %edx\n\tIDIVL\t%ecx\n", stream);
+}
+
+pop_div(stream, is_assign) {
+    common_div(stream, is_assign);
     if (is_assign)
         fputs("\tPOP\t%ecx\nMOVL\t%eax, (%ecx)\nMOVL\t%ecx, %eax\n", stream);
 }
 
 pop_mod(stream, is_assign) {
-    if (is_assign)
-        fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%esp), %eax\n", stream);
-    else
-        fputs("\tMOVL\t%eax, %ecx\n\tPOP\t%eax\n", stream);
-    fputs("\tXORL\t%edx, %edx\n\tIDIVL\t%ecx\n", stream);
+    common_div(stream, is_assign);
     if (is_assign)
         fputs("\tPOP\t%eax\nMOVL\t%edx, (%eax)\n", stream);
     else
@@ -139,7 +137,7 @@ pop_bitxor(stream, is_assign) { pop_binop(stream, "XORL", is_assign, 1); }
 pop_subscr(stream, need_lval) {
     fputs("\tMOVB\t$2, %cl\n\tSHLL\t%eax\n", stream);
     pop_add(stream, 0);
-    if (!need_lval) dereference();
+    dereference(stream, need_lval);
 }
 
 pop_assign(stream) {
