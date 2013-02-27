@@ -4,6 +4,7 @@
  * All rights reserved.
  */
 
+
 /* expr-stmt ::= expr? ';'  */
 static
 expr_stmt() {
@@ -115,6 +116,11 @@ obj_decl(decl, req_const) {
         skip_node(']');
     }
 
+    /* If it's not a const, then it's an auto, and so it needs putting in 
+     * scope.  */
+    if (!req_const)
+        decl_var(decl);
+
     if (token && token[0] == '=') {
         auto type = decl[2];
         skip_node('=');
@@ -170,10 +176,12 @@ stmt(in_loop) {
 block(in_loop) {
     auto sz = 4, n = node_new('{}');
 
+    start_block();
     skip_node('{');
     while ( token && token[0] != '}' )
         n = vnode_app( n, stmt(in_loop), &sz );
 
+    end_block();
     skip_node('}');
 
     return n;
@@ -223,9 +231,11 @@ fn_decl( vnode, decl ) {
 
     skip_node('(');
     decl[2] = param_list();
+    start_fn(decl[2]);
     skip_node(')');
 
     decl[4] = block(0);
+    end_fn();
     
     vnode[1] = 1;
     vnode[2] = decl;

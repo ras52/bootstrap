@@ -84,6 +84,8 @@ postfx_expr() {
         t = token[0];
 
         if ( t == '++' || t == '--' ) {
+            req_lvalue(p);
+
             /* Postfix ++ and -- are marked as binary operators.  This is 
              * what distinguishes them from the prefix versions which are 
              * marked as unary.  This is inspired by C++'s idea of
@@ -126,6 +128,8 @@ unary_expr() {
         auto p = take_node(1);
         req_token(token);
         p[2] = unary_expr();
+        if (t == '++' || t == '--' || t == '&')
+            req_lvalue( p[2] );
         return p;
     }
 
@@ -321,6 +325,7 @@ assign_expr() {
     if ( token ) {
         auto t = token[0];
         if ( is_assop(t) ) {
+            req_lvalue(p);
             p = do_binop( p, token );
             p[3] = assign_expr();
         }

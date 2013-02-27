@@ -99,3 +99,50 @@ lookup_sym( name, off_ptr ) {
     return 1;
 }
 
+type_size(type) {
+    if (type && type[0] == '[]')
+        return 4 * type[3][2];
+    else
+        return 4;
+}
+
+/* Bytes of local variables on the stack. */
+static frame_size = 0;
+
+decl_var(decl) {
+    auto sz = type_size( decl[2] );
+    /* Arrays are currently the only object that's not an lvalue */
+    auto is_lval = !( decl[2] && decl[2][0] == '[]' );
+
+    frame_size += sz;
+    if ( decl[3][0] != 'id' ) int_error("Expected identifier in auto decl");
+    save_sym( &decl[3][2], -frame_size, is_lval, sz );
+    return sz;
+}
+
+start_fn(decl) {
+    auto i = 1;
+    frame_size = 0;
+    new_scope();
+
+    /* Inject the parameters into the scope */
+    while ( i < decl[1] ) {
+        auto n = decl[ 2 + i++ ];
+        if (n[0] != 'id') int_error("Non-identifier found as function param");
+        save_sym( &n[2], 4*i, 1, 4 ); /* TODO: size */
+    }
+}
+
+end_fn() {
+    end_scope();
+}
+
+start_block() {
+    new_scope();
+}
+
+end_block() {
+    auto sz = end_scope();
+    frame_size -= sz;
+    return sz;
+}

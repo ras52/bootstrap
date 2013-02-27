@@ -17,9 +17,10 @@ INIT = as ld cc0 libc.o crt0.o
 
 init:	$(INIT)
 
-# cc0 is the compiler imported from stage 4.
-# cc1 is this stage's compiler (written in the cc0 language) compiled with cc0
-# cc  is this stage's compiler compiled with itself (i.e. with cc1)
+# cc0 is the compiler symlinked from stage 4.
+# cc1 is this stage's compiler (written in the cc0 language) compiled with cc0.
+# cc  is the same code compiled by itself (by cc1), and is therefore smaller.
+# cc2 is a test compiler produced by cc; it should be binary identical to cc.
 
 $(INIT):
 	$(MAKE) -C ../stage-4
@@ -41,7 +42,7 @@ $(INIT):
 %2.s:	%.c cc
 	cc -S -o $@ $<
 
-CC_OBJS  = scanner.o symtab.o expr.o stmt.o i386.o codegen.o main.o
+CC_OBJS  = scanner.o symtab.o expr.o stmt.o syncheck.o i386.o codegen.o main.o
 
 cc1:	ld libc.o crt0.o $(CC_OBJS)
 	ld -o cc1 libc.o crt0.o $(CC_OBJS)

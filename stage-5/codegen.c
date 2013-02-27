@@ -20,17 +20,12 @@ new_label() {
     return ++label_cnt;
 }
 
-/* Bytes of local variables on the stack. */
-static frame_size = 0;
-
 
 /* Code for leaf nodes in the expression parse tree: constants, strings,
  * identifers, and so on.  */
 static
 leaf_code(stream, node, need_lval) {
     if ( node[0] == 'num' || node[0] == 'chr' || node[0] == 'str' ) {
-        if (need_lval) error("Literal used as an lvalue");
-
         if (node[0] == 'num') load_num(stream, node[2]);
         else if (node[0] == 'chr') load_chr(stream, &node[2]);
         else if (node[0] == 'str') load_str(stream, &node[2], new_clabel());
@@ -39,9 +34,7 @@ leaf_code(stream, node, need_lval) {
     else if ( node[0] == 'id' ) {
         auto off, is_lval = lookup_sym( &node[2], &off );
         auto need_addr = (is_lval == need_lval);
-        if (need_lval && !is_lval) 
-            error("Non-lvalue identifier '%s' where lvalue is required",
-                  &node[2]);
+
         if (!off) load_symbol(stream, &node[2], need_addr);
         else load_local(stream, off, need_addr);
     }
@@ -154,10 +147,6 @@ static
 opexpr_code(stream, node, need_lval) {
     auto op = node[0];
 
-    /* The following operators result in an lvalue: *, [] */
-    if (need_lval && op != '*' && op != '[]')
-        error("Non-lvalue expression used as lvalue");
-
     /* Unary prefix operators */
     if ( node[1] == 1 )
         unary_pre( stream, node, need_lval );
@@ -259,26 +248,11 @@ do_stmt(stream, node, brk, cont, ret) {
 }
 
 static
-type_size(type) {
-    if (type && type[0] == '[]')
-        return 4 * type[3][2];
-    else
-        return 4;
-}
-
-static
 auto_stmt(stream, node) {
     auto i = 0;
     while ( i < node[1] ) {
         auto decl = node[ 2 + i++ ];
-        auto sz = type_size( decl[2] );
-
-        /* Arrays are currently the only object that's not an lvalue */
-        auto is_lval = !( decl[2] && decl[2][0] == '[]' );
-
-        frame_size += sz;
-        if ( decl[3][0] != 'id' ) int_error("Expected identifier in auto decl");
-        save_sym( &decl[3][2], -frame_size, is_lval, sz );
+        auto sz = decl_var(decl);
 
         if ( decl[4] ) {
             auto init = decl[4];
@@ -330,12 +304,10 @@ stmt_code(stream, node, brk, cont, ret) {
 static
 do_block(stream, node, brk, cont, ret) {
     auto i = 0, sz;
-    new_scope();
+    start_block();
     while ( i < node[1] )
         stmt_code( stream, node[ 2 + i++ ], brk, cont, ret );
-    sz = end_scope();
-    clear_stack( stream, sz );
-    frame_size -= sz;
+    clear_stack( stream, end_block() );
 }
 
 static
@@ -349,23 +321,12 @@ storage(stream, storage, name) {
 static
 fn_decl(stream, name, decl, block) {
     auto ret = new_label();
-
-    frame_size = 0;
-    new_scope();
-
-    /* Inject the parameters into the scope */
-    auto i = 1;
-    while ( i < decl[1] ) {
-        auto n = decl[ 2 + i++ ];
-        save_sym( &n[2], 4*i, 1, 4 );
-    }
-
+    start_fn(decl);
     prolog(stream, name);
     do_block(stream, block, -1, -1, ret);
     emit_label( stream, ret );
     epilog(stream);
-
-    end_scope();
+    end_fn();
 }
 
 static
