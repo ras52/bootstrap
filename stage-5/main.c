@@ -20,7 +20,7 @@ cli_error(fmt) {
 }
 
 usage() {
-    cli_error("Usage: cc -S [-o filename.o] filename.c\n");
+    cli_error("Usage: cc -S [-o filename.s] filename.c\n");
 }
 
 main(argc, argv) {

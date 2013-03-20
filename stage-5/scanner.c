@@ -96,12 +96,22 @@ static
 chk_keyword(node) {
     /* Argument is:  struct node { int type; int dummy; char str[]; } */
     
-    auto keywords[15] = {
-        /* 'do' and 'if' have an extra NUL character to pad them to 4 bytes
+    auto keywords[28] = {
+        /* Complete list of keywords per K&R, minus 'entry'.
+         * C90 adds 'const', 'enum', 'signed', 'void', and 'volatile'
+         *
+         * 'do' and 'if' have an extra NUL character to pad them to 4 bytes
          * for casting to an int (i.e. a multicharacter literal). */
-        "auto", "break", "case", "continue", "default", "do\0", "else", 
-        "extern", "goto", "if\0", "return", "static", "switch", "while", 0
+        "auto", "break", "case", "char", "continue", "default", "do\0", 
+        "double", "else", "extern", "float", "for", "goto", "if\0", 
+        "int", "long", "register", "return", "short", "sizeof", "static", 
+        "struct", "switch", "typedef", "union", "unsigned", "while", 0
     };
+
+    /* TODO: Jumps not yet implemented: case, switch, default, goto */
+    /* TODO: Types not yet implemented: char, double, int, long, short, 
+     * sizeof, struct, typedef, union, unsigned */
+    /* TODO: Misc not yet implemented: extern, register */
 
     auto i = 0, str = &node[2];
     while ( keywords[i] && strcmp(keywords[i], str) != 0 )
@@ -332,14 +342,9 @@ init_scan(in_filename) {
 /* Test whether token type OP is an operator in the syntax tree. */
 is_op(op) {
     /* TODO: '.', ',' */
-    return strnlen(&op, 4) == 1 && strchr("&*+-~!/%<>^|=", op)
+    return strnlen(&op, 4) == 1 && strchr("&*+-~!/%<>^|=,", op)
         || is_2charop(op) || op == '?:' || op == '[]' 
         || op == '>>=' || op == '<<=';
-}
-
-is_stmt_op(op) {
-    return op == 'if' || op == 'do' || op == 'whil' || op == 'retu' 
-        || op == 'brea' || op == 'cont';
 }
 
 /* Unallocate a node */

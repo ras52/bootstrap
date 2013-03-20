@@ -47,7 +47,7 @@ arg_list(fn) {
 
     while (1) {
         req_token( token );
-        p = vnode_app( p, expr(), &sz );
+        p = vnode_app( p, assign_expr(), &sz );
 
         /* It would be easier to code for an optional ',' at the end, but
          * the standard doesn't allow for that. */
@@ -334,8 +334,15 @@ assign_expr() {
     return p;
 }
 
-
+/* expr ::= ( assign-expr ',' )* assign-expr */
 expr() {
-    /* TODO: comma-expr */
-    return assign_expr();
+    auto p = assign_expr();
+
+    /* Left-to-right associatibity: a, b, c == (a, b), c */
+    while ( token && token[0] == ',' ) {
+        p = do_binop( p, token );
+        p[3] = assign_expr();
+    }
+
+    return p;
 }

@@ -101,7 +101,9 @@ binary_op(stream, node, need_lval) {
     auto op = node[0];
     expr_code( stream, node[2], is_assop(op) );
 
-    asm_push( stream );
+    /* Discard the l.h.s. of the , operator. */
+    if ( op != ',' ) asm_push( stream );
+
     expr_code( stream, node[3], 0);
 
     if      ( op == '[]'  ) pop_subscr(stream, need_lval);
@@ -134,7 +136,7 @@ binary_op(stream, node, need_lval) {
     else if ( op == '|='  ) pop_bitor(stream, 1);
     else if ( op == '^='  ) pop_bitxor(stream, 1);
 
-    else int_error("Unknown operator: '%Mc'", op);
+    else if ( op != ','   ) int_error("Unknown operator: '%Mc'", op);
 
     /* The assignment operators are implemented to return lvalues, but
      * the C standard says they're not lvalues.  (The C++ standard has
@@ -248,6 +250,31 @@ do_stmt(stream, node, brk, cont, ret) {
 }
 
 static
+for_stmt(stream, node, brk, cont, ret) {
+    if (node[2])
+        expr_code( stream, node[2], 0 );
+
+    auto start = new_label();
+    emit_label( stream, start );
+
+    brk = new_label();
+    if (node[3]) {
+        expr_code( stream, node[3], 0 );
+        branch_ifz( stream, brk );
+    }
+
+    cont = new_label();
+    stmt_code( stream, node[5], brk, cont, ret );
+    
+    emit_label( stream, cont );
+    if (node[4])
+        expr_code( stream, node[4], 0 );
+
+    branch( stream, start );
+    emit_label( stream, brk );
+}
+
+static
 auto_stmt(stream, node) {
     auto i = 0;
     while ( i < node[1] ) {
@@ -295,6 +322,7 @@ stmt_code(stream, node, brk, cont, ret) {
 
     else if ( op == 'if'   ) if_stmt( stream, node, brk, cont, ret );
     else if ( op == 'whil' ) while_stmt( stream, node, brk, cont, ret );
+    else if ( op == 'for'  ) for_stmt( stream, node, brk, cont, ret );
     else if ( op == 'do'   ) do_stmt( stream, node, brk, cont, ret );
     
     else if ( op == '{}'   ) do_block( stream, node, brk, cont, ret );

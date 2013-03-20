@@ -4,6 +4,7 @@
  * All rights reserved.
  */
 
+/* TODO:  switch statement, goto statement */
 
 /* expr-stmt ::= expr? ';'  */
 static
@@ -38,8 +39,8 @@ if_stmt(in_loop) {
 static
 do_stmt() {
     auto node = take_node(2); 
-
     node[2] = stmt(1);
+
     skip_node('whil');
     skip_node('(');
     node[3] = expr();
@@ -56,8 +57,25 @@ while_stmt() {
     skip_node('(');
     node[2] = expr();
     skip_node(')');
-    node[3] = stmt(1);
 
+    node[3] = stmt(1);
+    return node;
+}
+
+/*  for-stmt ::= 'for' '(' expr? ';' expr? ';' expr? ')' stmt */
+static
+for_stmt() {
+    auto node = take_node(4);
+
+    skip_node('(');
+    if ( token && token[0] != ';' ) node[2] = expr();
+    skip_node(';');
+    if ( token && token[0] != ';' ) node[3] = expr();
+    skip_node(';');
+    if ( token && token[0] != ';' ) node[4] = expr();
+    skip_node(')');
+
+    node[5] = stmt(1);
     return node;
 }
 
@@ -166,6 +184,7 @@ stmt(in_loop) {
     else if (t == 'if'  ) return if_stmt( in_loop );
     else if (t == 'do'  ) return do_stmt();
     else if (t == 'whil') return while_stmt();
+    else if (t == 'for' ) return for_stmt();
     else if (t == 'retu') return return_stmt();
     else if (t == 'brea') return keywd_stmt( in_loop, "break"    );
     else if (t == 'cont') return keywd_stmt( in_loop, "continue" );
