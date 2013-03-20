@@ -20,6 +20,13 @@ new_label() {
     return ++label_cnt;
 }
 
+static
+named_label(name, is_defn) {
+    if ( save_label( name, 0 ) )
+        return set_label( name, new_label() );
+    else
+        return get_label( name );
+}
 
 /* Code for leaf nodes in the expression parse tree: constants, strings,
  * identifers, and so on.  */
@@ -201,6 +208,11 @@ return_stmt(stream, node, ret) {
 }
 
 static
+goto_stmt(stream, node) {
+    branch( stream, named_label( &node[2][2], 0 ) );
+}
+
+static
 if_stmt(stream, node, brk, cont, ret) {
     auto l1 = new_label(), l2 = l1;
 
@@ -308,6 +320,12 @@ auto_stmt(stream, node) {
 }
 
 static
+label_stmt(stream, node, brk, cont, ret) {
+    emit_label( stream, named_label( &node[2][2], 1 ) );
+    stmt_code( stream, node[3], brk, cont, ret );
+}
+
+static
 stmt_code(stream, node, brk, cont, ret) {
     /* Handle the null expression. */
     if ( !node ) return;
@@ -319,12 +337,14 @@ stmt_code(stream, node, brk, cont, ret) {
     else if ( op == 'brea' ) branch( stream, brk );
     else if ( op == 'cont' ) branch( stream, cont ); 
     else if ( op == 'retu' ) return_stmt( stream, node, ret );
+    else if ( op == 'goto' ) goto_stmt( stream, node );
 
     else if ( op == 'if'   ) if_stmt( stream, node, brk, cont, ret );
     else if ( op == 'whil' ) while_stmt( stream, node, brk, cont, ret );
     else if ( op == 'for'  ) for_stmt( stream, node, brk, cont, ret );
     else if ( op == 'do'   ) do_stmt( stream, node, brk, cont, ret );
     
+    else if ( op == ':'    ) label_stmt( stream, node, brk, cont, ret );
     else if ( op == '{}'   ) do_block( stream, node, brk, cont, ret );
     else                     expr_code( stream, node, 0 );
 }

@@ -315,6 +315,13 @@ static input_strm;
 /* Contains the token most recently read by next() */
 token = 0;
 
+peek_char() {
+    auto stream = input_strm;
+    auto c = skip_white(input_strm);
+    ungetc(c, stream);
+    return c;
+}
+
 /* Read the next lexical element as a syntax tree node */
 next() {
     auto stream = input_strm;

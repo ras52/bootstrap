@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-/* TODO:  switch statement, goto statement */
+/* TODO:  switch statement */
 
 /* expr-stmt ::= expr? ';'  */
 static
@@ -76,6 +76,19 @@ for_stmt() {
     skip_node(')');
 
     node[5] = stmt(1);
+    return node;
+}
+
+/*  goto-stmt ::= 'goto' label ';' */
+goto_stmt() {
+    auto node = take_node(1); 
+
+    if ( token[0] != 'id' )
+        error("Expected an identifier at label in goto statement");
+    node[2] = take_node(0);
+    
+    save_label( &node[2][2], 0 );
+
     return node;
 }
 
@@ -175,6 +188,21 @@ auto_stmt() {
 }
 
 static
+label_stmt(in_loop) {
+    auto label, name = take_node(0);
+
+    if (token[0] != ':')
+        int_error("Unexpected token '%Mc' found ending label", token[0]);
+    label = take_node(2);
+    label[2] = name;
+    label[3] = stmt( in_loop );
+
+    save_label( &name[2], 1 );
+
+    return label;
+}
+
+static
 stmt(in_loop) {
     auto t;
     req_token(token);
@@ -185,11 +213,22 @@ stmt(in_loop) {
     else if (t == 'do'  ) return do_stmt();
     else if (t == 'whil') return while_stmt();
     else if (t == 'for' ) return for_stmt();
+    else if (t == 'goto') return goto_stmt();
     else if (t == 'retu') return return_stmt();
     else if (t == 'brea') return keywd_stmt( in_loop, "break"    );
     else if (t == 'cont') return keywd_stmt( in_loop, "continue" );
     else if (t == 'auto') return auto_stmt();
-    else                  return expr_stmt();
+
+    /* We either have a labelled statement or we have a (possibly null)
+     * expression statement.  Both can start with an identifier, so
+     * we use peek_char() to look at the next non-whitespace character.
+     * This works because the only use of : is in label or the second
+     * part of a ternary, and we cannot get the ternary use here.  Note
+     * that C++'s :: scope operator will break this. */
+    else {
+        if (t == 'id' && peek_char() == ':') return label_stmt( in_loop );
+        else return expr_stmt();
+    }
 }
 
 block(in_loop) {
