@@ -6,6 +6,9 @@
 
 /* TODO:  switch statement */
 
+/* Calculate the amount of space needed for the function's frame */
+static frame_size = 0;
+
 /* expr-stmt ::= expr? ';'  */
 static
 expr_stmt() {
@@ -149,8 +152,13 @@ obj_decl(decl, req_const) {
 
     /* If it's not a const, then it's an auto, and so it needs putting in 
      * scope.  */
-    if (!req_const)
+    if (!req_const) {
         decl_var(decl);
+
+        auto foff = -frame_off();
+        if (foff > frame_size)
+            frame_size = foff;
+    }
 
     if (token && token[0] == '=') {
         auto type = decl[2];
@@ -203,6 +211,16 @@ label_stmt(in_loop) {
 }
 
 static
+stmt_or_dcl(in_loop) {
+    auto t;
+    req_token(token);
+    t = token[0];
+
+    if (t == 'auto') return auto_stmt();
+    else return stmt(in_loop);
+}
+
+static
 stmt(in_loop) {
     auto t;
     req_token(token);
@@ -217,7 +235,6 @@ stmt(in_loop) {
     else if (t == 'retu') return return_stmt();
     else if (t == 'brea') return keywd_stmt( in_loop, "break"    );
     else if (t == 'cont') return keywd_stmt( in_loop, "continue" );
-    else if (t == 'auto') return auto_stmt();
 
     /* We either have a labelled statement or we have a (possibly null)
      * expression statement.  Both can start with an identifier, so
@@ -237,7 +254,7 @@ block(in_loop) {
     start_block();
     skip_node('{');
     while ( token && token[0] != '}' )
-        n = vnode_app( n, stmt(in_loop), &sz );
+        n = vnode_app( n, stmt_or_dcl(in_loop), &sz );
 
     end_block();
     skip_node('}');
@@ -292,9 +309,15 @@ fn_decl( vnode, decl ) {
     start_fn(decl[2]);
     skip_node(')');
 
+    /* We store the frame size in decl[5], which is where the 4th node arg
+     * would go, but we've set arity=3 so it's unused space. */
+    frame_size = 0;
     decl[4] = block(0);
+    decl[5] = frame_size;
+
     end_fn();
-    
+   
+    /* vnode is the storage 'static' or 'extern' */ 
     vnode[1] = 1;
     vnode[2] = decl;
     return vnode;
@@ -312,7 +335,7 @@ top_level() {
 
     while (1) {
         auto decl = node_new('decl');
-        decl[1] = 3; /* args are type, fn or name, init.  fn type is '()' */
+        decl[1] = 3; /* args are type, name, init.  type is '()' for fn */
 
         decl[3] = take_node(0);
         if (decl[3][0] != 'id') error("Expected identifier in declaration");

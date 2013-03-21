@@ -26,6 +26,10 @@ load_symbol(stream, name, need_addr) {
     fprintf(stream, "\tMOVL\t%s%s, %%eax\n", need_addr ? "$" : "", name);
 }
 
+save_local(stream, offset) {
+    fprintf(stream, "\tMOVL\t%%eax, %d(%%ebp)\n", offset);
+}
+
 asm_push(stream) {
     fputs("\tPUSH\t%eax\n", stream);
 }
@@ -145,13 +149,14 @@ pop_assign(stream) {
     fputs("\tMOVL\t%ecx,(%eax)\n", stream);
 }
 
-push_n_zero(stream, n) {
+
+load_zero(stream) {
     fputs("\tXORL\t%eax, %eax\n", stream);
-    while (n--) asm_push(stream);
 }
 
 alloc_stack(stream, sz) {
-    fprintf(stream, "\tSUBL\t$%d, %%esp\n", sz);
+    if (sz)
+        fprintf(stream, "\tSUBL\t$%d, %%esp\n", sz);
 }
 
 clear_stack(stream, sz) {
@@ -198,11 +203,13 @@ local_decl(stream, name) {
     fprintf(stream, ".local\t%s\n", name);
 }
 
-prolog(stream, name) {
+prolog(stream, name, frame_sz) {
     fprintf(stream, ".text\n%s:\n\tPUSH\t%%ebp\n\tMOVL\t%%esp, %%ebp\n", name);
+    alloc_stack(stream, frame_sz);
 }
 
-epilog(stream) {
+epilog(stream, frame_sz) {
+    clear_stack(stream, frame_sz);
     fputs("\tLEAVE\n\tRET\n\n", stream);
 }
 

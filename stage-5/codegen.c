@@ -292,30 +292,35 @@ auto_stmt(stream, node) {
     while ( i < node[1] ) {
         auto decl = node[ 2 + i++ ];
         auto sz = decl_var(decl);
+        auto offset = frame_off();
 
         if ( decl[4] ) {
             auto init = decl[4];
             if ( init[0] == '{}' ) {
+                auto j = 0;
+                while ( j < init[1] ) {
+                    expr_code( stream, init[2 + j], 0 );
+                    save_local( stream, offset + j*4 );
+                    ++j;
+                }
+
                 /* Check for an initialisation list that's not long enough.
                  * If it's not, the standard requires zero initialisation of
                  * the extra members. C99:6.7.8/21 */
-                if ( 4 * init[1] < sz )
-                    push_n_zero( stream, sz/4 - init[1] );
-
-                auto j = init[1];
-                while ( j ) {
-                    expr_code( stream, init[ 2 + --j ], 0 );
-                    asm_push( stream );
+                if ( j < sz/4 ) {
+                    load_zero( stream );
+                    while ( j < sz/4 ) {
+                        save_local( stream, offset + j*4 );
+                        ++j;
+                    }
                 }
             }
             /* Scalar initialisation */
             else {
                 expr_code( stream, init, 0 );
-                asm_push( stream );
+                save_local( stream, offset );
             }
         }
-        /* If no intialiser, then just allocate memory */
-        else alloc_stack( stream, sz );
     }
 }
 
@@ -351,11 +356,11 @@ stmt_code(stream, node, brk, cont, ret) {
 
 static
 do_block(stream, node, brk, cont, ret) {
-    auto i = 0, sz;
+    auto i = 0;
     start_block();
     while ( i < node[1] )
         stmt_code( stream, node[ 2 + i++ ], brk, cont, ret );
-    clear_stack( stream, end_block() );
+    end_block();
 }
 
 static
@@ -367,13 +372,13 @@ storage(stream, storage, name) {
 }
 
 static
-fn_decl(stream, name, decl, block) {
+fn_decl(stream, name, decl, block, frame_sz) {
     auto ret = new_label();
     start_fn(decl);
-    prolog(stream, name);
+    prolog(stream, name, frame_sz);
     do_block(stream, block, -1, -1, ret);
     emit_label( stream, ret );
-    epilog(stream);
+    epilog(stream, frame_sz);
     end_fn();
 }
 
@@ -422,7 +427,7 @@ codegen(stream, node) {
         if (!type) /* all scalars and only scalars are currently typeless */
             int_decl( stream, name, init );
         else if (type[0] == '()')
-            fn_decl( stream, name, type, init );
+            fn_decl( stream, name, type, init, decl[5] );
         else if (type[0] == '[]')
             array_decl( stream, name, type, init );
         else 

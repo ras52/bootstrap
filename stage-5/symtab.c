@@ -173,22 +173,26 @@ type_size(type) {
 }
 
 /* Bytes of local variables on the stack. */
-static frame_size = 0;
+static frame_sz = 0;
+
+frame_off() {
+    return -frame_sz; 
+}
 
 decl_var(decl) {
     auto sz = type_size( decl[2] );
     /* Arrays are currently the only object that's not an lvalue */
     auto is_lval = !( decl[2] && decl[2][0] == '[]' );
 
-    frame_size += sz;
+    frame_sz += sz;
     if ( decl[3][0] != 'id' ) int_error("Expected identifier in auto decl");
-    save_sym( &decl[3][2], -frame_size, is_lval, sz );
+    save_sym( &decl[3][2], -frame_sz, is_lval, sz );
     return sz;
 }
 
 start_fn(decl) {
     auto i = 1;
-    frame_size = 0;
+    frame_sz = 0;
     new_scope();
 
     /* Inject the parameters into the scope */
@@ -212,6 +216,6 @@ start_block() {
 
 end_block() {
     auto sz = end_scope();
-    frame_size -= sz;
+    frame_sz -= sz;
     return sz;
 }

@@ -108,7 +108,7 @@ chk_keyword(node) {
         "struct", "switch", "typedef", "union", "unsigned", "while", 0
     };
 
-    /* TODO: Jumps not yet implemented: case, switch, default, goto */
+    /* TODO: Switches not yet implemented: case, switch, default */
     /* TODO: Types not yet implemented: char, double, int, long, short, 
      * sizeof, struct, typedef, union, unsigned */
     /* TODO: Misc not yet implemented: extern, register */
