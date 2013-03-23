@@ -287,6 +287,39 @@ for_stmt(stream, node, brk, cont, ret) {
 }
 
 static
+case_stmt(stream, node, brk, cont, ret) {
+    emit_label( stream, node[4] );
+    stmt_code( stream, node[3], brk, cont, ret );
+}
+
+static
+switch_stmt(stream, node, brk, cont, ret) {
+    auto i = 0, def;
+    expr_code( stream, node[2], 0 );
+    def = brk = new_label();
+
+    if (node[4][0] != 'swtb') int_error("No table for switch statement");
+
+    while ( i < node[4][1] ) {
+        auto c = node[4][2 + i++];
+
+        /* Make asm labels for each case label.  We store these as integers 
+         * in the unused 3rd operator slot of the case node. */
+        c[4] = new_label();
+
+        if (c[0] == 'case')
+            /* Case labels have to be integers */
+            branch_eq_n( stream, c[2][2], c[4] );
+        else 
+            def = c[4];
+    }
+    
+    branch( stream, def ); 
+    stmt_code( stream, node[3], brk, cont, ret );
+    emit_label( stream, brk );
+}
+
+static
 auto_stmt(stream, node) {
     auto i = 0;
     while ( i < node[1] ) {
@@ -348,6 +381,9 @@ stmt_code(stream, node, brk, cont, ret) {
     else if ( op == 'whil' ) while_stmt( stream, node, brk, cont, ret );
     else if ( op == 'for'  ) for_stmt( stream, node, brk, cont, ret );
     else if ( op == 'do'   ) do_stmt( stream, node, brk, cont, ret );
+    else if ( op == 'swit' ) switch_stmt( stream, node, brk, cont, ret );
+    else if ( op == 'case' 
+          ||  op == 'defa' ) case_stmt( stream, node, brk, cont, ret );
     
     else if ( op == ':'    ) label_stmt( stream, node, brk, cont, ret );
     else if ( op == '{}'   ) do_block( stream, node, brk, cont, ret );

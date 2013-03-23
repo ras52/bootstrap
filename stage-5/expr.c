@@ -23,7 +23,7 @@ primry_expr() {
     return n;
 }
 
-/* Append node N to the vector node N, which is of size *SZ_PTR, growing
+/* Append node N to the vector node V, which is of size *SZ_PTR, growing
  * the vector if necessary, and returning the (possibly reallocated) vector. */
 vnode_app( v, n, sz_ptr ) {
     if ( v[1] == *sz_ptr ) {

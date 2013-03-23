@@ -185,7 +185,11 @@ branch_ifnz(stream, label_num) {
 
 branch(stream, label_num) {
     fprintf(stream, "\tJMP\t.L%d\n", label_num);
-}    
+}
+
+branch_eq_n(stream, n, label_num) {
+    fprintf(stream, "\tCMPL\t$%d, %%eax\n\tJE\t.L%d\n", n, label_num);
+}
 
 emit_label(stream, label_num) {
     fprintf(stream, ".L%d:\n", label_num);

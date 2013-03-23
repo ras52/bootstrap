@@ -108,7 +108,6 @@ chk_keyword(node) {
         "struct", "switch", "typedef", "union", "unsigned", "while", 0
     };
 
-    /* TODO: Switches not yet implemented: case, switch, default */
     /* TODO: Types not yet implemented: char, double, int, long, short, 
      * sizeof, struct, typedef, union, unsigned */
     /* TODO: Misc not yet implemented: extern, register */
@@ -363,8 +362,11 @@ free_node(node) {
     /* As a safety measure, if it's the current node, unset TOKEN. */
     if ( node == token ) token = 0;
 
-    while ( i < node[1] )
-        free_node( node[ 2 + i++ ] );
+    /* The switch table contains weak links, so don't recurse into that. */
+    if ( node[0] != 'swtb' )
+        while ( i < node[1] ) 
+            free_node( node[ 2 + i++ ] );
+
     free(node);
 }
 
