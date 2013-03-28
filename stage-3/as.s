@@ -68,15 +68,12 @@ mnemonics:
 
 # Type 02 instructions.   A single immediate 32-bit argument, e.g.
 #
-#   CALL    rel32           E8
+#   JNE    rel32           0F 85
 #
 # The three parameters are: 
-#   1) the number of bytes in the op-code (01 here),
-#   2) the first op-code byte (E8), and 
-#   3) the second op-code byte (n/a here).
-
-.hex	43 41 4C 4C  00 00 00 00  00 00 00 00    02 01 E8 00	# CALL
-.hex	4A 4D 50 00  00 00 00 00  00 00 00 00    02 01 E9 00	# JMP
+#   1) the number of bytes in the op-code (02 here),
+#   2) the first op-code byte (0F), and 
+#   3) the second op-code byte (85 here).
 
 .hex	4A 4F 00 00  00 00 00 00  00 00 00 00    02 02 0F 80	# JO
 .hex	4A 4E 4F 00  00 00 00 00  00 00 00 00    02 02 0F 81	# JNO
@@ -110,15 +107,15 @@ mnemonics:
 .hex	4A 4E 4C 45  00 00 00 00  00 00 00 00    02 02 0F 8F	# JNLE == JG
 
 
-	# Type 03 instructions.   A single r/m8 operand, e.g.
-	#
-	#   INCB    r/m8            FE /0
-	#
-	# The three parameters are:
-	#   1) the number of bytes in the op-code (01 here),
-	#   2) the first op-code byte (FE), and 
-	#   3) a) the second op-code byte *OR* 
-	#      b) the three-bit reg field for the ModR/M byte (0 here).
+# Type 03 instructions.   A single r/m8 operand, e.g.
+#
+#   INCB    r/m8            FE /0
+#
+# The three parameters are:
+#   1) the number of bytes in the op-code (01 here),
+#   2) the first op-code byte (FE), and 
+#   3) a) the second op-code byte *OR* 
+#      b) the three-bit reg field for the ModR/M byte (0 here).
 
 .hex	49 4E 43 42  00 00 00 00  00 00 00 00    03 01 FE 00	# INCB
 .hex	44 45 43 42  00 00 00 00  00 00 00 00    03 01 FE 01	# DECB
@@ -267,6 +264,20 @@ mnemonics:
 .hex    4D 4F 56 5A  58 00 00 00  00 00 00 00    0A 02 0F B6    # MOVZX == "
 .hex    4D 4F 56 53  42 4C 00 00  00 00 00 00    0A 02 0F BE    # MOVSBL
 .hex    4D 4F 56 53  58 00 00 00  00 00 00 00    0A 02 0F BE    # MOVSX == "
+
+
+# Type 11 instructions.  One argument: either an immediate or an r/m.
+#
+#   CALL    rel32           E8
+#   CALL    r/m32           FF /2
+#
+# The three parameters are: 
+#   1) the rel32 op-code byte (E8 here),
+#   2) the r/m32 op-code byte (FF), and 
+#   3) the three-bit reg field for the mod-r/m byte (2 here).
+
+.hex	43 41 4C 4C  00 00 00 00  00 00 00 00    0B E8 FF 02	# CALL
+.hex	4A 4D 50 00  00 00 00 00  00 00 00 00    0B E9 FF 04	# JMP
 
 
 # Type FF 'instructions'.  These are actually directives.    
@@ -1205,7 +1216,8 @@ read_int:
 	CALL	unread
 	POP	%edx
 
-	#  TODO Estimate the number of oct digits (divide number of bits by 2)
+	#  Estimate the number of oct digits (divide number of bits by 2)
+	#  TODO Ideally we would do handle overflow exactly
 	MOVB	$1, %cl
 	SARL	8(%ebp)		# by %cl
 .L16g:
@@ -2581,6 +2593,78 @@ type_01:
 	POP	%edx
 	JMP	insn_end
 
+type_11:
+	#  First, skip whitespace, leaving %eax containing the peek-ahead char
+	PUSH	%edx	# opcode info
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	POP	%ecx	# ifile
+	POP	%edx
+	
+	#  Is it an indirect argument? 
+	CMPB	$0x2A, %al		# '*'
+	JE	type_11_rm
+
+	#  It's an immediate: so the arg is an PC-relative immediate
+	#  Write the op-code byte
+	LEA	-112(%ebp), %ecx
+	PUSH	%ecx			# ofile object
+	MOVB	%dh, %dl		# get 2nds byte from opcode info
+	PUSH	%edx
+	CALL	writebyte
+	POP	%eax
+	POP	%eax
+
+	#  Skip ws and read immediate.
+	PUSH	%ebp
+	MOVL	$2, %eax		# 2 == R_386_PC32 (e.g. for CALL)
+	PUSH	%eax
+	PUSH	%ebx			# bits
+	CALL	read_imm
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+
+	#  Byte is in %al (as part of return from read_imm): write it.
+	LEA	-112(%ebp), %ecx	# ofile
+	PUSH	%ecx
+	PUSH	%eax
+	PUSH	%ebx
+	CALL	writedata
+	POP	%edx
+	POP	%edx
+	POP	%edx
+	JMP	insn_end
+
+type_11_rm:
+	#  Write the op-code byte
+	LEA	-112(%ebp), %ecx
+	PUSH	%ecx			# ofile object
+	MOVB	$16, %cl
+	SHRL	%edx			# by %cl
+	PUSH	%edx
+	CALL	writebyte
+	POP	%edx
+	POP	%eax
+
+	#  Skip the '*' and any whitespace, then read the r/m
+	PUSH	%edx			# store opcode info
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	getone
+	CALL	skiphws
+	LEA	-96(%ebp), %ecx		# disp
+	PUSH	%ecx
+	PUSH	%ebx			# bits
+	CALL	read_rm
+	ADDL	$12, %esp
+	POP	%edx			# restore opcode info
+
+	#  Write the ModR/M byte and displacement
+	MOVB	%dh, %dl
+	JMP	.L21
+
 type_03:
 	#  Write the opcode byte(s).
 	PUSH	%ebp		# main_frame
@@ -3111,9 +3195,11 @@ type_06:
 	JE	type_06_im
 	CMPB	$0x27, %al		# '\''
 	JE	type_06_im
+	PUSH	%edx
 	PUSH	%eax
 	CALL	dchr
 	POP	%ecx
+	POP	%edx
 	CMPB	$-1, %al
 	JNE	type_06_rm
 	CMPB	$8, %dl
@@ -3249,6 +3335,8 @@ tl_ident:
 	JE	type_06
 	CMPB	$10, %dl
 	JE	type_10
+	CMPB	$11, %dl
+	JE	type_11
 
 	JMP	error
 	RET	# to main loop

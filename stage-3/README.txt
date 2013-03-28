@@ -92,6 +92,10 @@ There is also very limited support for instructions with a SIB bytes:
 just enough to allow %esp to be dereferenced %esp in an r/m32, e.g. in 
 MOVL (%esp), %eax.
 
+Indirect relative branches and calls are now supported, e.g. with 
+CALL *%eax.  These are needed for function pointers and computed jumps
+as used in a jump table for switch statements.
+
 Character literals are now allowed as immediates, enclosed in single 
 quotes.  (Note this is unlike the GNU assembler, where character 
 literals begin with a single quote, but do not have a closing quote.)  
