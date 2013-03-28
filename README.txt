@@ -14,7 +14,7 @@ Stage 0 -- unhex
 
 Stage 1 -- unhexl & elfify
 
-  This stage adds add tool to wrap a text section into a minimal ELF
+  This stage adds a tool to wrap a text section into a minimal ELF
   executable, as well as further developing the unhex program to support
   labels, references to earlier labels, and a freer input format that 
   allows comments.
