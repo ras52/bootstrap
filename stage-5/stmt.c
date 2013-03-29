@@ -232,7 +232,7 @@ decl_list( vnode, fn ) {
     auto sz = 4;
 
     while (1) {
-        auto decl = declarator();
+        auto decl = declarator(), name = &decl[3][2];
         
         /* Automatic declarations need space reserving in the frame. */
         if ( vnode[0] == 'auto' ) {
@@ -240,10 +240,15 @@ decl_list( vnode, fn ) {
             if (decl[2] && decl[2][0] == '[]' && !decl[2][3])
                 error("Automatic array of unknown size");
 
+            chk_dup_sym( name, 0 );
             decl_var(decl);
         }
         /* External declarations still need storing in the symbol table */
-        else save_sym( &decl[3][2], 0, is_lv_decl(decl), 0 );
+        else {
+            /* TODO:  Check for duplicate defintions at file scope */
+            if (fn) chk_dup_sym( name, 1 );
+            save_sym( name, 0, is_lv_decl(decl), 0 );
+        }
 
         /* Handle function definitions */
         if ( peek_token() == '{' ) {

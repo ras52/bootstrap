@@ -463,16 +463,18 @@ array_decl(stream, name, type, init) {
     save_sym( name, 0, 0, sz );
 }
 
+/* This is only callled on top-level declarations */
 codegen(stream, node) {
     auto storage = node[0], i = 0;
     while ( i < node[1] ) {
         auto decl = node[ 2 + i++ ];
         auto init = decl[4];
-        
-        /* extern declarations don't need handling as the symbol table 
-         * already knows about them.   TODO: this isn't quite right, e.g. 
-         * w.r.t. tentative declarations */
-        if (init || storage == 'auto' || storage == 'stat' ) {
+
+        /* We only need to take action here if this is a definition.
+         * Declarations that are not definitions have already been 
+         * added to the symbol table by the parser. */
+        /* TODO:  tentative definitions, duplicate definitions */
+        if (init || storage == 'stat' ) {
             auto type = decl[2], name = &decl[3][2];
             set_storage( stream, storage, name );
 

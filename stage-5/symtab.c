@@ -59,11 +59,11 @@ grow_tab( tab, entry_size, name ) {
  * or NULL if not found. */
 static
 lookup_tab( tab, entry_size, name ) {
-    auto e = tab[0];
-    while ( e < tab[1] ) {
+    auto e = tab[1];
+    while (e > tab[0]) {
+        e -= entry_size;
         if ( strcmp( e, name ) == 0 )
             return e;
-        e += entry_size;
     }
     return 0;
 }
@@ -165,6 +165,20 @@ lookup_sym( name, off_ptr ) {
     /* Symbol not found */
     *off_ptr = 0;
     return 1;
+}
+
+/* Check whether another symbol called NAME exists in the current scope,
+ * and if necessary give an error. */
+chk_dup_sym( name, has_linkage ) {
+    auto e = lookup_tab( symtab, 28, name );    /* sizeof(sym_entry) */
+    if (e && e[4] == scope_id) {
+        /* If both definitions are definitions with linkage (meaning extern
+         * definitions) then we allow it.  Once we have types, we should 
+         * check for compatibility before allowing it.  Otherwise, we issue
+         * an error. */
+        if ( !(has_linkage && e[3] == 0) )
+            error("Multiple definitions of '%s' within the same block", name);
+    }
 }
 
 type_size(type) {

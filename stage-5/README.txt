@@ -10,3 +10,9 @@ New features in stage 5 cc:
   - comma operator
   - goto and labelled statements
   - switch, case labels and default (implemented as sequential if-then-branch)
+
+
+TODO:
+  - Errors on duplicate declarations at global scope
+  - Tentative definitions
+  - A type system
