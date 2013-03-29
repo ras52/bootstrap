@@ -112,6 +112,6 @@ strdup( str ) {
     auto l = strlen(str);
     auto str2 = malloc(l + 1);
     strcpy( str2, str );
-    str2[l] = 0;
+    lchar( str2, l, 0 );
     return str2;
 }
