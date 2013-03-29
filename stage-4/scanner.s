@@ -284,17 +284,13 @@ get_word:
 keywords:
 	.string "auto"		.align 12
 	.string "break"		.align 12
-	.string "case"		.align 12	# TODO
         .string "continue"      .align 12
-	.string "default"	.align 12	# TODO
 	.string "do"		.align 12
 	.string "else"		.align 12
-	.string "extern"	.align 12	# TODO
-	.string "goto"		.align 12	# TODO
+	.string "extern"	.align 12
 	.string "if"		.align 12
 	.string "return"	.align 12
 	.string "static"	.align 12
-	.string "switch"	.align 12	# TODO
 	.string "while"		.align 12
 	.byte  0	# <-- the end of table marker
 
