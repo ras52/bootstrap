@@ -550,29 +550,30 @@ new_clabel:
 	LEAVE
 	RET
 
-####	#  Function:	void call(char const* name, int nargs);
-	#  We've just pushed NARGS arguments.  Now call NAME.
+####	#  Function:	void call_ptr(int nargs);
+	#  We've just pushed a function pointer followed by NARGS arguments.  
+	#  Now call the function with those arguments, and remove the arguments
+	#  and function pointer from the stack.
 .data .LC36:
 .string "\tMOVL\t%esp, %eax\n"
 .data .LC37:
 .string "\tPUSH\t%d(%%eax)\n"
 .data .LC38:
-.string "\tCALL\t%s\n"
-.text call:
+.string "\tCALL\t*%d(%%eax)\n"
+.text call_ptr:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	PUSH	%esi
 	PUSH	%edi
 
 	XORL	%edi, %edi
-	MOVL	12(%ebp), %esi
-	TESTL	%esi, %esi
-	JZ	.L1
-
+	MOVL	8(%ebp), %esi
 	MOVL	$.LC36, %eax
 	PUSH	%eax
 	CALL	putstr
 	POP	%eax
+	TESTL	%esi, %esi
+	JZ	.L1
 
 .L2:
 	ADDL	$4, %edi
@@ -590,24 +591,25 @@ new_clabel:
 	JMP	.L2
 .L1:
 
-	PUSH	8(%ebp)
+	PUSH	%edi
 	MOVL	$.LC38, %eax
 	PUSH	%eax
 	CALL	printf
 	POP	%eax
 	POP	%eax
 	
-	MOVL	12(%ebp), %eax
+	MOVL	8(%ebp), %eax
 	TESTL	%eax, %eax
 	JZ	.L3
 	MOVL	$8, %ecx
 	IMULL	%ecx			# on %edx:%eax
 	SUBL	$4, %eax
+.L3:
+	ADDL	$4, %eax
 	PUSH	%eax
 	CALL	clear_stack
 	POP	%eax
 	
-.L3:
 	POP	%edi
 	POP	%esi
 	POP	%ebp

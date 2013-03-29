@@ -7,7 +7,7 @@
 static
 compile(output) {
     auto node;
-    while ( token && (node = top_level()) ) {
+    while ( peek_token() && (node = top_level()) ) {
         codegen( output, node );
         free_node( node );
     }
@@ -15,6 +15,7 @@ compile(output) {
 
 static
 cli_error(fmt) {
+    extern stderr;
     vfprintf(stderr, fmt, &fmt);
     exit(1);
 }
@@ -24,6 +25,7 @@ usage() {
 }
 
 main(argc, argv) {
+    extern stdout;
     auto filename, l, outname = 0, freeout = 0;
 
     if ( argc < 3 ) usage();

@@ -26,6 +26,8 @@ static labtab[3] = { 0, 0, 0 };  /* start, end, end_store */
 
 static scope_id = 0;
 
+static frame_size = 0;
+
 /* Initialise a table */
 static
 init_tab( tab, entry_size ) {
@@ -173,26 +175,32 @@ type_size(type) {
 }
 
 /* Bytes of local variables on the stack. */
-static frame_sz = 0;
+static cur_offset = 0;
 
 frame_off() {
-    return -frame_sz; 
+    return -cur_offset; 
+}
+
+is_lv_decl(decl) {
+    if ( decl[2] && decl[2][0] == '[]' ) return 0;
+    if ( decl[2] && decl[2][0] == '()' ) return 0;
+    else return 1;
 }
 
 decl_var(decl) {
     auto sz = type_size( decl[2] );
-    /* Arrays are currently the only object that's not an lvalue */
-    auto is_lval = !( decl[2] && decl[2][0] == '[]' );
-
-    frame_sz += sz;
-    if ( decl[3][0] != 'id' ) int_error("Expected identifier in auto decl");
-    save_sym( &decl[3][2], -frame_sz, is_lval, sz );
+    cur_offset += sz;
+    if ( decl[3][0] != 'id' )
+        int_error("Expected identifier in auto decl");
+    save_sym( &decl[3][2], -cur_offset, is_lv_decl(decl), sz );
+    if (cur_offset > frame_size)
+        frame_size = cur_offset;
     return sz;
 }
 
 start_fn(decl) {
     auto i = 1;
-    frame_sz = 0;
+    cur_offset = frame_size = 0;
     new_scope();
 
     /* Inject the parameters into the scope */
@@ -208,6 +216,8 @@ end_fn() {
 
     /* Drop all labels */
     labtab[1] = labtab[0];
+
+    return frame_size;
 }
 
 start_block() {
@@ -216,6 +226,6 @@ start_block() {
 
 end_block() {
     auto sz = end_scope();
-    frame_sz -= sz;
+    cur_offset -= sz;
     return sz;
 }

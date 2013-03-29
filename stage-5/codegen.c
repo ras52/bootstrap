@@ -320,6 +320,15 @@ switch_stmt(stream, node, brk, cont, ret) {
 }
 
 static
+extern_stmt(stream, node) {
+    auto i = 0;
+    while ( i < node[1] ) {
+        auto decl = node[ 2 + i++ ];
+        save_sym( &decl[3][2], 0, is_lv_decl(decl), 0 );
+    } 
+}
+
+static
 auto_stmt(stream, node) {
     auto i = 0;
     while ( i < node[1] ) {
@@ -327,6 +336,7 @@ auto_stmt(stream, node) {
         auto sz = decl_var(decl);
         auto offset = frame_off();
 
+        /* Is there an initaliser */
         if ( decl[4] ) {
             auto init = decl[4];
             if ( init[0] == '{}' ) {
@@ -371,6 +381,7 @@ stmt_code(stream, node, brk, cont, ret) {
     auto op = node[0];
 
     if      ( op == 'auto' ) auto_stmt( stream, node );
+    else if ( op == 'exte' ) extern_stmt( stream, node );
 
     else if ( op == 'brea' ) branch( stream, brk );
     else if ( op == 'cont' ) branch( stream, cont ); 
@@ -400,7 +411,7 @@ do_block(stream, node, brk, cont, ret) {
 }
 
 static
-storage(stream, storage, name) {
+set_storage(stream, storage, name) {
     if (storage == 'stat')
         local_decl(stream, name);
     else
@@ -453,20 +464,26 @@ array_decl(stream, name, type, init) {
 }
 
 codegen(stream, node) {
-    auto i = 0;
+    auto storage = node[0], i = 0;
     while ( i < node[1] ) {
         auto decl = node[ 2 + i++ ];
-        auto type = decl[2], name = &decl[3][2], init = decl[4];
+        auto init = decl[4];
+        
+        /* extern declarations don't need handling as the symbol table 
+         * already knows about them.   TODO: this isn't quite right, e.g. 
+         * w.r.t. tentative declarations */
+        if (init || storage == 'auto' || storage == 'stat' ) {
+            auto type = decl[2], name = &decl[3][2];
+            set_storage( stream, storage, name );
 
-        storage(stream, node[0], name);
-
-        if (!type) /* all scalars and only scalars are currently typeless */
-            int_decl( stream, name, init );
-        else if (type[0] == '()')
-            fn_decl( stream, name, type, init, decl[5] );
-        else if (type[0] == '[]')
-            array_decl( stream, name, type, init );
-        else 
-            int_error("Unexpected node in declaration");
+            if (!type) /* scalars and only scalars are currently typeless */
+                int_decl( stream, name, init );
+            else if (type[0] == '()')
+                fn_decl( stream, name, type, init, decl[5] );
+            else if (type[0] == '[]')
+                array_decl( stream, name, type, init );
+            else 
+                int_error("Unexpected node in declaration");
+        }
     }
 }

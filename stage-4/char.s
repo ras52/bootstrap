@@ -7,12 +7,12 @@
 # in the B language.
 
 .text
-.globl char
 
 ####	#  Function:  char rchar(char const* s, size_t n);
 	#
 	#  B's char function, renamed to avoid forward compatibility problems 
 	#  with C's keyword.  Returns the byte S[N], zero padded in a word.
+.globl rchar
 rchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -28,6 +28,7 @@ rchar:
 ####	#  Function: char lchar(char* s, size_t n, char c);
 	#  B's lchar function.  Sets S[N] = C, and returns C, zero padded in 
 	#  a word.
+.globl lchar
 lchar:
 	PUSH	%ebp
 	MOVL	%esp, %ebp

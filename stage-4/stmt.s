@@ -266,7 +266,7 @@ init_array:
 	MOVL	$frame_size, %eax
 	SUBL	%edx, (%eax)
 	PUSH	(%eax)
-	PUSH	12(%ebp)
+	PUSH	12(%ebp)		# name
 	CALL	save_sym
 	POP	%ecx
 	POP	%ecx
@@ -346,15 +346,88 @@ init_int:
 	RET
 
 
-####	#  Function:	void auto_stmt(int brk, int cont, int ret);
+####	#  Function:	void auto_decl(int brk, int cont, int ret);
+	#
+	#    ext-decl ::= name ( '[' ']' | '(' ')' )?
+	#
+	#    extern-stmt ::= 'extern' ext-decl ( ',' ext-decl )* ';'
+	#
+	#  Current token is 'extern'
+.local extern_decl
+extern_decl:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	SUBL	$16, %esp		# temporary buffer
+
+.L20:
+	CALL	next
+	CMPL	'id', %eax
+	JNE	_error
+
+	#  Copy the identifier into the temporary buffer
+	MOVL	$value, %eax
+	PUSH	%eax
+	LEA	-16(%ebp), %eax
+	PUSH	%eax
+	CALL	strcpy
+	POP	%eax
+	POP	%eax
+
+	#  Is it an array?
+	CALL	next
+	CMPL	'[', %eax
+	JNE	.L21
+	CALL	next
+	CMPL	']', %eax
+	JNE	_error
+	CALL	next
+	XORL	%edx, %edx		# Arrays are not lvalues
+	JMP	.L23
+
+.L21:
+	#  Is it a function?
+	CMPL	'(', %eax
+	JNE	.L22
+	CALL	next
+	CMPL	')', %eax
+	JNE	_error
+	CALL	next
+	XORL	%edx, %edx		# Functions are not lvalues
+	JMP	.L23
+
+.L22:
+	#  It's a single object of some sort, and therefore an lvalue
+	XORL	%edx, %edx
+	INCL	%edx
+
+.L23:
+	XORL	%eax, %eax
+	PUSH	%eax			# external, so zero size on stack
+	PUSH	%edx			# lv
+	PUSH	%eax			# frame_off is zero for undefined
+	LEA	-16(%ebp), %eax
+	PUSH	%eax			# name
+	CALL	save_sym
+	ADDL	$16, %esp
+
+	#  Any more declarations?
+	CMPL	',', %eax
+	JE	.L20
+	CALL	semicolon
+
+	LEAVE
+	RET
+
+
+####	#  Function:	void auto_decl(int brk, int cont, int ret);
 	#
 	#    init-decl ::= name ( init-int | '[' number ']' init-array )
 	#
 	#    auto-stmt ::= 'auto' init-decl ( ',' init-decl )* ';'
 	#
 	#  Current token is 'auto'
-.local auto_stmt
-auto_stmt:
+.local auto_decl
+auto_decl:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 
@@ -474,6 +547,8 @@ stmt:
 	JE	.L12
 	CMPL	'auto', %eax
 	JE	.L13
+	CMPL	'exte', %eax
+	JE	.L13a
 	CMPL	';', %eax
 	JE	.L4
 	CMPL	'{', %eax
@@ -499,7 +574,10 @@ stmt:
 	CALL	cont_stmt
 	JMP	.L6
 .L13:
-	CALL	auto_stmt
+	CALL	auto_decl
+	JMP	.L6
+.L13a:
+	CALL	extern_decl
 	JMP	.L6
 
 .L4:	# The null statement

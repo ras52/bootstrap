@@ -215,6 +215,16 @@ int_decl:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 
+	XORL	%eax, %eax
+	PUSH	%eax			# external, so zero size on stack
+	INCL	%eax
+	PUSH	%eax			# objects are lvalues
+	DECL	%eax
+	PUSH	%eax			# frame_off == 0 for undefined
+	PUSH	8(%ebp)			# name
+	CALL	save_sym
+	ADDL	$16, %esp
+
 	MOVL	'0', %eax
 	PUSH	%eax
 	MOVL	token, %eax

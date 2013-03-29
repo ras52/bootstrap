@@ -22,7 +22,6 @@ arg_list:
 	MOVL	%esp, %ebp
 	XORL	%eax, %eax
 	PUSH	%eax		# -4(%ebp) is count
-
 	MOVL	token, %eax
 	CMPL	')', %eax
 	JE	.L41
@@ -45,84 +44,9 @@ arg_list:
 	RET
 
 
-####	#  Function: 	type_t maybe_call();
-	#
-	#    maybe-call ::= name ( '(' params ')' )?
-	#
-.local maybe_call
-maybe_call:
-	PUSH	%ebp
-	MOVL	%esp, %ebp
-
-	#  Create a temporary buffer and copy the identifier to it.
-	SUBL	$16, %esp
-	MOVL	$value, %eax
-	PUSH	%eax
-	LEA	-16(%ebp), %eax
-	PUSH	%eax
-	CALL	strcpy
-	POP	%eax
-	POP	%eax
-
-	CALL	next
-	MOVL	token, %eax
-	CMPL	'(', %eax
-	JNE	.L38
-	CALL	next
-	CALL	arg_list
-
-	PUSH	%eax
-	LEA	-16(%ebp), %eax
-	PUSH	%eax
-	CALL	call
-	POP	%eax
-	POP	%eax
-
-	MOVL	token, %eax
-	CMPL	')', %eax
-	JNE	_error
-
-	CALL	next
-	XORL	%eax, %eax		# rvalue
-	JMP	.L39
-.L38:
-	#  We just have a symbol
-	PUSH	%eax			# slot for frame offset
-	PUSH	%esp			# &offset
-	LEA	-16(%ebp), %eax
-	PUSH	%eax
-	CALL	lookup_sym
-	POP	%ecx
-	POP	%ecx
-	POP	%ecx
-	TESTL	%ecx, %ecx
-	JZ	.L38a			# *offset == 0 if not found
-
-	PUSH	%eax
-	PUSH	%ecx			# frame offset
-	CALL	load_local
-	POP	%ecx
-	POP	%eax			# return lvalue flag
-	JMP	.L39
-
-.L38a:
-	PUSH	%eax			# store lvalue flag
-
-	#  Symbol not found, so leave it as a symbol for the linker to resolve
-	LEA	-16(%ebp), %eax
-	PUSH	%eax
-	CALL	load_var
-	POP	%eax
-	POP	%eax			# restore lvalue flag for return
-	
-.L39:
-	LEAVE
-	RET
-
-
 ####	#  Function:	type_t primry_expr();
 	#
-	#    primry-expr ::= number | maybe-call | '(' expr ')'
+	#    primry-expr ::= number | string | char | identifier | '(' expr ')'
 	#
 .local primry_expr
 primry_expr:
@@ -176,7 +100,39 @@ primry_expr:
 	JMP	.L37
 
 .L36:
-	CALL	maybe_call
+	#  We have a symbol: what is it?
+	PUSH	%eax			# slot for frame offset
+	PUSH	%esp			# &offset
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	lookup_sym
+	POP	%ecx
+	POP	%ecx
+	POP	%ecx
+	TESTL	%ecx, %ecx
+	JZ	.L36a			# *offset == 0 if not found
+
+	#  An automatic variable (including function parameters)
+	PUSH	%eax
+	PUSH	%ecx			# frame offset
+	CALL	load_local
+	POP	%ecx
+	CALL	next
+	POP	%eax			# return lvalue flag
+	JMP	.L37
+
+.L36a:
+	PUSH	%eax			# store lvalue flag
+
+	#  Symbol not found, so leave it as a symbol for the linker to resolve
+	#  Note all functions go this route, and we therefore never create 
+	#  PC-rel relocations for function calls.
+	MOVL	$value, %eax
+	PUSH	%eax
+	CALL	load_var
+	POP	%eax
+	CALL	next
+	POP	%eax			# restore lvalue flag for return
 	
 .L37:
 	POP	%ebp
@@ -202,7 +158,8 @@ make_rvalue:
 
 ####	#  Function:	type_t postfx_expr();
 	#
-	#    postfx-expr ::= primary-expr ( '[' expr '] | '++' | '--' )?
+	#    postfx-expr ::= primary-expr 
+	#                      ( '[' expr '] | '++' | '--' | '(' params ')')*
 	#
 .local postfx_expr
 postfx_expr:
@@ -219,9 +176,12 @@ postfx_expr:
 	JE	.L63
 	CMPL	'--', %eax
 	JE	.L64
+	CMPL	'(', %eax
+	JE	.L64a
 	JMP	.L65
 
-.L49:
+.L49:	
+	#  We have a subscript operator 
 	CALL	make_rvalue
 	CALL	next
 	CALL	push
@@ -240,6 +200,7 @@ postfx_expr:
 
 	JMP	.L48
 .L63:
+	#  Postfix increment: check we have an lvalue
 	MOVL	-4(%ebp), %eax
 	TESTL	%eax, %eax		# check acting on an lvalue
 	JZ	_error
@@ -248,13 +209,29 @@ postfx_expr:
 	CALL	next
 	JMP	.L48
 .L64:
-	#  Check it's an lvalue
+	#  Postfix decrement: check we have an lvalue
 	MOVL	-4(%ebp), %eax
 	TESTL	%eax, %eax		# check acting on an lvalue
 	JZ	_error
 	CALL	postfix_dec
 	MOVL	$0, -4(%ebp)		# result is not an lvalue
 	CALL	next
+	JMP	.L48
+.L64a:
+	#  A call.  (Note functions are rvalues.)
+	CALL	make_rvalue
+	CALL	next			# skip '('
+	CALL	push
+	CALL	arg_list
+	PUSH	%eax			# number of arguments
+	CALL	call_ptr
+	POP	%eax
+
+	MOVL	token, %eax
+	CMPL	')', %eax
+	JNE	_error
+	CALL	next
+	MOVL	$0, -4(%ebp)		# Result of a call is an rvalue
 	JMP	.L48
 .L65:
 	POP	%eax

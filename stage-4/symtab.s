@@ -215,9 +215,9 @@ lookup_sym:
 	MOVL	12(%edi), %edx		# frame offset
 	JMP	.L6
 .L3:
-	#  Symbol not found
+	#  Symbol not found -- we assume it's an external function
+	#  which is not an lvalue (so return 0)
 	XORL	%eax, %eax
-	INCL	%eax			# return +1 (is lvalue) if not found
 	XORL	%edx, %edx		# use 0 frame offset for error
 .L6:
 	# write *off

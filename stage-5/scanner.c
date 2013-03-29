@@ -9,6 +9,7 @@ static filename;
 
 static
 print_msg(fmt, ap) {
+    extern stderr;
     fprintf(stderr, "%s:%d: ", filename, line);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
@@ -24,6 +25,7 @@ error(fmt) {
 }
 
 int_error(fmt) {
+    extern stderr;
     fputs("Internal error: ", stderr);
     vfprintf(stderr, fmt, &fmt);
     fputc('\n', stderr);
@@ -110,7 +112,7 @@ chk_keyword(node) {
 
     /* TODO: Types not yet implemented: char, double, int, long, short, 
      * sizeof, struct, typedef, union, unsigned */
-    /* TODO: Misc not yet implemented: extern, register */
+    /* TODO: Misc not yet implemented: register */
 
     auto i = 0, str = &node[2];
     while ( keywords[i] && strcmp(keywords[i], str) != 0 )
@@ -312,7 +314,7 @@ get_qlit(stream, q) {
 static input_strm;
 
 /* Contains the token most recently read by next() */
-token = 0;
+static token;
 
 peek_char() {
     auto stream = input_strm;
@@ -339,6 +341,7 @@ next() {
 }
 
 init_scan(in_filename) {
+    extern stdin;
     freopen( in_filename, "r", stdin );
     filename = in_filename;
     input_strm = stdin;
@@ -392,8 +395,12 @@ take_node(arity) {
 
 /* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
  * Returns P. */
-req_token(p) {
-    if (!p) error("Unexpected EOF");
-    return p;
+req_token() {
+    if (!token) error("Unexpected EOF");
+    return token;
+}
+
+peek_token() {
+    return token ? token[0] : 0;
 }
 

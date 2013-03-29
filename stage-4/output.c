@@ -42,6 +42,7 @@ fclose( stream ) {
 
 /* The C library freopen() */
 freopen( filename, mode, stream ) {
+    extern errno;
     auto fmode = 0, fd;
 
     if ( fclose( stream ) == -1 ) 

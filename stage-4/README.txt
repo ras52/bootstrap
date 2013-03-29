@@ -39,6 +39,8 @@ Summary of differences from B:
   * The return statement does not require brackets.
   * We don't allow backspace (character 0x7F) or dot (.) in identifiers.
   * The escape characters in strings is \ not *, and there is no \e.
+  * We don't support the switch statement, and therefore case labels.
+  * We don't support goto and labeled statements.
 
 The stage 4 compiler is a simple afair, making a single pass over the 
 input file and code generation is done straight out of the parser,
@@ -62,9 +64,3 @@ the compiler against this to produce a significantly faster compiler.
 
   Usage: cc -S file.c
 
-
-TODO
-  Switch statements
-  Goto and labels
-  Extern declarations (especially for arrays)
-  Function pointers (may need linker & assembler support)
