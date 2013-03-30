@@ -163,20 +163,14 @@ mnemonics:
 
 # Type 04 instructions.   A single r/m32 operand, e.g.
 #
-#   INCL    r/m32           FF /0
+#   NEGL    r/m32           F7 /3
 #
 # The three parameters are:
 #   1) the number 1 (to allow it to be treated as the opcode length)
-#   2) the op-code byte (FF), and 
-#   3) the three-bit reg field for the ModR/M byte (0 here).
+#   2) the op-code byte (F7), and 
+#   3) the three-bit reg field for the ModR/M byte (3 here).
 
-.hex	49 4E 43 4C  00 00 00 00  00 00 00 00    04 01 FF 00    # INCL
-.hex	44 45 43 4C  00 00 00 00  00 00 00 00    04 01 FF 01    # DECL
 .hex	4E 45 47 4C  00 00 00 00  00 00 00 00    04 01 F7 03    # NEGL
-.hex	50 55 53 48  00 00 00 00  00 00 00 00    04 01 FF 06    # PUSH
-.hex	50 55 53 48  4C 00 00 00  00 00 00 00    04 01 FF 06    # PUSHL == PUSH
-.hex	50 4F 50 00  00 00 00 00  00 00 00 00    04 01 8F 00    # POP
-.hex	50 4F 50 4C  00 00 00 00  00 00 00 00    04 01 8F 00    # POPL == POP
 .hex	53 41 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SALL
 .hex	53 48 4C 4C  00 00 00 00  00 00 00 00    04 01 D3 04    # SHLL == SALL
 .hex	53 41 52 4C  00 00 00 00  00 00 00 00    04 01 D3 07    # SARL
@@ -248,6 +242,8 @@ mnemonics:
 #
 #   MOVL    moffs32, %eax   A1 		MOVB    moffs8, %al   A0
 #   MOVL    %eax, moffs32   A3          MOVB    %al, moffs8   A2
+#
+# The extra op-codes are not encoded here, but are hard-coded in the code.
 
 .hex	4D 4F 56 42  00 00 00 00  00 00 00 00    08 88 C6 00    # MOVB
 .hex	4D 4F 56 4C  00 00 00 00  00 00 00 00    09 89 C7 00    # MOVL
@@ -282,11 +278,28 @@ mnemonics:
 .hex	4A 4D 50 00  00 00 00 00  00 00 00 00    0B E9 FF 04	# JMP
 
 
+# Type 12 instructions.  Like type 04, but with a short version for registers
+#
+#   INCL    r32             40+r
+#   INCL    r/m32           FF /0
+#
+# The three parameters are 
+#   1) the register op-code base (40 here),
+#   2) the op-code byte for the r/m32 version (FF), and
+#   3) the three-bit reg field for the ModR/M byte (0 here).
+
+.hex	49 4E 43 4C  00 00 00 00  00 00 00 00    0C 40 FF 00    # INCL
+.hex	44 45 43 4C  00 00 00 00  00 00 00 00    0C 48 FF 01    # DECL
+.hex	50 55 53 48  00 00 00 00  00 00 00 00    0C 50 FF 06    # PUSH
+.hex	50 55 53 48  4C 00 00 00  00 00 00 00    0C 50 FF 06    # PUSHL == PUSH
+.hex	50 4F 50 00  00 00 00 00  00 00 00 00    0C 58 8F 00    # POP
+.hex	50 4F 50 4C  00 00 00 00  00 00 00 00    0C 58 8F 00    # POPL == POP
+
 # Type FF 'instructions'.  These are actually directives.    
 #
 #   Sub-type 0:  .hex            -- no parameters
 #   Sub-type 1:  .text  .data    -- one parameter: section id
-#   Sub-type 2:  .int   .bytes   -- one parameter: bits
+#   Sub-type 2:  .int   .byte    -- one parameter: bits
 #   Sub-type 3:  .string         -- no parameters
 #   Sub-type 4:  .zero           -- no parameters
 #   Sub-type 5:  .align          -- no parameters
@@ -2667,6 +2680,42 @@ type_11_rm:
 	MOVB	%dh, %dl
 	JMP	.L21
 
+type_12:
+	#  First, skip whitespace, leaving %eax containing the peek-ahead char
+	PUSH	%edx	# opcode info
+	LEA	-104(%ebp), %ecx	# ifile
+	PUSH	%ecx
+	CALL	skiphws
+	POP	%ecx	# ifile
+	POP	%edx
+
+	CMPB	$0x25, %al		# '%'
+	JNE	.L21a
+
+	#  We have a register: which is it?
+	PUSH	%edx			# opcode info	
+	PUSH	%ecx			# ifile
+	CALL	getone			# skip the '%'
+	PUSH	%ebx			# bits
+	CALL	read_reg
+	POP	%ebx
+	POP	%ecx
+	POP	%edx			# opcode info
+
+	#  %dh is the opcode bits; %al is the register
+	ADDB	%dh, %al
+	LEA	-112(%ebp), %ecx	# ofile
+	PUSH	%ecx
+	PUSH	%eax
+	CALL	writebyte
+	POP	%eax
+	POP	%eax
+	JMP	insn_end
+
+.L21a:
+	#  It's a r/m, so fall through to the type 4 code
+	MOVB	$1, %dh			# single byte op-code
+
 type_03:
 	#  Write the opcode byte(s).
 	PUSH	%ebp		# main_frame
@@ -2800,7 +2849,7 @@ type_08_w:
 	MOVB	$0xA2, %dl
 	CMPL	$8, %ebx
 	JE	.L28
-	INCB	%dl
+	INCB	%dl			# => 0xA3 if MOVB
 .L28:
 	#  Write opcode byte
 	LEA	-112(%ebp), %ecx
@@ -3102,7 +3151,7 @@ type_08_r:
 	MOVB	$0xA0, %dl
 	CMPL	$8, %ebx
 	JE	.L27
-	INCB	%dl
+	INCB	%dl			# => 0xA1 if MOVB
 .L27:
 	#  Write opcode byte
 	LEA	-112(%ebp), %ecx
@@ -3339,6 +3388,8 @@ tl_ident:
 	JE	type_10
 	CMPB	$11, %dl
 	JE	type_11
+	CMPB	$12, %dl
+	JE	type_12
 
 	JMP	error
 	RET	# to main loop
@@ -3448,14 +3499,25 @@ _start:
 	MOVL	%eax, -128(%ebp)
 
 	#  Locate the mnemonics table:  instrct* mnemonics = &mnemonics;
+
+	#  First set up a dummy slot that we can pop into.  This is needed
+	#  because POP %eax assembles (sub-optimally) to two bytes by the 
+	#  stage-2 as, and to one byte by this as.
+	PUSH	%eax			# create a dummy slot
+	MOVL	%esp, %eax
+
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
 	CALL	.L8a
 .L8a:
-	POP	%eax		# Currently assembled sub-optimally as 2 bytes
-	ADDL	mnemonics, %eax	# Assembled as six bytes (op, modrm, imm32)
+	POP	(%eax)			# Assembled as two bytes
+	ADDL	mnemonics, (%eax)	# Assembled as six bytes 
+					#    (op, modrm, imm32)
 
-	#  And add the length of the previous two instructions
-	ADDL	$8, %eax   	# len of prev two instr
+	#  Add the length of the previous two instructions
+	ADDL	$8, (%eax)		# len of prev two instr
+
+	#  And retreive the slot: effectively MOVL (%eax), %eax.
+	POP	%eax
 	MOVL	%eax, -116(%ebp)
 
 	#  Default to the .text section
@@ -3497,16 +3559,29 @@ _start:
 	MOVL	%eax, -112(%ebp)	# fout.fd = return from creat
 
 	#  Locate the ELF header
+
+	#  First set up a dummy slot that we can pop into.  This is needed
+	#  because POP %eax assembles (sub-optimally) to two bytes by the 
+	#  stage-2 as, and to one byte by this as.
+	PUSH	%ecx			# create a dummy slot
+	MOVL	%esp, %ecx
+
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
 	CALL	.L8b
 .L8b:
-	POP	%ecx		# Currently assembled sub-optimally as 2 bytes
-	ADDL	elf_hdr, %ecx	# Assembled as six bytes (op, modrm, imm32)
-	ADDL	$8, %ecx	# len of prev two instr
+	POP	(%ecx)			# Assembled as two bytes
+	ADDL	elf_hdr, (%ecx)		# Assembled as six bytes
+					#   (op, modrm, imm32)
+
+	#  Add the length of the previous two instructions
+	ADDL	$8, (%ecx)		# len of prev two instr
+
+	#  And retreive the slot: effectively MOVL (%eax), %eax.
+	POP	%ecx			# for buffer arg of write(2)
 
 	#  Write the ELF header
 	#  Don't use writedptr because we don't want to update ofile->count
-	MOVL	%eax, %ebx
+	MOVL	%eax, %ebx		# the fd
 	MOVL	$0x1A4, %edx		# Length of ELF header
 	MOVL	$4, %eax		# 4 == __NR_write
 	INT	$0x80

@@ -1241,12 +1241,25 @@ _start:
 	MOVL	%eax, -16(%ebp)		# fout.fd
 
 	#  Locate the ELF header
+
+	#  First set up a dummy slot that we can pop into.  This is needed
+	#  because POP %eax assembles (sub-optimally) to two bytes by the 
+	#  stage-2 as, and to one byte by this as.
+	PUSH	%ecx			# create a dummy slot
+	MOVL	%esp, %ecx
+
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
 	CALL	.L4
 .L4:
-	POP	%ecx		# Currently assembled sub-optimally as 2 bytes
-	ADDL	elf_hdr, %ecx	# Assembled as six bytes (op, modrm, imm32)
-	ADDL	$8, %ecx	# len of prev two instr
+	POP	(%ecx)			# Assembled as two bytes
+	ADDL	elf_hdr, (%ecx)		# Assembled as six bytes
+					#   (op, modrm, imm32)
+
+	#  Add the length of the previous two instructions
+	ADDL	$8, (%ecx)		# len of prev two instr
+
+	#  And retreive the slot: effectively MOVL (%eax), %eax.
+	POP	%ecx			# for buffer arg of write(2)
 
 	#  Write the ELF & program header
 	MOVL	$0x74, %edx		# Length of ELF & program headers
@@ -1385,12 +1398,25 @@ _start:
 	POP	%eax			# remove -60(%ebp)
 
 	#  Locate the section headers we want to write
+
+	#  First set up a dummy slot that we can pop into.  This is needed
+	#  because POP %eax assembles (sub-optimally) to two bytes by the 
+	#  stage-2 as, and to one byte by this as.
+	PUSH	%ecx			# create a dummy slot
+	MOVL	%esp, %ecx
+
 	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
 	CALL	.L5
 .L5:
-	POP	%ecx		# Currently assembled sub-optimally as 2 bytes
-	ADDL	sect_hdr, %ecx	# Assembled as six bytes (op, modrm, imm32)
-	ADDL	$8, %ecx	# len of prev two instr
+	POP	(%ecx)			# Assembled as two bytes
+	ADDL	sect_hdr, (%ecx)	# Assembled as six bytes
+					#   (op, modrm, imm32)
+
+	#  Add the length of the previous two instructions
+	ADDL	$8, (%ecx)		# len of prev two instr
+
+	#  And retreive the slot: effectively MOVL (%eax), %eax.
+	POP	%ecx			# for buffer arg of write(2)
 
 	#  Write the section headers
 	MOVL	-52(%ebp), %edx		# Length of headers
@@ -1401,11 +1427,25 @@ _start:
 	JL	error
 
 	#  And similarly for the .shstrtab
+
+	#  First set up a dummy slot that we can pop into.  This is needed
+	#  because POP %eax assembles (sub-optimally) to two bytes by the 
+	#  stage-2 as, and to one byte by this as.
+	PUSH	%ecx			# create a dummy slot
+	MOVL	%esp, %ecx
+
+	#  CALL next_line; next_line: POP %eax  simply effects  MOV %eip, %eax
 	CALL	.L5a
 .L5a:
-	POP	%ecx		# Currently assembled sub-optimally as 2 bytes
-	ADDL	shstrtab, %ecx	# Assembled as six bytes (op, modrm, imm32)
-	ADDL	$8, %ecx	# len of prev two instr
+	POP	(%ecx)			# Assembled as two bytes
+	ADDL	shstrtab, (%ecx)	# Assembled as six bytes
+					#   (op, modrm, imm32)
+
+	#  Add the length of the previous two instructions
+	ADDL	$8, (%ecx)		# len of prev two instr
+
+	#  And retreive the slot: effectively MOVL (%eax), %eax.
+	POP	%ecx			# for buffer arg of write(2)
 
 	#  Write the shstrtab
 	MOVL	$0x30, %edx		# Length of table
