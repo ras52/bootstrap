@@ -13,7 +13,8 @@ load_chr(stream, chr) {
 }
 
 load_str(stream, str, clabel) {
-    fprintf(stream, ".data .LC%d: .string %s\n.text\tMOVL\t$.LC%d, %%eax\n",
+    fprintf(stream, 
+            ".data\n.LC%d:\n\t.string %s\n.text\n\tMOVL\t$.LC%d, %%eax\n",
             clabel, str, clabel);
 }
 

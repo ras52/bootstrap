@@ -9,9 +9,15 @@
 static
 primry_expr() {
     auto n, t = peek_token();
-    if ( t == 'num' || t == 'chr' || t == 'id' | t == 'str' )
+    if ( t == 'num' || t == 'id' | t == 'str' )
         n = take_node(0);
 
+    else if ( t == 'chr' ) {
+        n = take_node(0);
+        /* Convert it into a integer literal */
+        n[0] = 'num';
+        n[2] = parse_chr( &n[2] );
+    }
     else if ( t == '(' ) {
         skip_node('(');
         n = expr(); 
@@ -146,10 +152,16 @@ test_level( t, ap ) {
     return 0;
 }
 
+/* Handle a standard left-to-right binary operator precedence level.  
+ * Call CHAIN() to get parse the operands, so CHAIN should be a pointer 
+ * to the parser function for a higher precedence level.  It is a variadic 
+ * function, and the varargs are operator tokens in the predence level, 
+ * followed by a 0 end marker. */
 static
 bin_level( chain ) {
-    auto p = chain(), t;
+    auto p = chain();
 
+    /* Left-to-right associatibity: a, b, c == (a, b), c */
     while ( test_level( peek_token(), &chain ) ) { 
         p = do_binop( p );
         p[3] = chain();
@@ -275,13 +287,5 @@ assign_expr() {
 
 /* expr ::= ( assign-expr ',' )* assign-expr */
 expr() {
-    auto p = assign_expr();
-
-    /* Left-to-right associatibity: a, b, c == (a, b), c */
-    while ( peek_token() == ',' ) {
-        p = do_binop( p );
-        p[3] = assign_expr();
-    }
-
-    return p;
+    return bin_level( assign_expr, ',', 0 );
 }

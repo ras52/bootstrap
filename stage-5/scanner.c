@@ -274,6 +274,34 @@ get_multiop(stream, c) {
     return node_new(c);
 }
 
+/* Convert a quoted character literal in STR (complete with single quotes,
+ * and escapes) into an integer, and return that. */
+parse_chr(str) {
+    auto i = 0, val = 0, bytes = 0;
+
+    if ( rchar( str, i++ ) != '\'' )
+        int_error("Character literal doesn't begin with '");
+
+    while (1) {
+        auto c = rchar( str, i++ );
+        if ( c == '\'' ) break;
+        else if ( bytes == 4 ) 
+            error("Character literal overflows 32 bits");
+        else if ( c == '\\' ) {
+            c = rchar( str, i++ );
+            if ( c == 'n' ) c = '\n';
+            else if ( c == 't' ) c == '\t';
+            else if ( c == '0' ) c == '\0';
+        }
+        val += c << (bytes++ << 3);
+    }
+
+    if ( bytes == 0 )
+        error("Empty character literal");
+
+    return val;
+}
+
 /* Read a string or character literal into VALUE, beginning with quote mark, 
  * Q, and return the appropriate token type ('str' or 'chr'). */
 static
