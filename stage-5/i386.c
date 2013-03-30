@@ -31,7 +31,7 @@ save_local(stream, offset) {
 }
 
 asm_push(stream) {
-    fputs("\tPUSH\t%eax\n", stream);
+    fputs("\tPUSHL\t%eax\n", stream);
 }
 
 arith_neg(stream) {
@@ -68,12 +68,12 @@ postfix_dec(stream) {
 
 static
 start_binop(stream, is_assign, is_sym) {
-    if (is_sym && !is_assign) fputs("\tPOP\t%ecx\n", stream);
-    else fputs("\tMOVL\t%eax, %ecx\n\tPOP\t%eax\n", stream);
+    if (is_sym && !is_assign) fputs("\tPOPL\t%ecx\n", stream);
+    else fputs("\tMOVL\t%eax, %ecx\n\tPOPL\t%eax\n", stream);
 }
 
 pop_mult(stream, is_assign) {
-    fputs("\tPOP\t%ecx\n", stream);
+    fputs("\tPOPL\t%ecx\n", stream);
     fprintf(stream, "\tIMULL\t%s\n", is_assign ? "(%ecx)" : "%ecx");
     if (is_assign)
         fputs("\tMOVL\t%eax, (%ecx)\n\tMOVL\t%ecx, %eax\n", stream);
@@ -85,20 +85,20 @@ common_div(stream, is_assign) {
         fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%esp), %eax\nMOVL\t(%eax), %eax\n", 
               stream);
     else
-        fputs("\tMOVL\t%eax, %ecx\n\tPOP\t%eax\n", stream);
+        fputs("\tMOVL\t%eax, %ecx\n\tPOPL\t%eax\n", stream);
     fputs("\tXORL\t%edx, %edx\n\tIDIVL\t%ecx\n", stream);
 }
 
 pop_div(stream, is_assign) {
     common_div(stream, is_assign);
     if (is_assign)
-        fputs("\tPOP\t%ecx\nMOVL\t%eax, (%ecx)\nMOVL\t%ecx, %eax\n", stream);
+        fputs("\tPOPL\t%ecx\nMOVL\t%eax, (%ecx)\nMOVL\t%ecx, %eax\n", stream);
 }
 
 pop_mod(stream, is_assign) {
     common_div(stream, is_assign);
     if (is_assign)
-        fputs("\tPOP\t%eax\nMOVL\t%edx, (%eax)\n", stream);
+        fputs("\tPOPL\t%eax\nMOVL\t%edx, (%eax)\n", stream);
     else
         fputs("\tMOVL\t%edx, %eax\n", stream);
 }
@@ -114,7 +114,7 @@ pop_rshift(stream, is_assign) { pop_shift(stream, "SARL", is_assign); }
 
 static
 pop_rel(stream, mnemonic) {
-    fprintf(stream, "\tPOP\t%%ecx\n\tCMPL\t%%eax, %%ecx\n");
+    fprintf(stream, "\tPOPL\t%%ecx\n\tCMPL\t%%eax, %%ecx\n");
     fprintf(stream, "\t%s\t%%al\n\tMOVZBL\t%%al, %%eax\n", mnemonic);
 }
 
@@ -213,7 +213,7 @@ local_decl(stream, name) {
 }
 
 prolog(stream, name, frame_sz) {
-    fprintf(stream, ".text\n%s:\n\tPUSH\t%%ebp\n\tMOVL\t%%esp, %%ebp\n", name);
+    fprintf(stream, ".text\n%s:\n\tPUSHL\t%%ebp\n\tMOVL\t%%esp, %%ebp\n", name);
     alloc_stack(stream, frame_sz);
 }
 
