@@ -1465,6 +1465,7 @@ _start:
 
 
 	#  Write Null symbol (per gABI-4.1, Fig 4-18)
+	XORL	%eax, %eax
 	PUSH	%eax
 	CALL	writedword
 	CALL	writedword	
