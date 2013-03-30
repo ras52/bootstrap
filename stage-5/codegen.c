@@ -187,7 +187,20 @@ do_call(stream, node, need_lval) {
         expr_code( stream, node[ 3 + --i ], 0 );
         asm_push( stream );
     }
-    asm_call( stream, &node[2][2], args );
+
+    /* If we're calling an identifier that's not local and isn't an lval,
+     * it must either be an extern function or an extern array.  The latter
+     * would be a syntax error but for the present lack of a type system
+     * So we assume it's a function and do a direct call if possible. */
+    if ( node[2][0] == 'id' ) {
+        auto off, is_lval = lookup_sym( &node[2][2], &off );
+        if (!off && !is_lval)
+            return asm_call( stream, &node[2][2], args*4 );
+    }
+
+    /* And fall back to an indirect call with CALL *%eax. */
+    expr_code( stream, node[2], 0 );
+    call_ptr( stream, args*4 );
 }
 
 static

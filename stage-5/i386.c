@@ -164,9 +164,14 @@ clear_stack(stream, sz) {
         fprintf(stream, "\tADDL\t$%d, %%esp\n", sz);
 }
 
-asm_call(stream, fn_name, nargs) {
+asm_call(stream, fn_name, cleanup_sz) {
     fprintf(stream, "\tCALL\t%s\n", fn_name);
-    clear_stack( stream, nargs*4 );
+    clear_stack( stream, cleanup_sz );
+}
+
+call_ptr(stream, cleanup_sz) {
+    fputs("\tCALL\t*%eax\n", stream);
+    clear_stack( stream, cleanup_sz );
 }
 
 static

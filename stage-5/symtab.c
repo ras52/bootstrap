@@ -162,9 +162,9 @@ lookup_sym( name, off_ptr ) {
         return e[5];
     }
 
-    /* Symbol not found */
+    /* Symbol not found -- default to rvalues e.g. functions */
     *off_ptr = 0;
-    return 1;
+    return 0;
 }
 
 /* Check whether another symbol called NAME exists in the current scope,

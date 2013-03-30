@@ -77,7 +77,6 @@ static
 postfx_expr() {
     auto p = primry_expr(), t;
 
-
     while (1) {
         req_token();
         t = peek_token();
@@ -101,8 +100,6 @@ postfx_expr() {
     
         else if ( t == '(' ) {
             /* We don't currently support function pointers */
-            if ( p[0] != 'id' )
-                error( "Expression found where function name was expected" );
             skip_node('(');
             p = arg_list(p);
             skip_node(')');
@@ -141,140 +138,89 @@ cast_expr() {
     return unary_expr();
 }
 
+static
+test_level( t, ap ) {
+    while ( (ap += 4) && *ap ) 
+        if ( *ap == t )
+            return 1;
+    return 0;
+}
+
+static
+bin_level( chain ) {
+    auto p = chain(), t;
+
+    while ( test_level( peek_token(), &chain ) ) { 
+        p = do_binop( p );
+        p[3] = chain();
+    }
+
+    return p;
+}
+
 /* mult-op   ::= '*' | '/' | '%'
    mult-expr ::= cast-expr ( mult-op cast-expr )* */
 static
 mult_expr() {
-    auto p = cast_expr(), t;
-
-    while ( ( t = peek_token() ) &&  ( t == '*' || t == '/' || t == '%' ) ) {
-        p = do_binop( p );
-        p[3] = cast_expr();
-    }
-
-    return p;
+    return bin_level( cast_expr, '*', '/', '%', 0 );
 }
 
 /* add-op   ::= '+' | '-'
    add-expr ::= mult-expr ( add-op mult-expr )* */
 static
 add_expr() {
-    auto p = mult_expr(), t;
-
-    while ( ( t = peek_token() ) && ( t == '+' || t == '-' ) ) {
-        p = do_binop( p );
-        p[3] = mult_expr();
-    }
-
-    return p;
+    return bin_level( mult_expr, '+', '-', 0 );
 }
 
 /* shift-op   ::= '<<' | '>>'
    shift-expr ::= add-expr ( shift-op add-expr )* */
 static
 shift_expr() {
-    auto p = add_expr(), t;
-
-    while ( ( t = peek_token() ) && ( t == '<<' || t == '>>' ) ) {
-        p = do_binop( p );
-        p[3] = add_expr();
-    }
-
-    return p;
+    return bin_level( add_expr, '<<', '>>', 0 );
 }
 
 /* rel-op   ::= '<' | '>' | '<=' | '>='
    rel-expr ::= shift-expr ( rel-op shift-expr )* */
 static
 rel_expr() {
-    auto p = shift_expr(), t;
-
-    while ( ( t = peek_token() ) && ( t == '<' || t == '<=' || 
-                                      t == '>' || t == '>=' ) ) {
-        p = do_binop( p );
-        p[3] = shift_expr();
-    }
-
-    return p;
+    return bin_level( shift_expr, '<', '<=', '>', '>=', 0 );
 }
 
 /* eq-op   ::= '==' | '!='
    eq-expr ::= rel-expr ( eq-op rel-expr )* */
 static
 eq_expr() {
-    auto p = rel_expr(), t;
-
-    while ( ( t = peek_token() ) && ( t == '==' || t == '!=' ) ) {
-        p = do_binop( p );
-        p[3] = rel_expr();
-    }
-
-    return p;
+    return bin_level( rel_expr, '==', '!=', 0 );
 }
 
 /* bitand-expr ::= eq-expr ( '&' eq-expr )* */
 static
 bitand_expr() {
-    auto p = eq_expr();
-
-    while ( peek_token() == '&' ) {
-        p = do_binop( p );
-        p[3] = eq_expr();
-    }
-
-    return p;
+    return bin_level( eq_expr, '&', 0 );
 }
 
 /* bitxor-expr ::= bitand-expr ( '^' binand-expr )* */
 static
 bitxor_expr() {
-    auto p = bitand_expr();
-
-    while ( peek_token() == '^' ) {
-        p = do_binop( p );
-        p[3] = bitand_expr();
-    }
-
-    return p;
+    return bin_level( bitand_expr, '^', 0 );
 }
 
 /* bitor-expr ::= bitxor-expr ( '|' binand-expr )* */
 static
 bitor_expr() {
-    auto p = bitxor_expr();
-
-    while ( peek_token() == '|' ) {
-        p = do_binop( p );
-        p[3] = bitxor_expr();
-    }
-
-    return p;
+    return bin_level( bitxor_expr, '|', 0 );
 }
 
 /* logand-expr ::= bitor-expr ( '&&' binand-expr )* */
 static
 logand_expr() {
-    auto p = bitor_expr();
-
-    while ( peek_token() == '&&' ) {
-        p = do_binop( p );
-        p[3] = bitor_expr();
-    }
-
-    return p;
+    return bin_level( bitor_expr, '&&', 0 );
 }
 
 /* logor-expr ::= logand-expr ( '||' binand-expr )* */
 static
 logor_expr() {
-    auto p = logand_expr();
-
-    while ( peek_token() == '||' ) {
-        p = do_binop( p );
-        p[3] = logand_expr();
-    }
-
-    return p;
+    return bin_level( logand_expr, '||', 0 );
 }
 
 /* cond-expr ::= logor-expr ( '?' expr ':' assign-expr )? */
