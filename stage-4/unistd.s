@@ -176,3 +176,67 @@ mmap:
 	POP	%ebp
 	RET
 
+
+####	#  Function:	void (*signal(int signum, void (*handler)(int)))(int);
+	#
+.globl signal
+signal:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	12(%ebp), %ecx
+	MOVL	8(%ebp), %ebx
+	MOVL	$48, %eax		# 48 == __NR_signal
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L7
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+.L7:
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+####	#  Function:	int kill( pid_t pid, int sig );
+	#
+.globl kill
+kill:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	12(%ebp), %ecx
+	MOVL	8(%ebp), %ebx
+	MOVL	$37, %eax		# 37 == __NR_kill
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L8
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+.L8:
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+####	#  Function:	pid_t getpid();
+	#
+.globl getpid
+getpid:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	MOVL	$20, %eax		# 20 == __NR_getpid
+	INT	$0x80
+	#  NB the getpid syscall cannot fail.
+	POP	%ebp
+	RET
+
+

@@ -38,7 +38,7 @@ libc0.o:	ld $(LIB0_OBJS) stdio.o memory.o
 cc0:	ld libc0.o crt0.o $(CC_OBJS)
 	ld -o cc0 libc0.o crt0.o $(CC_OBJS)
 
-LIB1_OBJS = output.o input.o char.o malloc.o
+LIB1_OBJS = output.o input.o char.o malloc.o signal.o
 
 libc.o:	ld $(LIB0_OBJS) $(LIB1_OBJS)
 	ld -r -o libc.o $(LIB0_OBJS) $(LIB1_OBJS)
@@ -74,7 +74,7 @@ check-malloc: cc as malloc.c malloc.o
 
 clean:
 	$(RM) -f as ld $(LIB0_OBJS) stdio.o memory.o libc0.o crt0.o 
-	$(RM) -f $(LIB1_OBJS) input.s output.s malloc.s libc.o 
+	$(RM) -f $(LIB1_OBJS) $(LIB1_OBJS:%o=%.s) libc.o
 	$(RM) -f $(CC_OBJS) cc0 cc
 	$(RM) -f output2.o output2.s input2.o input2.s malloc2.o malloc2.s
 
