@@ -77,9 +77,9 @@ The list of supported mnemonics is:
 
   ADCx, ADDx, ANDx, CALL, CBW, CDQ, CLC, CLD, CMPx, CMPSB, CWDE, DECB, 
   DECL, DIVx, HLT, IDIVx, IMULx, INCx, INT, Jcc, LEA, LEAVE, MOVx, 
-  MOVSB, MULx, NEGx, NOP, ORx, POP, POPF, PUSH, PUSHF, REP, REPE, REPNE, 
-  RET, SALx, SARx, SBBx, SCASB, SHLx, SHRx, STC, STD, SUBx, TEST, XCHG, 
-  XORx.
+  MOVSB, MULx, NEGx, NOP, NOTx, ORx, POP, POPF, PUSH, PUSHF, REP, REPE, 
+  REPNE, RET, SALx, SARx, SBBx, SCASB, SHLx, SHRx, STC, STD, SUBx, TEST, 
+  XCHG, XORx.
 
 In that list, 'x' represents a size suffix L or B, and 'cc' is a
 condition (A, AE, B, BE, C, E, G, GE, L, LE, O, P, PE, PO, S, Z, 
