@@ -56,7 +56,13 @@ main(argc, argv) {
     freopen( outname, "w", stdout );
     if (freeout) free(outname);
 
+    init_stypes();
     init_symtab();
+
     compile(stdout);
+
+    fini_symtab();
+    fini_stypes();
+    rc_done();
     return 0;
 }

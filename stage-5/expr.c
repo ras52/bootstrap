@@ -29,31 +29,18 @@ primry_expr() {
     return n;
 }
 
-/* Append node N to the vector node V, which is of size *SZ_PTR, growing
- * the vector if necessary, and returning the (possibly reallocated) vector. */
-vnode_app( v, n, sz_ptr ) {
-    if ( v[1] == *sz_ptr ) {
-        *sz_ptr *= 2;
-        v = realloc( v, (2 + *sz_ptr) * 4 );
-    }
-
-    v[ 2 + v[1]++ ] = n;
-
-    return v;
-}
-
 /*  arg-list ::= ( expr ( ',' expr )* )? */
 static
 arg_list(fn) {
-    auto sz = 4, p = node_new('()');
-    p = vnode_app( p, fn, &sz );
+    auto p = new_node('()');
+    p = vnode_app( p, fn );
 
     if ( peek_token() == ')' ) 
         return p;
 
     while (1) {
         req_token();
-        p = vnode_app( p, assign_expr(), &sz );
+        p = vnode_app( p, assign_expr() );
 
         /* It would be easier to code for an optional ',' at the end, but
          * the standard doesn't allow for that. */
@@ -87,6 +74,12 @@ postfx_expr() {
         req_token();
         t = peek_token();
 
+        /* The only valid use of an undeclared symbol is in a simple function 
+         * call.   In that case, foo() is valid, but, say, (foo)() is not. */
+        if ( t != '(' && p[0] == 'id' && !is_declared(&p[2]) ) 
+            error("Undefined symbol '%s'", &p[2]);
+
+
         if ( t == '++' || t == '--' ) {
             req_lvalue(p);
 
@@ -98,6 +91,8 @@ postfx_expr() {
         }
     
         else if ( t == '[' ) {
+            req_pointer(p);
+
             p = do_binop( p );
             p[0] = '[]';
             p[3] = expr();
@@ -131,6 +126,8 @@ unary_expr() {
         p[2] = unary_expr();
         if (t == '++' || t == '--' || t == '&')
             req_lvalue( p[2] );
+        else if (t == '*')
+            req_pointer( p[2] );
         return p;
     }
 

@@ -333,50 +333,54 @@ switch_stmt(stream, node, brk, cont, ret) {
 }
 
 static
-extern_stmt(stream, node) {
-    auto i = 0;
-    while ( i < node[1] ) {
-        auto decl = node[ 2 + i++ ];
-        save_sym( &decl[3][2], 0, is_lv_decl(decl), 0 );
-    } 
+extern_decl(stream, decl) {
+    save_sym( decl, 0 );
 }
 
 static
-auto_stmt(stream, node) {
-    auto i = 0;
-    while ( i < node[1] ) {
-        auto decl = node[ 2 + i++ ];
-        auto sz = decl_var(decl);
-        auto offset = frame_off();
+auto_decl(stream, decl) {
+    auto sz = decl_var(decl);
+    auto offset = frame_off();
 
-        /* Is there an initaliser */
-        if ( decl[4] ) {
-            auto init = decl[4];
-            if ( init[0] == '{}' ) {
-                auto j = 0;
-                while ( j < init[1] ) {
-                    expr_code( stream, init[2 + j], 0 );
+    /* Is there an initaliser */
+    if ( decl[4] ) {
+        auto init = decl[4];
+        if ( init[0] == '{}' ) {
+            auto j = 0;
+            while ( j < init[1] ) {
+                expr_code( stream, init[2 + j], 0 );
+                save_local( stream, offset + j*4 );
+                ++j;
+            }
+
+            /* Check for an initialisation list that's not long enough.
+             * If it's not, the standard requires zero initialisation of
+             * the extra members. C99:6.7.8/21 */
+            if ( j < sz/4 ) {
+                load_zero( stream );
+                while ( j < sz/4 ) {
                     save_local( stream, offset + j*4 );
                     ++j;
                 }
-
-                /* Check for an initialisation list that's not long enough.
-                 * If it's not, the standard requires zero initialisation of
-                 * the extra members. C99:6.7.8/21 */
-                if ( j < sz/4 ) {
-                    load_zero( stream );
-                    while ( j < sz/4 ) {
-                        save_local( stream, offset + j*4 );
-                        ++j;
-                    }
-                }
-            }
-            /* Scalar initialisation */
-            else {
-                expr_code( stream, init, 0 );
-                save_local( stream, offset );
             }
         }
+        /* Scalar initialisation */
+        else {
+            expr_code( stream, init, 0 );
+            save_local( stream, offset );
+        }
+    }
+}
+
+static
+declaration(stream, node) {
+    auto i = 2;
+    while ( i < node[1] ) {
+        auto decl = node[ 2 + i++ ];
+        if ( node[2] && node[2][0] == 'exte' )
+            extern_decl( stream, decl );
+        else
+            auto_decl( stream, decl );
     }
 }
 
@@ -393,8 +397,7 @@ stmt_code(stream, node, brk, cont, ret) {
 
     auto op = node[0];
 
-    if      ( op == 'auto' ) auto_stmt( stream, node );
-    else if ( op == 'exte' ) extern_stmt( stream, node );
+    if      ( op == 'dcls' ) declaration( stream, node );
 
     else if ( op == 'brea' ) branch( stream, brk );
     else if ( op == 'cont' ) branch( stream, cont ); 
@@ -455,9 +458,9 @@ int_decl(stream, name, init ) {
 
 /* Global-scope array declaration */
 static
-array_decl(stream, name, type, init) {
-    auto sz = type_size( type );
-    data_decl(stream, name);
+array_decl(stream, decl) {
+    auto init = decl[4], sz = type_size( decl[2] );
+    data_decl(stream, &decl[3][2]);
 
     if (init) {
         auto i = 0;
@@ -473,12 +476,14 @@ array_decl(stream, name, type, init) {
             zero_direct( stream, sz - 4*init[1] );
     }
 
-    save_sym( name, 0, 0, sz );
+    save_sym( decl, 0 );
 }
 
 /* This is only callled on top-level declarations */
 codegen(stream, node) {
-    auto storage = node[0], i = 0;
+    auto decls = node, i = 2;
+    auto storage = decls[2] ? decls[2][0] : 0;
+
     while ( i < node[1] ) {
         auto decl = node[ 2 + i++ ];
         auto init = decl[4];
@@ -491,12 +496,12 @@ codegen(stream, node) {
             auto type = decl[2], name = &decl[3][2];
             set_storage( stream, storage, name );
 
-            if (!type) /* scalars and only scalars are currently typeless */
+            if (type[0] == 'dclt')
                 int_decl( stream, name, init );
             else if (type[0] == '()')
                 fn_decl( stream, name, type, init, decl[5] );
             else if (type[0] == '[]')
-                array_decl( stream, name, type, init );
+                array_decl( stream, decl );
             else 
                 int_error("Unexpected node in declaration");
         }

@@ -40,7 +40,7 @@ arith_neg(stream) {
 }
 
 bit_not(stream) {
-    fputs("\tNOTL\t%%eax\n", stream);
+    fputs("\tNOTL\t%eax\n", stream);
 }
 
 logic_not(stream) {

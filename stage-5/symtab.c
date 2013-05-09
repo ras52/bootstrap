@@ -7,12 +7,11 @@
 /* This table contains the namespace of ordinary identifiers */
 static symtab[3] = { 0, 0, 0 };  /* start, end, end_store */
 /*  struct sym_entry {
- *      char sym[12];
- *      int  frame_off;     [3]
- *      int  scope_id;      [4]
- *      int  lval;          [5]
- *      int  size;          [6]
- *  };                              size = 28
+ *      char  sym[12];
+ *      int   frame_off;     [3]     -- 0 is used for undefined symbols
+ *      int   scope_id;      [4]
+ *      node* decl;          [5]
+ *  };                              size = 24 = 6*4
  */
 
 /* This table contains the namespace of label names */
@@ -21,7 +20,7 @@ static labtab[3] = { 0, 0, 0 };  /* start, end, end_store */
  *      char sym[12];
  *      bool defined;       [3]
  *      int  label_num;     [4]
- *  };                              size = 20
+ *  };                              size = 20 = 5*4
  */ 
 
 static scope_id = 0;
@@ -35,6 +34,12 @@ init_tab( tab, entry_size ) {
     auto p = malloc(sz);
     tab[0] = tab[1] = p;
     tab[2] = p + sz;
+}
+
+static
+fini_tab( tab ) {
+    free( tab[0] );
+    tab[0] = tab[1] = tab[2] = 0;    
 }
 
 /* Check whether the symbol table is full, and if so double its capacity. 
@@ -69,17 +74,16 @@ lookup_tab( tab, entry_size, name ) {
 }
 
 init_symtab() {
-    init_tab( symtab, 28 );         /* sizeof(sym_entry) */
+    init_tab( symtab, 24 );         /* sizeof(sym_entry) */
     init_tab( labtab, 20 );         /* sizeof(lab_entry) */
 }
 
-/* Define a symbol, possibly implicitly by calling a function */
-save_sym( name, frame_off, lval, sym_size ) {
-    auto e = grow_tab( symtab, 28, name );   /* sizeof(sym_entry) */
-    e[3] = frame_off;
-    e[4] = scope_id;
-    e[5] = lval;
-    e[6] = sym_size; 
+fini_symtab() {
+    /* Calling end_scope destroys the type nodes in the symbol table. */
+    end_scope();
+
+    fini_tab( symtab );
+    fini_tab( labtab );
 }
 
 /* Define a label, possibly implicitly in the case of a forwards goto. 
@@ -119,10 +123,25 @@ get_label( name ) {
     return e[4];
 }
 
+/* Define a symbol, possibly implicitly by calling a function */
+save_sym( decl, frame_off ) {
+    auto name = &decl[3][2];
+    auto e = grow_tab( symtab, 24, name );   /* sizeof(sym_entry) */
+    e[3] = frame_off;
+    e[4] = scope_id;
+    e[5] = add_ref(decl);
+}
+
 /* Called on parsing '{' or otherwise starting a new nested scope. */
 static
 new_scope() {
     ++scope_id;
+}
+
+/* Promote SIZE to the amount of space it takes up on the stack. */
+static
+promote_sz(size) {
+    return (size + 3) & ~3;
 }
 
 /* Called on parsing '}' or similar to remove symbols from the table.
@@ -132,16 +151,19 @@ end_scope() {
     auto e = symtab[0], sz = 0;
     while ( e < symtab[1] ) {
         if ( e[4] == scope_id ) break;
-        e += 28;    /* sizeof(sym_entry) */
+        e += 24;    /* sizeof(sym_entry) */
     }
 
     /* Anything at e or beyond is about to go out of scope.  
-     * Add up the size. */
+     * Add up the stack space used by automatic symbols. */
     if ( e < symtab[1] ) {
         auto f = e;
         while ( e < symtab[1] ) {
-            sz += e[6];
-            e += 28;    /* sizeof(sym_entry) */
+            /* The only symbols in this scope with an offset in e[3] 
+             * will be automatic variables. */
+            if (e[3]) sz += promote_sz( type_size( e[5][2] ) );
+            free_node(e[5]);
+            e += 24;    /* sizeof(sym_entry) */
         }
         symtab[1] = f;
     }
@@ -156,10 +178,10 @@ end_scope() {
  * 0 if it is not defined (as 0 is not a valid offset because 
  * 0(%ebp) is the calling frame's base pointer.) */
 lookup_sym( name, off_ptr ) {
-    auto e = lookup_tab( symtab, 28, name );    /* sizeof(sym_entry) */
+    auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
     if (e) {
         *off_ptr = e[3];
-        return e[5];
+        return is_lv_decl(e[5][2]);
     }
 
     /* Symbol not found -- default to rvalues e.g. functions */
@@ -167,10 +189,22 @@ lookup_sym( name, off_ptr ) {
     return 0;
 }
 
+/* Check whether a symbol NAME has been declared */
+is_declared( name ) {
+    auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
+    return e ? 1 : 0;
+}
+
+/* Lookup the type node for a name */
+lookup_type( name ) {
+    auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
+    return e ? e[5][2] : 0;
+}
+
 /* Check whether another symbol called NAME exists in the current scope,
  * and if necessary give an error. */
 chk_dup_sym( name, has_linkage ) {
-    auto e = lookup_tab( symtab, 28, name );    /* sizeof(sym_entry) */
+    auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
     if (e && e[4] == scope_id) {
         /* If both definitions are definitions with linkage (meaning extern
          * definitions) then we allow it.  Once we have types, we should 
@@ -195,33 +229,37 @@ frame_off() {
     return -cur_offset; 
 }
 
-is_lv_decl(decl) {
-    if ( decl[2] && decl[2][0] == '[]' ) return 0;
-    if ( decl[2] && decl[2][0] == '()' ) return 0;
+static
+is_lv_decl(type) {
+    if ( type && type[0] == '[]' ) return 0;
+    if ( type && type[0] == '()' ) return 0;
     else return 1;
 }
 
 decl_var(decl) {
     auto sz = type_size( decl[2] );
-    cur_offset += sz;
+    cur_offset += promote_sz(sz);
     if ( decl[3][0] != 'id' )
         int_error("Expected identifier in auto decl");
-    save_sym( &decl[3][2], -cur_offset, is_lv_decl(decl), sz );
+    save_sym( decl, -cur_offset );
     if (cur_offset > frame_size)
         frame_size = cur_offset;
     return sz;
 }
 
 start_fn(decl) {
-    auto i = 1;
+    auto i = 1, off = 8;
     cur_offset = frame_size = 0;
     new_scope();
 
     /* Inject the parameters into the scope */
     while ( i < decl[1] ) {
-        auto n = decl[ 2 + i++ ];
-        if (n[0] != 'id') int_error("Non-identifier found as function param");
-        save_sym( &n[2], 4*i, 1, 4 ); /* TODO: type size */
+        auto n = decl[ 2 + i++ ], sz;
+        if (n[0] != 'decl')
+            int_error("Unexpected token found as function param");
+        sz = type_size(n[2]);
+        save_sym( n, off );
+        off += promote_sz(sz);
     }
 }
 
@@ -239,7 +277,5 @@ start_block() {
 }
 
 end_block() {
-    auto sz = end_scope();
-    cur_offset -= sz;
-    return sz;
+    cur_offset -= end_scope();
 }

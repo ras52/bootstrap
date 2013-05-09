@@ -110,9 +110,7 @@ chk_keyword(node) {
         "struct", "switch", "typedef", "union", "unsigned", "while", 0
     };
 
-    /* TODO: Types not yet implemented: char, double, int, long, short, 
-     * sizeof, struct, typedef, union, unsigned */
-    /* TODO: Misc not yet implemented: register */
+    /* TODO: Not yet implemented: double, sizeof, struct, typedef, union */
 
     auto i = 0, str = &node[2];
     while ( keywords[i] && strcmp(keywords[i], str) != 0 )
@@ -127,30 +125,32 @@ chk_keyword(node) {
     return node;
 }
 
+/* Append character CHR to the payload of the node *NODE_PTR which is treated 
+ * as a string with current length *LEN_PTR.  The value of *LEN_PTR is 
+ * incremented.  The node may be reallocated. */
+static
+node_lchar( node_ptr, len_ptr, chr ) {
+    auto node = *node_ptr;
+    node = grow_node( node, *len_ptr );
+    lchar( &node[2], (*len_ptr)++, chr );
+    *node_ptr = node;
+}
+
 /* Create a node, NODE, which will be returned; read a word (i.e. identifier 
  * or keyword) starting with C (which has already been checked by isidchar1) 
  * into NODE->str, set NODE->type, and return NODE. */
 static
 get_word(stream, c) {
-    auto i = 0, len = 32;  /* Len must be >= 16, which is the op node size */
     /* struct node { int type; int dummy; char str[]; } */
-    auto node = malloc(8 + len);
-    auto str = &node[2];
+    auto node = new_node('id');
+    auto i = 0;
 
-    node[0] = 'id';  node[1] = 0;
-    lchar( str, i++, c );
-    while (1) { 
-        while ( i < len && isidchar( c = fgetc(stream) ) )
-            lchar( str, i++, c );
-        if ( i < len )
-            break;
-        len *= 2;
-        node = realloc( node, 8 + len );
-        str = &node[2];
-    } 
+    node_lchar( &node, &i, c );
+    while ( isidchar( c = fgetc(stream) ) )
+        node_lchar( &node, &i, c );
 
-    lchar( str, i, 0 );
     ungetc(c, stream);
+    node_lchar( &node, &i, 0 );
     return chk_keyword( node );
 }
 
@@ -195,10 +195,9 @@ static
 get_number(stream,c) {
     auto buf[16], nptr;
     /* struct node { int type; int dummy; int val; }; */
-    auto node = malloc(12);
+    auto node = new_node('num');
 
     read_number( stream, buf, c );
-    node[0] = 'num';  node[1] = 0;
     node[2] = strtol( buf, &nptr, 0 );
     if ( rchar(nptr, 0) )
         error("Unexpected character '%c' in string \"%s\"",
@@ -226,26 +225,6 @@ is_2charop(op) {
     return mops[i] ? 1 : 0;
 }
 
-/* struct node { int type; int nops; node* op[4]; } */
-node_new(type) {
-    /* For binary operators, op[0] is the lhs and op[1] the rhs; for unary 
-     * prefix operators, only op[0] is used; and for unary postfix only 
-     * op[1] is used. 
-     * 
-     * The scanner never reads a ternary operator (because ?: has two separate
-     * lexical elements), but we generate '?:' nodes in the expression parser
-     * and want a uniform interface.  Similarly, the 'for' node is a quaternary
-     * "operator" (init, test, incr, stmt). */
-    auto n = malloc(24);
-
-    n[0] = type; n[1] = 0;
-
-    /* The operands will get filled in by the parser */
-    n[2] = n[3] = n[4] = n[5] = 0;
-
-    return n;
-}
-
 /* Read an operator, starting with character C, and return a node with
  * NODE->type set to the operator as a multicharacter literal. */
 static
@@ -261,7 +240,7 @@ get_multiop(stream, c) {
      * TODO: '...' breaks that assumption. */
     if ( !is_2charop(c) ) {
         ungetc( rchar( &c, 1 ), stream );
-        return node_new( rchar( &c, 0 ) );
+        return new_node( rchar( &c, 0 ) );
     }
 
     /* Is it a <<= or >>= operator? */
@@ -271,7 +250,7 @@ get_multiop(stream, c) {
         else ungetc(c2, stream);
     }
 
-    return node_new(c);
+    return new_node(c);
 }
 
 /* Convert a quoted character literal in STR (complete with single quotes,
@@ -306,36 +285,26 @@ parse_chr(str) {
  * Q, and return the appropriate token type ('str' or 'chr'). */
 static
 get_qlit(stream, q) {
-    auto i = 0, len = 32, c;
+    auto i = 0, c;
     /* struct node { int type; int dummy; char str[]; } */
-    auto node = malloc(8 + len);
-    auto str = &node[2];
+    auto node = new_node( q == '"' ? 'str' : 'chr' );
 
-    lchar( str, i++, q );
-    while (1) {
-        while ( i < len-1 && (c = fgetc(stream)) != -1 && c != q ) {
-            lchar( str, i++, c );
-            if ( i < len-1 && c == '\\' ) {
-                if ( (c = fgetc(stream)) == -1 ) break;
-                lchar( str, i++, c );
-            }
+    node_lchar( &node, &i, q );
+    
+    while ( (c = fgetc(stream)) != -1 && c != q ) {
+        node_lchar( &node, &i, c );
+        if ( c == '\\' ) {
+            if ( (c = fgetc(stream)) == -1 ) break;
+            node_lchar( &node, &i, c );
         }
-
-        if ( c == -1 )
-            error("Unexpected EOF during %s literal",
-                  q == '"' ? "string" : "character");
-
-        if ( i < len-1 )
-            break;
-        len *= 2;
-        node = realloc( node, 8 + len );
-        str = &node[2];
     }
 
-    /* We can only reach here if i < len-1, so no need to check for overflow */
-    lchar( str, i++, q );
-    lchar( str, i++, 0 );
-    node[0] = q == '"' ? 'str' : 'chr';
+    if ( c == -1 )
+        error("Unexpected EOF during %s literal",
+              q == '"' ? "string" : "character");
+
+    node_lchar( &node, &i, q );
+    node_lchar( &node, &i, 0 );
     return node;
 }
 
@@ -382,23 +351,6 @@ is_op(op) {
     return strnlen(&op, 4) == 1 && strchr("&*+-~!/%<>^|=,", op)
         || is_2charop(op) || op == '?:' || op == '[]' 
         || op == '>>=' || op == '<<=';
-}
-
-/* Unallocate a node */
-free_node(node) {
-    auto i = 0;
-
-    if (!node) return;
-
-    /* As a safety measure, if it's the current node, unset TOKEN. */
-    if ( node == token ) token = 0;
-
-    /* The switch table contains weak links, so don't recurse into that. */
-    if ( node[0] != 'swtb' )
-        while ( i < node[1] ) 
-            free_node( node[ 2 + i++ ] );
-
-    free(node);
 }
 
 /* Skip over a piece of syntax, deallocating its node */

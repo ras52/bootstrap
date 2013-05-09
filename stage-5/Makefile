@@ -42,7 +42,8 @@ $(INIT):
 %2.s:	%.c cc
 	cc -S -o $@ $<
 
-CC_OBJS  = scanner.o symtab.o expr.o stmt.o syncheck.o i386.o codegen.o main.o
+CC_OBJS  = scanner.o node.o symtab.o expr.o stmt.o syncheck.o i386.o \
+           codegen.o main.o
 
 cc1:	ld libc.o crt0.o $(CC_OBJS)
 	ld -o cc1 libc.o crt0.o $(CC_OBJS)

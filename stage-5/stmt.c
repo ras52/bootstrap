@@ -84,13 +84,9 @@ switch_stmt( fn, loop ) {
     node[2] = expr();
     skip_node(')');
 
-    /* The 3rd argument is the switch table which is built up as case and
-     * default statements are encountered.  The 4th argument is an integer
-     * which is the capacity (i.e. allocated size) of the switch table;
-     * because it's not a node, it's not included in the node's arity,
-     * which was set to 3 by take_node. */
-    node[4] = node_new('swtb');
-    node[5] = 4;
+    /* The 3rd "operand" is the switch table which is built up as case and
+     * default statements are encountered.  */
+    node[4] = new_node('swtb');
 
     node[3] = stmt( fn, loop, node );
     return node;
@@ -125,10 +121,10 @@ case_stmt( fn, loop, swtch ) {
         node[2] = take_node(0);
     }
 
-    /* Append the case label to the switch table (whose size, as an integer, 
-     * is in the 4th operand slot of the switch).  Note that the switch table
-     * is treated as weak links, so we won't double free the case label. */
-    swtch[4] = vnode_app( swtch[4], node, &swtch[5] );
+    /* Append the case label to the switch table so it can do the forward
+     * jump.  Note this is a duplicate reference of the case label, hence
+     * calling add_ref(). */
+    swtch[4] = vnode_app( swtch[4], add_ref(node) );
 
     skip_node(':');
     node[3] = stmt( fn, loop, swtch );
@@ -167,7 +163,7 @@ cont_stmt( loop ) {
 /*  init-array ::= '{' assign-expr ( ',' assign-expr )* '}' */
 static
 init_array( type, req_const ) {
-    auto init, sz = 4, elts;
+    auto init, elts;
     if (peek_token() != '{')
         error("Expected array initialiser");
 
@@ -183,7 +179,7 @@ init_array( type, req_const ) {
         auto elt = req_const ? constant() : assign_expr();
         if (!elts--) 
             error("Too many array initialisers");
-        init = vnode_app( init, elt, &sz );
+        init = vnode_app( init, elt );
         if (peek_token() == '}')
             break;
         skip_node(',');
@@ -193,49 +189,184 @@ init_array( type, req_const ) {
     return init;
 }
 
-/*  declarator ::= name ( '[' number ']' | '(' param-list ')' )? */
+/*  primry-decl ::= name */
 static
-declarator() {
-    auto decl = node_new('decl');
-    decl[1] = 3; /* args are type, name, init */
-
+primry_decl(decl) {
     decl[3] = take_node(0);
     if (decl[3][0] != 'id') error("Expected identifier in declaration");
+}
 
-    if (peek_token() == '[') {
-        auto bounds = take_node(2);
-        bounds[0] = '[]';
-        if ( peek_token() == 'num' )
-            bounds[3] = take_node(0);
-        decl[2] = bounds;
-        skip_node(']');
+/*  postfx-decl ::= primry-decl ( '[' number ']' | '(' param-list ')' )? */
+static
+postfx_decl(decl) {
+    primry_decl(decl);
+
+    /* Iterate through the declarator postfixes building up the type.  
+     * The innermost part of the type is the root, so, for example, 
+     * foo[3][5] is an array of 3 elements.  Once we've parsed a postfix
+     * on to the root of the decl tree, we therefore never alter that
+     * and DECL tracks up to the lowest alterable point. */
+    while (1) {
+        auto postfix, t = peek_token();
+
+        if (t == '[') {
+            postfix = take_node(2);
+            postfix[0] = '[]';
+            if ( peek_token() == 'num' )
+                postfix[3] = take_node(0);
+            else
+                error( "Declaration of an array with an unknown size" );
+            skip_node(']');
+
+        }
+
+        else if (t == '(') {
+            skip_node('(');
+            postfix = param_list();
+            skip_node(')');
+        }
+
+        else break;
+
+        postfix[2] = decl[2];
+        decl = decl[2] = postfix;
+    }
+}
+
+/*  prefix-decl ::= '*'* postfx-decl */
+static
+prefix_decl(decl) {
+    while (peek_token() == '*') {
+        auto p = take_node(1);
+        p[2] = decl[2];
+        decl[2] = p;
     }
 
-    else if (peek_token() == '(') {
-        skip_node('(');
-        decl[2] = param_list();
-        skip_node(')');
-    }
+    postfx_decl(decl);
+}
 
+/*  Parse a declarator into a new 'decl' node.
+ *
+ *  declarator ::= postfx-decl */
+static
+declarator(dclt) {
+    auto decl = new_node('decl');
+    decl[1] = 3; /* operands are: type, name, init.
+                  * Note the 4th slot is used for fuction stack size. */
+
+    decl[2] = add_ref(dclt);
+    prefix_decl(decl);
     return decl;
 }
 
-/*  Parse a declaration inside function FN, and add it to the VNODE 
- *  representing a storage class ('extern' or 'auto'), or a 'dcls' vnode
- *  if the storage class is implicit.  Current token is an identifier. 
- *
- *  declaration ::= declarator ( '=' ( init-array | assign-expr ) )?
- *  decl-list   ::= declaration ( ',' declaration )* ';'  | declarator block
+/* Test whether the current token is a decl spec. */
+static
+is_dclspec(t) {
+    return t == 'stat' || t == 'exte' || t == 'auto' || t == 'regi' ||
+        t == 'char' || t == 'int' || t == 'shor' || t == 'long' ||
+        t == 'sign' || t == 'unsi';
+}
+
+static
+set_dclt(decls, field) {
+    if (!decls[3]) {
+        decls[3] = new_node('dclt');    
+        decls[3][1] = 4;  /* arity */
+    }
+
+    else if ( decls[3][field] )
+        error("Invalid combination of type specifiers");
+
+    decls[3][field] = take_node(0);
+}
+
+/*  Parse a list of declaration specifiers, and return them in a 'dcls' node.
+ *  Errors are given for invalid combinations.
+ * 
+ *  decl-specs   ::= ( storage-spec | type-spec )*
+ *  storage-spec ::= 'extern' | 'static' | 'auto' | 'register'
+ *  type-spec    ::= 'int' | 'char' | 'long' | 'short' | 'signed' | 'unsigned'
  */
 static
-decl_list( vnode, fn ) {
-    auto sz = 4;
+decl_specs() {
+    auto decls = new_node('dcls');
+    decls[1] = 2;  /* arity */
+
+    /* The dcls node has ops:  
+     *   dcls[2] = storage class:     { extern, static, auto }
+     *   dcls[3] = a dclt node:
+     *   dcls[4...] = the declarators
+     *
+     * The dclt node has ops:
+     *   dclt[2] = unused
+     *   dclt[3] = base of the type   { char, int }    --- always present
+     *   dclt[4] = length modifier    { long, short }
+     *   dclt[5] = signed modifier    { signed, unsigned }  */
 
     while (1) {
-        auto decl = declarator(), name = &decl[3][2];
+        auto t = peek_token();
+
+        if ( t == 'stat' || t == 'exte' || t == 'auto' || t == 'regi' ) {
+            if ( decls[2] )
+                error("Multiple storage class specifiers found");
+
+            decls[2] = take_node(0);
+        }
+
+        else if ( t == 'char' || t == 'int' )
+            set_dclt(decls, 3);
+        else if ( t == 'shor' || t == 'long' )
+            set_dclt(decls, 4); /* TODO:  long long will become valid */
+        else if ( t == 'sign' || t == 'unsi' )
+            set_dclt(decls, 5);
+
+        else break;
+    }
+
+    /* Sanity check and normalise the decl-spec combos. 
+     * We don't check that at least one decl-spec is present because 
+     * (i) implicit int on functions, and (ii) the caller has checked.  */
+
+    if ( !decls[3] ) decls[3] = implct_int();
+    else if ( !decls[3][3] ) decls[3][3] = new_node('int');
+   
+    if ( decls[3][3][0] == 'char' && decls[3][4] )
+        error("Invalid combination of type specifiers");
+
+    if ( decls[3][3][0] == 'int' && decls[3][5] == 'sign' ) {
+        free_node( decls[3][5] );
+        decls[3][5] = 0;
+    }
+
+    return decls;
+}
+
+/*  Parse a declaration inside function FN or at global scope (in which case
+ *  FN is null), and add it to the VNODE representing a storage class 
+ *  ('extern' or 'auto'), or a 'dcls' vnode if the storage class is implicit.  
+ *  Current token is the first token of the declaration, e.g. 'auto'.
+ *
+ *  intialiser     ::= init-array | assign-expr
+ *  init-decl      ::= declarator ( '=' initialiser )?
+ *  init-decl-list ::= init-decl ( ',' init-decl )*
+ *  declaration    ::= decl-specs ( init-decl-list ';' | declarator block )
+ */
+static
+declaration( fn ) {
+    auto decls = decl_specs();
+
+    if ( !fn && decls[2] && ( decls[2][0] == 'auto' || decls[2][0] == 'regi' ) )
+        error("Automatic variables are not allowed at file scope");
+
+    /* TODO: Handle block-scope statics */
+    if ( fn && decls[2] && decls[2][0] == 'stat' )
+        error("Block-scope statics are not supported");
+
+    while (1) {
+        auto decl = declarator(decls[3]), name = &decl[3][2];
         
         /* Automatic declarations need space reserving in the frame. */
-        if ( vnode[0] == 'auto' ) {
+        if ( decls[2] && ( decls[2][0] == 'auto' || decls[2][0] == 'regi' ) ) {
             /* TODO:  This is valid: auto x[] = { 1, 2, 3 }; */
             if (decl[2] && decl[2][0] == '[]' && !decl[2][3])
                 error("Automatic array of unknown size");
@@ -247,18 +378,25 @@ decl_list( vnode, fn ) {
         else {
             /* TODO:  Check for duplicate defintions at file scope */
             if (fn) chk_dup_sym( name, 1 );
-            save_sym( name, 0, is_lv_decl(decl), 0 );
+            save_sym( decl, 0 );
         }
 
         /* Handle function definitions */
-        if ( peek_token() == '{' ) {
+        if ( is_dclspec( peek_token() ) || peek_token() == '{' ) {
             if (fn) 
-                error("Nested functions are not allowed");
-            else if ( decl[2] && decl[2][0] == '()' )
-                fn_defn( vnode, decl );
+                error("Nested functions are not allowed: missing semicolon?");
+            else if ( decl[2] && decl[2][0] == '()' ) {
+                /* The standard doesn't allow things like:  int i, f() { }  
+                 * From a grammar point of view, this is an arbitrary 
+                 * restriction, but sensible from a sanity p.o.v. */
+                if ( decls[1] > 2 )
+                    error("Function definition not allowed here");
+
+                fn_defn( decl );
+                return vnode_app( decls, decl );
+            }
             else
                 error("Non-function declaration with function body");
-            return vnode;
         }
 
         /* Handle initialisers */
@@ -273,12 +411,12 @@ decl_list( vnode, fn ) {
                 decl[4] = fn ? assign_expr() : constant();
         }
 
-        vnode = vnode_app( vnode, decl, &sz );
+        decls = vnode_app( decls, decl );
         if ( peek_token() == ';') break;
         skip_node(',');
     }
     skip_node(';');
-    return vnode;
+    return decls;
 }
 
 /* label-stmt ::= identifier ':' stmt */
@@ -300,9 +438,8 @@ label_stmt( fn, loop, swtch ) {
 /*  stmt-or-decl ::= stmt | ( 'auto' | 'extern' ) decl-list */
 static
 stmt_or_dcl( fn, loop, swtch ) {
-    auto t = peek_token();
-    if (t == 'auto' || t == 'exte') 
-        return decl_list( take_node(0), fn );
+    if ( is_dclspec( peek_token() ) ) 
+        return declaration( fn );
     else
         return stmt( fn, loop, swtch );
 }
@@ -340,14 +477,15 @@ stmt( fn, loop, swtch ) {
     }
 }
 
+/* block ::= '{' stmt-or-decl* '}' */
 block( fn, loop, swtch ) {
-    auto sz = 4, n = node_new('{}');
+    auto n = new_node('{}');
 
     start_block();
     skip_node('{');
 
     while ( peek_token() != '}' )
-        n = vnode_app( n, stmt_or_dcl( fn, loop, swtch ), &sz );
+        n = vnode_app( n, stmt_or_dcl( fn, loop, swtch ) );
 
     end_block();
     skip_node('}');
@@ -358,8 +496,8 @@ block( fn, loop, swtch ) {
 /*  param-list ::= ( identifier ( ',' identifier )* )? */
 static
 param_list() {
-    auto sz = 4, p = node_new('()');
-    p = vnode_app( p, 0, &sz );  /* Place holder for return type */
+    auto  p = new_node('()');
+    p = vnode_app( p, 0 );  /* Place holder for return type */
 
     if ( peek_token() == ')' ) 
         return p;
@@ -368,7 +506,7 @@ param_list() {
         req_token();
         if (peek_token() != 'id')
             error("Expected identifier in function parameter list");
-        p = vnode_app( p, take_node(0), &sz );
+        p = vnode_app( p, take_node(0) );
 
         /* It would be easier to code for an optional ',' at the end, but
          * the standard doesn't allow for that. */
@@ -390,37 +528,92 @@ constant() {
         error("Unexpected token '%Mc' while parsing expression", t);
 }
 
+/* Scan through FN_DECL for an undeclared parameter matching PDECL, and 
+ * replace it with the declaration. */
 static
-fn_defn( vnode, decl ) {
-    /* The standard doesn't allow things like:  int i, f() { }  
-     * From a grammar point of view, this is an arbitrary restriction. */
-    if ( vnode[1] )
-        error("Function definition not allowed here");
+replc_param( fn_decl, pdecl ) {
+    auto i = 1;
+    
+    while ( i < fn_decl[1] ) {
+        auto n = fn_decl[ 2 + i ], name;
 
-    start_fn(decl[2]);
+        if ( n[0] == 'id' ) name = n;
+        else if ( n[0] == 'decl' ) name = n[3];
+        else int_error("Unexpected node in parameter list");
+
+        if ( strcmp( &name[2], &pdecl[3][2] ) == 0 ) {
+            if ( n[0] == 'decl' ) 
+                error("Multiple declarations for parameter '%s'", &name[2]);
+
+            free_node( fn_decl[2+i] );
+            fn_decl[2+i] = pdecl;
+            return;
+        }
+
+        ++i;
+    }
+
+    error("No parameter called '%s'", &pdecl[3][2]);
+}
+
+/* Scan through FN_DECL for any undeclared parameters, and give implicit int
+ * declarations to them. */
+static
+fini_params( fn_decl ) {
+    auto i = 1;
+
+    while ( i < fn_decl[1] ) {
+        auto n = fn_decl[2+i];
+
+        if ( n[0] == 'id' ) {
+            auto decl = new_node('decl');
+            decl[1] = 3; /* operands are: type, name, init. */
+            decl[2] = add_ref( implct_int() );
+            decl[3] = n;
+            fn_decl[2+i] = decl;
+        }
+
+        ++i;
+    }
+}
+
+static
+fn_defn( decl ) {
+    /* Handle K&R style parameter declarations */
+    while ( peek_token() != '{' ) {
+        auto pdecls = decl_specs();
+   
+        if ( pdecls[2] && pdecls[2][0] != 'regi' )
+            error("Storage specifiers not allowed on parameter declarations");
+
+        while (1) {
+            auto pdecl = declarator( pdecls[3] ), name = &pdecl[3][2];
+       
+            if (pdecl[2][0] == '()')
+                error("Parameter declared as a function");
+
+            /* TODO:  arrays get promoted to pointers, but they're not yet
+             * yet supported either. */
+            if (pdecl[2][0] == '[]')
+                error("Arrays not supported as parameter");
+ 
+            replc_param( decl[2], pdecl ); /* Takes ownership of pdecl */
+            if ( peek_token() == ';') break;
+            skip_node(',');
+        }
+        skip_node(';');
+        free_node(pdecls);
+    }
+    fini_params( decl[2] );
+
+    start_fn( decl[2] );
     decl[4] = block( decl, 0, 0 );
 
     /* We store the frame size in decl[5], which is where the 4th node arg
      * would go, but we've set arity=3 so it's unused space. */
     decl[5] = end_fn();
-   
-    /* vnode is the storage 'static' or 'extern' */ 
-    vnode[1] = 1;
-    vnode[2] = decl;
-    return vnode;
 }
 
 top_level() {
-    auto t = peek_token();
-
-    /* If there's a storage class, use that for the vnode */
-    if (t == 'stat' || t == 'exte')
-        return decl_list( take_node(0), 0 );
-
-    /* Otherwise use 'dcls' for the default behaviour.  (We cannot use
-     * extern for the default, as "extern int i; and int i;" are not the 
-     * same thing: the former is an external declaration; the latter is
-     * a tentative definition [C90 6.7.2].)  */
-    else 
-        return decl_list( node_new('dcls'), 0 );
+    return declaration( 0 );
 }
