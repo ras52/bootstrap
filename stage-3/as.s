@@ -195,6 +195,8 @@ mnemonics:
 .hex	4C 45 41 00  00 00 00 00  00 00 00 00    05 01 8D 00    # LEA
 .hex	58 43 48 47  4C 00 00 00  00 00 00 00    05 01 87 00	# XCHGL
 .hex	54 45 53 54  4C 00 00 00  00 00 00 00    05 01 85 00	# TESTL
+.hex	42 53 52 4C  00 00 00 00  00 00 00 00    05 02 0F BD	# BSRL
+.hex	42 53 46 4C  00 00 00 00  00 00 00 00    05 02 0F BC	# BSFL
 
 
 # Type 06 instructions.   These represent a large family of op-codes, e.g.
