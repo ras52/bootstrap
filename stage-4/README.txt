@@ -24,6 +24,12 @@ so that ptr[1] is equivalent to *(ptr + 4).  When types are introduced
 in a subsequent stage, this behaviour can be preserved because 
 subscripting an int (other than with a pointer) is not legal in C.
 
+For forwards compatibility, certain type constructs are allowed and
+completely ignored.  The (otherwise unsupported) int keyword may be
+placed immediately after auto, and the identifiers in an auto 
+declaration can be preceded with one or more *.  A list of parameter 
+declarations by precede the opening brace of a function.
+
 Summary of differences from B:
 
   * Compound assignment operators are spelt OP= instead of =OP.

@@ -421,9 +421,9 @@ extern_decl:
 
 ####	#  Function:	void auto_decl(int brk, int cont, int ret);
 	#
-	#    init-decl ::= name ( init-int | '[' number ']' init-array )
+	#    init-decl ::= '*'* name ( init-int | '[' number ']' init-array )
 	#
-	#    auto-stmt ::= 'auto' init-decl ( ',' init-decl )* ';'
+	#    auto-stmt ::= 'auto' 'int'? init-decl ( ',' init-decl )* ';'
 	#
 	#  Current token is 'auto'
 .local auto_decl
@@ -434,8 +434,18 @@ auto_decl:
 	SUBL	$16, %esp		# temporary buffer
 	LEA	-16(%ebp), %eax
 	PUSH	%eax			# pointer to buffer
+	CALL	next
+
+	#  Ignore any type specifiers
+	CMPL	'int', %eax
+	JNE	.L15a
 .L15:
 	CALL	next
+.L15a:
+	#  And skip any pointer declarators
+	CMPL	'*', %eax
+	JE	.L15
+
 	CMPL	'id', %eax
 	JNE	_error
 
@@ -626,3 +636,34 @@ block:
 
 	LEAVE
 	RET
+
+
+####	#  Function:	void param_decls(int brk, int cont, int ret);
+	#
+	#    param-decls ::= ( 'int' ( '*'* name ',' )* '*'* name ';' )*
+	#
+	#  Skip over parameter declarations.  Current token is 'int' or '{'.
+param_decls:
+	PUSH	%ebp	
+	MOVL	%esp, %ebp
+.L24:
+	MOVL	token, %eax
+	CMPL	'int', %eax
+	JNE	.L25
+
+.L26:	#  Skip pointer declarators
+	CALL	next
+	CMPL	'*', %eax
+	JE	.L26
+	CMPL	'id', %eax
+	JNE	_error
+	
+	CALL	next
+	CMPL	',', %eax
+	JE	.L26
+	CALL	semicolon
+	JMP	.L24
+.L25:
+	LEAVE
+	RET
+

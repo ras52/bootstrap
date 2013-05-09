@@ -289,6 +289,7 @@ keywords:
 	.string "else"		.align 12
 	.string "extern"	.align 12
 	.string "if"		.align 12
+	.string "int"		.align 12
 	.string "return"	.align 12
 	.string "static"	.align 12
 	.string "while"		.align 12

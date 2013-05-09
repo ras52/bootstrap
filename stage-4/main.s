@@ -326,6 +326,7 @@ func_decl:
 	PUSH	%eax
 
 	CALL	next
+	CALL	param_decls
 	CALL	block
 	POP	%eax
 	POP	%eax
