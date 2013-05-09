@@ -104,6 +104,19 @@ conditional(stream, node) {
 }
 
 static
+subscript(stream, node, need_lval) {
+    auto type = expr_type( node[2] );  /* type being subscripted */
+
+    /* For (hopefully temporary) compatibility with stage-4, we allow an 
+     * implicit int to be dereferenced as an int*. */
+    extern compat_flag;
+    auto elt_sz = compat_flag && type == implct_int() ? 4 
+        : type_size( type[2] );        /* remove * or [] from type */
+
+    pop_subscr(stream, elt_sz, need_lval);
+}
+
+static
 binary_op(stream, node, need_lval) {
     auto op = node[0];
     expr_code( stream, node[2], is_assop(op) );
@@ -113,7 +126,7 @@ binary_op(stream, node, need_lval) {
 
     expr_code( stream, node[3], 0);
 
-    if      ( op == '[]'  ) pop_subscr(stream, need_lval);
+    if      ( op == '[]'  ) subscript(stream, node, need_lval);
     else if ( op == '*'   ) pop_mult(stream, 0);
     else if ( op == '/'   ) pop_div(stream, 0);
     else if ( op == '%'   ) pop_mod(stream, 0);

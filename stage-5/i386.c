@@ -139,8 +139,21 @@ pop_bitand(stream, is_assign) { pop_binop(stream, "ANDL", is_assign, 1); }
 pop_bitor (stream, is_assign) { pop_binop(stream, "ORL",  is_assign, 1);  }
 pop_bitxor(stream, is_assign) { pop_binop(stream, "XORL", is_assign, 1); }
 
-pop_subscr(stream, need_lval) {
-    fputs("\tMOVB\t$2, %cl\n\tSHLL\t%eax\n", stream);
+static
+ilog2(i) {
+    auto l = 0;
+    while (i >>= 1) ++l;
+    return l;
+}
+
+pop_subscr(stream, elt_size, need_lval) {
+    if ( elt_size == 1 )
+        ;
+    else if ( (elt_size & (elt_size-1)) == 0 )
+        /* If the size is a power of two, then use SHLL for speed */
+        fprintf(stream, "\tMOVB\t$%d, %%cl\n\tSHLL\t%%eax\n", ilog2(elt_size));
+    else
+        fprintf(stream, "\tMOVL\t$%d, %%ecx\n\tMULL\t%%ecx\n", elt_size);
     pop_add(stream, 0);
     dereference(stream, need_lval);
 }

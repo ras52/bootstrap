@@ -91,12 +91,12 @@ postfx_expr() {
         }
     
         else if ( t == '[' ) {
-            req_pointer(p);
-
             p = do_binop( p );
             p[0] = '[]';
             p[3] = expr();
             skip_node(']');
+
+            chk_subscr(p);
         }
     
         else if ( t == '(' ) {
@@ -127,7 +127,7 @@ unary_expr() {
         if (t == '++' || t == '--' || t == '&')
             req_lvalue( p[2] );
         else if (t == '*')
-            req_pointer( p[2] );
+            chk_deref(p);
         return p;
     }
 

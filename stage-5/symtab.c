@@ -89,7 +89,7 @@ fini_symtab() {
 /* Define a label, possibly implicitly in the case of a forwards goto. 
  * Return 1 if it is a new label. */
 save_label( name, is_defn ) {
-    auto e = lookup_tab( labtab, 20, name ); /* sizeof(lab_entry) */
+    auto *e = lookup_tab( labtab, 20, name ); /* sizeof(lab_entry) */
     auto rv = 1;
     if (e) {
         if ( is_defn ) {
@@ -213,13 +213,6 @@ chk_dup_sym( name, has_linkage ) {
         if ( !(has_linkage && e[3] == 0) )
             error("Multiple definitions of '%s' within the same block", name);
     }
-}
-
-type_size(type) {
-    if (type && type[0] == '[]')
-        return 4 * type[3][2];
-    else
-        return 4;
 }
 
 /* Bytes of local variables on the stack. */

@@ -29,7 +29,8 @@ int_error(fmt) {
     fputs("Internal error: ", stderr);
     vfprintf(stderr, fmt, &fmt);
     fputc('\n', stderr);
-    exit(2);
+    fflush(stderr);
+    abort();
 }
 
 

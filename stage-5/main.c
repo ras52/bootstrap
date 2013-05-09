@@ -4,6 +4,9 @@
  * All rights reserved.
  */
 
+/* Is the --compat flag given? */
+compat_flag = 0;
+
 static
 compile(output) {
     auto node;
@@ -21,27 +24,43 @@ cli_error(fmt) {
 }
 
 usage() {
-    cli_error("Usage: cc -S [-o filename.s] filename.c\n");
+    cli_error("Usage: cc -S [--compat] [-o filename.s] filename.c\n");
 }
 
 main(argc, argv) {
     extern stdout;
-    auto filename, l, outname = 0, freeout = 0;
+    auto filename = 0, l, i = 0, has_s = 0, outname = 0, freeout = 0;
 
-    if ( argc < 3 ) usage();
+    while ( ++i < argc ) {
+        if ( strcmp( argv[i], "-S" ) == 0 ) 
+            ++has_s;
 
-    if ( strcmp( argv[1], "-S" ) )
+        else if ( strcmp( argv[i], "-o" ) == 0 ) {
+            if ( ++i == argc ) usage();
+            outname = argv[i];
+        }
+
+        else if ( strcmp( argv[i], "--help" ) == 0 ) 
+            usage();
+
+        else if ( strcmp( argv[i], "--compat" ) == 0 )
+            compat_flag = 1;
+
+        else if ( rchar(argv[i], 0) == '-' )
+            cli_error("cc: unknown option: %s\n", argv[i]);
+
+        else {
+            if ( filename )
+                cli_error("cc: multiple input files specified\n");
+            filename = argv[i];
+        }
+    }
+
+    if ( !has_s )
         cli_error("cc: the -S option is mandatory\n");
 
-    if ( strcmp( argv[2], "-o" ) == 0 ) {
-        if ( argc != 5 ) usage();
-        outname = argv[3];
-        filename = argv[4];
-    }
-    else {
-        if ( argc != 3 ) usage();
-        filename = argv[2];
-    }
+    if ( !filename )
+        cli_error("cc: no input file specified\n");
 
     l = strlen(filename);
     if ( rchar( filename, l-1 ) != 'c' || rchar( filename, l-2 ) != '.' )

@@ -36,11 +36,12 @@ $(INIT):
 %.s:	%.c cc0
 	cc0 -S $<
 
+# The --compat option enables compatibility with the stage-4 cc.
 %1.s:	%.c cc1
-	cc1 -S -o $@ $<
+	cc1 -S --compat -o $@ $<
 
 %2.s:	%.c cc
-	cc -S -o $@ $<
+	cc -S --compat -o $@ $<
 
 CC_OBJS  = scanner.o node.o symtab.o expr.o stmt.o syncheck.o i386.o \
            codegen.o main.o
