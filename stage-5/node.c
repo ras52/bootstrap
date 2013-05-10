@@ -59,7 +59,7 @@ add_ref(ptr) {
 
 /* Allocate a new node of type TYPE. */
 new_node(type) {
-    /* struct node { int type; int nops; node* op[4]; } 
+    /* struct node { int type; int nops; node* type; node* op[4]; } 
      *
      * For binary operators, op[0] is the lhs and op[1] the rhs; for unary 
      * prefix operators, only op[0] is used; and for unary postfix only 
@@ -69,12 +69,12 @@ new_node(type) {
      * lexical elements), but we generate '?:' nodes in the expression parser
      * and want a uniform interface.  Similarly, the 'for' node is a quaternary
      * "operator" (init, test, incr, stmt). */
-    auto n = rc_alloc(24);
+    auto n = rc_alloc(28);
 
     n[0] = type; n[1] = 0;
 
-    /* The operands will get filled in by the parser */
-    n[2] = n[3] = n[4] = n[5] = 0;
+    /* The type and payload (operands) will get filled in by the parser */
+    memset( &n[2], 0, 20 );
 
     return n;
 }
@@ -87,8 +87,10 @@ free_node(node) {
     if (!node || --node[-2]) 
         return;
 
+    free_node( node[2] );
+
     while ( i < node[1] ) 
-        free_node( node[ 2 + i++ ] );
+        free_node( node[ 3 + i++ ] );
 
     rc_free(node);
 }
@@ -96,9 +98,11 @@ free_node(node) {
 /* If SIZE is equal to the capacity of NODE, then reallocate it with twice
  * capacity, and return the new node. */
 grow_node(node, size) {
-    if ( size + 8 == node[-1] ) {
+    /* 12 is the size of the node before the payload. */
+
+    if ( size + 12 == node[-1] ) {
         size *= 2;
-        return rc_realloc( node, size + 8 );
+        return rc_realloc( node, size + 12 );
     }
 
     return node;
@@ -108,7 +112,7 @@ grow_node(node, size) {
  * and returning the (possibly reallocated) vector. */
 vnode_app( v, n ) {
     v = grow_node(v, v[1] * 4);
-    v[ 2 + v[1]++ ] = n;
+    v[ 3 + v[1]++ ] = n;
     return v;
 }
 

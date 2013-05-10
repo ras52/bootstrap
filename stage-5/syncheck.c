@@ -13,9 +13,9 @@ req_lvalue(node) {
     /* This will need reworking as the C standard considers arrays to 
      * be lvalues -- i.e. our concept of an lvalue is at odd's with std C's */
     else if ( type == 'id' ) {
-        if ( !lookup_sym( &node[2], &dummy ) )
+        if ( !lookup_sym( &node[3], &dummy ) )
             error("Non-lvalue identifier '%s' where lvalue is required",
-                  &node[2]);
+                  &node[3]);
     }
 
     else if ( type != '*' && type != '[]')
@@ -27,7 +27,7 @@ static s_int = 0;
 
 init_stypes() {
     s_int = new_node('dclt');
-    s_int[1] = 4; /* arity */
+    s_int[1] = 3; /* arity */
     s_int[3] = new_node('int');
 }
 
@@ -44,7 +44,7 @@ type_size(type) {
     auto t = type[0];
 
     if (t == '[]')
-        return type_size(type[2]) * type[3][2];
+        return type_size(type[3]) * type[4][3];
 
     else if (t == '*')
         return 4;
@@ -59,7 +59,7 @@ type_size(type) {
     }
 
     else if ( t == 'id' )
-        return type_size( lookup_type( &type[2] ) );
+        return type_size( lookup_type( &type[3] ) );
 
     else int_error( "Unknown type: %Mc", type[0] );
 }
@@ -71,18 +71,18 @@ expr_type(node) {
     if ( t == 'chr' || t == 'num' )
         return s_int;
     else if ( t == 'id' )
-        return lookup_type( &node[2] );
+        return lookup_type( &node[3] );
 
     /* 'str' =>  char[N] */
 
     else if ( t == '++' || t == '--' ) /* Both postfix and prefix */
-        return expr_type( node[2] );
+        return expr_type( node[3] );
 
     else if ( t == '[]' || t == '*' && node[1] == 1 ) {
-        auto op_type = expr_type( node[2] );
+        auto op_type = expr_type( node[3] );
 
         if ( op_type[0] == '[]' || op_type[0] == '*' && op_type[1] == 1 )
-            return op_type[2];  /* strip the * or [] from the type */
+            return op_type[3];  /* strip the * or [] from the type */
         /* For (hopefully temporary) compatibility with stage-4, we allow an 
          * implicit int to be dereferenced.  Explicit int is not so treated. */
         else if ( compat_flag && op_type == s_int )
@@ -114,7 +114,7 @@ is_integral(type) {
 }
 
 chk_subscr(node) {
-    auto type1 = expr_type(node[2])/*, type2 = expr_type(node[3])*/;
+    auto type1 = expr_type(node[3])/*, type2 = expr_type(node[4])*/;
     extern compat_flag;
 
     if ( can_deref(type1) ) {
@@ -123,6 +123,7 @@ chk_subscr(node) {
     }
     /* C allows the subscript arguments to be either way around. 
      * If they're the unorthodox way, swap them. */
+    /* XXX swap the node[3] and node[4] too */
     /*else if ( is_integral(type1) && can_deref(type2) ) {
         auto tmp = type1;
         type1 = type2;
@@ -136,12 +137,12 @@ chk_subscr(node) {
      * that's not an array of dwords, as the elt size will change. */
     if ( compat_flag 
          && ( type1[0] == '[]' || type1[0] == '*' && type1[1] == 1 )
-         && type_size( type1[2] ) != 4 )
+         && type_size( type1[3] ) != 4 )
         error( "Element size has changed since stage-4" );
 }
 
 chk_deref(node) {
-    if ( !can_deref( expr_type(node[2]) ) )
+    if ( !can_deref( expr_type(node[3]) ) )
         error( "Attempted to dereference a non-pointer type" );
 }
 

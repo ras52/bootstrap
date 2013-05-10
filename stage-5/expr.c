@@ -16,7 +16,7 @@ primry_expr() {
         n = take_node(0);
         /* Convert it into a integer literal */
         n[0] = 'num';
-        n[2] = parse_chr( &n[2] );
+        n[3] = parse_chr( &n[3] );
     }
     else if ( t == '(' ) {
         skip_node('(');
@@ -59,7 +59,7 @@ arg_list(fn) {
 static
 do_binop(lhs) {
     auto node = take_node(2);
-    node[2] = lhs;
+    node[3] = lhs;
     req_token();
     return node;
 }
@@ -76,8 +76,8 @@ postfx_expr() {
 
         /* The only valid use of an undeclared symbol is in a simple function 
          * call.   In that case, foo() is valid, but, say, (foo)() is not. */
-        if ( t != '(' && p[0] == 'id' && !is_declared(&p[2]) ) 
-            error("Undefined symbol '%s'", &p[2]);
+        if ( t != '(' && p[0] == 'id' && !is_declared(&p[3]) ) 
+            error("Undefined symbol '%s'", &p[3]);
 
 
         if ( t == '++' || t == '--' ) {
@@ -93,14 +93,14 @@ postfx_expr() {
         else if ( t == '[' ) {
             p = do_binop( p );
             p[0] = '[]';
-            p[3] = expr();
+            p[4] = expr();
             skip_node(']');
 
             chk_subscr(p);
         }
     
         else if ( t == '(' ) {
-            /* We don't currently support function pointers */
+            /* We don't currently support function pointers [???] */
             skip_node('(');
             p = arg_list(p);
             skip_node(')');
@@ -123,9 +123,9 @@ unary_expr() {
          || t == '++' || t == '--' ) {
         auto p = take_node(1);
         req_token();
-        p[2] = unary_expr();
+        p[3] = unary_expr();
         if (t == '++' || t == '--' || t == '&')
-            req_lvalue( p[2] );
+            req_lvalue( p[3] );
         else if (t == '*')
             chk_deref(p);
         return p;
@@ -150,7 +150,7 @@ test_level( t, ap ) {
 }
 
 /* Handle a standard left-to-right binary operator precedence level.  
- * Call CHAIN() to get parse the operands, so CHAIN should be a pointer 
+ * Call CHAIN() to parse the operands, so CHAIN should be a pointer 
  * to the parser function for a higher precedence level.  It is a variadic 
  * function, and the varargs are operator tokens in the predence level, 
  * followed by a 0 end marker. */
@@ -161,7 +161,7 @@ bin_level( chain ) {
     /* Left-to-right associatibity: a, b, c == (a, b), c */
     while ( test_level( peek_token(), &chain ) ) { 
         p = do_binop( p );
-        p[3] = chain();
+        p[4] = chain();
     }
 
     return p;
@@ -240,10 +240,10 @@ cond_expr() {
     if ( peek_token() == '?' ) {
         p = do_binop( p );
         p[0] = '?:';  p[1] = 3;
-        p[3] = expr();
+        p[4] = expr();
         skip_node(':');
         req_token();
-        p[4] = assign_expr();
+        p[5] = assign_expr();
     }
 
     return p;
@@ -276,7 +276,7 @@ assign_expr() {
     if ( is_assop(t) ) {
         req_lvalue(p);
         p = do_binop( p );
-        p[3] = assign_expr();
+        p[4] = assign_expr();
     }
 
     return p;

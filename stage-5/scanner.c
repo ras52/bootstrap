@@ -113,14 +113,16 @@ chk_keyword(node) {
 
     /* TODO: Not yet implemented: double, sizeof, struct, typedef, union */
 
-    auto i = 0, str = &node[2];
+    auto i = 0, str = &node[3];
     while ( keywords[i] && strcmp(keywords[i], str) != 0 )
         ++i;
 
     if ( keywords[i] ) {
         /* Change the id node to an op node. */
         node[0] = *keywords[i];
-        node[2] = node[3] = node[4] = node[5] = 0;
+
+        /* Zero the memory used by the string: it's now an node* array */
+        memset( str, 0, 16 );
     }
     
     return node;
@@ -133,7 +135,7 @@ static
 node_lchar( node_ptr, len_ptr, chr ) {
     auto node = *node_ptr;
     node = grow_node( node, *len_ptr );
-    lchar( &node[2], (*len_ptr)++, chr );
+    lchar( &node[3], (*len_ptr)++, chr );
     *node_ptr = node;
 }
 
@@ -199,7 +201,7 @@ get_number(stream,c) {
     auto node = new_node('num');
 
     read_number( stream, buf, c );
-    node[2] = strtol( buf, &nptr, 0 );
+    node[3] = strtol( buf, &nptr, 0 );
     if ( rchar(nptr, 0) )
         error("Unexpected character '%c' in string \"%s\"",
               rchar(nptr, 0), buf);

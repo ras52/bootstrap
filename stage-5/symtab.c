@@ -125,7 +125,7 @@ get_label( name ) {
 
 /* Define a symbol, possibly implicitly by calling a function */
 save_sym( decl, frame_off ) {
-    auto name = &decl[3][2];
+    auto name = &decl[4][3];
     auto e = grow_tab( symtab, 24, name );   /* sizeof(sym_entry) */
     e[3] = frame_off;
     e[4] = scope_id;
@@ -232,7 +232,7 @@ is_lv_decl(type) {
 decl_var(decl) {
     auto sz = type_size( decl[2] );
     cur_offset += promote_sz(sz);
-    if ( decl[3][0] != 'id' )
+    if ( decl[4][0] != 'id' )
         int_error("Expected identifier in auto decl");
     save_sym( decl, -cur_offset );
     if (cur_offset > frame_size)
@@ -247,7 +247,7 @@ start_fn(decl) {
 
     /* Inject the parameters into the scope */
     while ( i < decl[1] ) {
-        auto n = decl[ 2 + i++ ], sz;
+        auto n = decl[ 3 + i++ ], sz;
         if (n[0] != 'decl')
             int_error("Unexpected token found as function param");
         sz = type_size(n[2]);
