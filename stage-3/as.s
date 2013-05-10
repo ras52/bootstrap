@@ -3754,6 +3754,15 @@ _start:
 	CALL	savelabel
 	ADDL	$12, %esp
 
+	#  Get the symbol pointer in %ebx, again
+	#  This needs to be repeated in case savelabel caused a reallocation
+	MOVL	4(%edi), %eax		# in-memory symbol number
+	XORL	%edx, %edx
+	MOVL	$24, %ecx		# sizeof(label)
+	MULL	%ecx			# acts on %edx:%eax
+	ADDL	-4(%ebp), %eax		# += label_start
+	MOVL	%eax, %ebx 
+
 	#  Set the symbol type & binding
 	MOVL	-8(%ebp), %eax
 	SUBL	$24, %eax		# sizeof(label)
