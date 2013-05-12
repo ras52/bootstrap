@@ -147,3 +147,23 @@ memcpy:
 	POP	%esi
 	POP	%ebp
 	RET
+
+
+####	#  Function:	void* memset(void* s, int c, size_t n);
+	#  Set N bytes of memory pointed to by S to the C byte
+memset:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%edi
+
+	MOVL	8(%ebp), %edi
+	MOVB	12(%ebp), %al
+	MOVL	16(%ebp), %ecx
+	REP STOSB
+	MOVL	8(%ebp), %eax
+
+	POP	%edi
+	POP	%ebp
+	RET
+
+
