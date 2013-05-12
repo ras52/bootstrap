@@ -9,8 +9,15 @@
 static
 primry_expr() {
     auto n, t = peek_token();
-    if ( t == 'num' || t == 'id' | t == 'str' )
+    if ( t == 'num' || t == 'str' ) 
         n = take_node(0);
+
+    else if ( t == 'id' ) {
+        n = take_node(0);
+        /* If the identifier is undeclared, the type will be null. */
+        n[2] = lookup_type( &n[3] ); 
+        if ( n[2] ) add_ref( n[2] );
+    }
 
     else if ( t == 'chr' ) {
         n = take_node(0);
@@ -88,6 +95,8 @@ postfx_expr() {
              * marked as unary.  This is inspired by C++'s idea of
              * T operator++(T&, int) vs. T& operator++(T&). */
             p = do_binop( p );
+
+            p[2] = add_ref( p[3][2] );
         }
     
         else if ( t == '[' ) {
@@ -100,10 +109,12 @@ postfx_expr() {
         }
     
         else if ( t == '(' ) {
-            /* We don't currently support function pointers [???] */
             skip_node('(');
             p = arg_list(p);
             skip_node(')');
+
+            /* TODO handle return types. */
+            p[2] = add_ref( implct_int() );
         }
 
         else break;
@@ -124,8 +135,19 @@ unary_expr() {
         auto p = take_node(1);
         req_token();
         p[3] = unary_expr();
-        if (t == '++' || t == '--' || t == '&')
+        if (t == '+' || t == '-' || t == '~')
+            p[2] = add_ref( prom_type( p[3][2] ) );
+        else if (t == '!')
+            p[2] = add_ref( implct_int() );
+        else if (t == '++' || t == '--' || t == '&') {
             req_lvalue( p[3] );
+            if (t == '&') {
+                p[2] = new_node('*');
+                p[2][1] = 1; /* arity */
+                p[2][3] = add_ref( p[3][2] );
+            }
+            else p[2] = add_ref( p[3][2] );
+        }
         else if (t == '*')
             chk_deref(p);
         return p;
@@ -149,19 +171,27 @@ test_level( t, ap ) {
     return 0;
 }
 
-/* Handle a standard left-to-right binary operator precedence level.  
+/* node* bin_level( node* (*chain)(), node* (*type)(node*, node*, int), ... );
+ *
+ * Handle a standard left-to-right binary operator precedence level.  
  * Call CHAIN() to parse the operands, so CHAIN should be a pointer 
- * to the parser function for a higher precedence level.  It is a variadic 
- * function, and the varargs are operator tokens in the predence level, 
- * followed by a 0 end marker. */
+ * to the parser function for a higher precedence level.  Then call
+ * TYPE( lhstype, rhstype, toktype ) to determine the type of expression,
+ * where lhstype and rhstype are the types of the left- and right-hand
+ * operands, and toktype is the tok-type of the expression (i.e. the 
+ * operator). 
+ *
+ * It is a variadic function, and the varargs are operator tokens in 
+ * the predence level, followed by a 0 end marker. */
 static
-bin_level( chain ) {
+bin_level( chain, type ) {
     auto p = chain();
 
     /* Left-to-right associatibity: a, b, c == (a, b), c */
-    while ( test_level( peek_token(), &chain ) ) { 
+    while ( test_level( peek_token(), &type ) ) { 
         p = do_binop( p );
         p[4] = chain();
+        p[2] = add_ref( type( p[3][2], p[4][2], p[0] ) );
     }
 
     return p;
@@ -171,65 +201,95 @@ bin_level( chain ) {
    mult-expr ::= cast-expr ( mult-op cast-expr )* */
 static
 mult_expr() {
-    return bin_level( cast_expr, '*', '/', '%', 0 );
+    extern usual_conv();
+    return bin_level( cast_expr, usual_conv, '*', '/', '%', 0 );
+}
+
+/* Determine the type of an + or - expression. */
+static
+add_type( type1, type2, op ) {
+    extern usual_conv();
+    if (op == '+') {
+        /* TODO: Check that the other type is integral */
+        if (type1[0] == '*' || type1[0] == '[]') return type1;
+        else if (type2[0] == '*' || type2[0] == '[]') return type2;
+    }
+    else if (op == '-' && (type1[0] == '*' || type1[0] == '[]')) {
+        /* TODO: Check pointers are compatible. */
+        /* We choose ptrdiff_t to be int. */
+        if (type2[0] == '*' || type2[0] == '[]') return implct_int();
+        /* TODO: Check that the rhs is integral */
+        else return type1;
+    }
+    
+    /* We have two integral arguments */
+    return usual_conv(type1, type2);
 }
 
 /* add-op   ::= '+' | '-'
    add-expr ::= mult-expr ( add-op mult-expr )* */
 static
 add_expr() {
-    return bin_level( mult_expr, '+', '-', 0 );
+    return bin_level( mult_expr, add_type, '+', '-', 0 );
 }
 
 /* shift-op   ::= '<<' | '>>'
    shift-expr ::= add-expr ( shift-op add-expr )* */
 static
 shift_expr() {
-    return bin_level( add_expr, '<<', '>>', 0 );
+    extern prom_type();
+    return bin_level( add_expr, prom_type, '<<', '>>', 0 );
 }
 
 /* rel-op   ::= '<' | '>' | '<=' | '>='
    rel-expr ::= shift-expr ( rel-op shift-expr )* */
 static
 rel_expr() {
-    return bin_level( shift_expr, '<', '<=', '>', '>=', 0 );
+    extern implct_int();
+    return bin_level( shift_expr, implct_int, '<', '<=', '>', '>=', 0 );
 }
 
 /* eq-op   ::= '==' | '!='
    eq-expr ::= rel-expr ( eq-op rel-expr )* */
 static
 eq_expr() {
-    return bin_level( rel_expr, '==', '!=', 0 );
+    extern implct_int();
+    return bin_level( rel_expr, implct_int, '==', '!=', 0 );
 }
 
 /* bitand-expr ::= eq-expr ( '&' eq-expr )* */
 static
 bitand_expr() {
-    return bin_level( eq_expr, '&', 0 );
+    extern usual_conv();
+    return bin_level( eq_expr, usual_conv, '&', 0 );
 }
 
 /* bitxor-expr ::= bitand-expr ( '^' binand-expr )* */
 static
 bitxor_expr() {
-    return bin_level( bitand_expr, '^', 0 );
+    extern usual_conv();
+    return bin_level( bitand_expr, usual_conv, '^', 0 );
 }
 
 /* bitor-expr ::= bitxor-expr ( '|' binand-expr )* */
 static
 bitor_expr() {
-    return bin_level( bitxor_expr, '|', 0 );
+    extern usual_conv();
+    return bin_level( bitxor_expr, usual_conv, '|', 0 );
 }
 
 /* logand-expr ::= bitor-expr ( '&&' binand-expr )* */
 static
 logand_expr() {
-    return bin_level( bitor_expr, '&&', 0 );
+    extern implct_int();
+    return bin_level( bitor_expr, implct_int, '&&', 0 );
 }
 
 /* logor-expr ::= logand-expr ( '||' binand-expr )* */
 static
 logor_expr() {
-    return bin_level( logand_expr, '||', 0 );
+    extern implct_int();
+    return bin_level( logand_expr, implct_int, '||', 0 );
 }
 
 /* cond-expr ::= logor-expr ( '?' expr ':' assign-expr )? */
@@ -244,6 +304,7 @@ cond_expr() {
         skip_node(':');
         req_token();
         p[5] = assign_expr();
+        p[2] = add_ref( implct_int() );
     }
 
     return p;
@@ -277,12 +338,18 @@ assign_expr() {
         req_lvalue(p);
         p = do_binop( p );
         p[4] = assign_expr();
+        p[2] = add_ref( p[3][2] );
     }
 
     return p;
 }
 
+static
+comma_type(lhs, rhs) {
+    return rhs;
+}
+
 /* expr ::= ( assign-expr ',' )* assign-expr */
 expr() {
-    return bin_level( assign_expr, ',', 0 );
+    return bin_level( assign_expr, comma_type, ',', 0 );
 }

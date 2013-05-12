@@ -43,7 +43,7 @@ $(INIT):
 %2.s:	%.c cc
 	cc -S --compat -o $@ $<
 
-CC_OBJS  = scanner.o node.o symtab.o expr.o stmt.o syncheck.o i386.o \
+CC_OBJS  = scanner.o node.o symtab.o expr.o stmt.o type.o i386.o \
            codegen.o main.o
 
 cc1:	ld libc.o crt0.o $(CC_OBJS)

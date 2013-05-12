@@ -8,8 +8,11 @@
 static
 expr_stmt() {
     auto n = 0;
-    if ( peek_token() != ';' )
+    if ( peek_token() != ';' ) {
         n = expr();
+        if ( !n || !n[2] )
+            int_error( "Expression has no type" );
+    }
     skip_node(';');
     return n;
 }
@@ -332,7 +335,7 @@ decl_specs() {
      * We don't check that at least one decl-spec is present because 
      * (i) implicit int on functions, and (ii) the caller has checked.  */
 
-    if ( !decls[4] ) decls[4] = implct_int();
+    if ( !decls[4] ) decls[4] = add_ref( implct_int() );
     else if ( !decls[4][3] ) decls[4][3] = new_node('int');
    
     if ( decls[4][3][0] == 'char' && decls[4][4] )

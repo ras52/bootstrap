@@ -206,6 +206,7 @@ get_number(stream,c) {
         error("Unexpected character '%c' in string \"%s\"",
               rchar(nptr, 0), buf);
     
+    node[2] = add_ref( implct_int() );
     return node;
 }
 
@@ -288,7 +289,7 @@ parse_chr(str) {
  * Q, and return the appropriate token type ('str' or 'chr'). */
 static
 get_qlit(stream, q) {
-    auto i = 0, c;
+    auto i = 0, l = 0, c;
     /* struct node { int type; int dummy; char str[]; } */
     auto node = new_node( q == '"' ? 'str' : 'chr' );
 
@@ -300,6 +301,7 @@ get_qlit(stream, q) {
             if ( (c = fgetc(stream)) == -1 ) break;
             node_lchar( &node, &i, c );
         }
+        ++l;
     }
 
     if ( c == -1 )
@@ -308,6 +310,14 @@ get_qlit(stream, q) {
 
     node_lchar( &node, &i, q );
     node_lchar( &node, &i, 0 );
+
+    /* Character literals have type int in C. */
+    if (q == '\'') 
+        node[2] = add_ref( implct_int() );
+    /* String literals have type char[N] */
+    else 
+        node[2] = chr_array_t(l);
+
     return node;
 }
 

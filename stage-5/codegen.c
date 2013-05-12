@@ -105,7 +105,7 @@ conditional(stream, node) {
 
 static
 subscript(stream, node, need_lval) {
-    auto type = expr_type( node[3] );  /* type being subscripted */
+    auto type = node[3][2];  /* type being subscripted */
 
     /* For (hopefully temporary) compatibility with stage-4, we allow an 
      * implicit int to be dereferenced as an int*. */

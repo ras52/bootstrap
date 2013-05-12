@@ -83,9 +83,11 @@ new_node(type) {
 free_node(node) {
     auto i = 0;
 
+    if (!node) return;
+    /* Trap for double delete */ 
+    else if (node[-2] == 0) abort();
     /* If the reference count doesn't drop to zero, do nothing. */
-    if (!node || --node[-2]) 
-        return;
+    else if (--node[-2]) return;
 
     free_node( node[2] );
 
