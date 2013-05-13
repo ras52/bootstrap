@@ -4,6 +4,36 @@
  * All rights reserved.
  */
 
+static
+sz_suffix(sz) {
+    extern compat_flag;
+    if (sz == 4) return 'L';
+
+    /* Stage 4 treated everything as an int. */
+    if (compat_flag) 
+        error("Operand size has changed since stage-4");
+
+    if (sz == 2) return 'W';
+    else if (sz == 1) return 'B';
+    int_error("Unexpected size operand to instruction: %d", sz);
+}
+
+static
+sz_accum(sz) {
+    if (sz == 4) return "%eax";
+    else if (sz == 2) return "%ax";
+    else if (sz == 1) return "%al";
+    int_error("Unexpected size register requested: %d", sz);
+}
+
+static
+sz_aux_reg(sz) {
+    if (sz == 4) return "%ecx";
+    else if (sz == 2) return "%cx";
+    else if (sz == 1) return "%cl";
+    int_error("Unexpected size register requested: %d", sz);
+}
+
 load_num(stream, num) {
     fprintf(stream, "\tMOVL\t$%d, %%eax\n", num);
 }
@@ -127,17 +157,27 @@ pop_eq(stream) { pop_rel(stream, "SETE");  }
 pop_ne(stream) { pop_rel(stream, "SETNE"); }
 
 static
-pop_binop(stream, mnemonic, is_assign, is_sym) {
+pop_binop(stream, mnemonic, is_assign, is_sym, sz) {
     start_binop(stream, is_assign, is_sym);
-    fprintf(stream, "\t%s\t%%ecx, %s\n", mnemonic, 
-            is_assign ? "(%eax)" : "%eax");
+    fprintf(stream, "\t%s%c\t%s, %s\n", mnemonic, sz_suffix(sz), 
+            sz_aux_reg(sz), is_assign ? "(%eax)" : sz_accum(sz) );
 }
 
-pop_add   (stream, is_assign) { pop_binop(stream, "ADDL", is_assign, 1); }
-pop_sub   (stream, is_assign) { pop_binop(stream, "SUBL", is_assign, 0); }
-pop_bitand(stream, is_assign) { pop_binop(stream, "ANDL", is_assign, 1); }
-pop_bitor (stream, is_assign) { pop_binop(stream, "ORL",  is_assign, 1);  }
-pop_bitxor(stream, is_assign) { pop_binop(stream, "XORL", is_assign, 1); }
+pop_add(stream, is_assign, sz) {
+    pop_binop(stream, "ADD", is_assign, 1, sz);
+}
+pop_sub(stream, is_assign, sz) {
+    pop_binop(stream, "SUB", is_assign, 0, sz);
+}
+pop_bitand(stream, is_assign, sz) {
+    pop_binop(stream, "AND", is_assign, 1, sz);
+}
+pop_bitor(stream, is_assign, sz) {
+    pop_binop(stream, "OR",  is_assign, 1, sz);
+}
+pop_bitxor(stream, is_assign, sz) {
+    pop_binop(stream, "XOR", is_assign, 1, sz);
+}
 
 static
 ilog2(i) {
@@ -154,13 +194,14 @@ pop_subscr(stream, elt_size, need_lval) {
         fprintf(stream, "\tMOVB\t$%d, %%cl\n\tSHLL\t%%eax\n", ilog2(elt_size));
     else
         fprintf(stream, "\tMOVL\t$%d, %%ecx\n\tMULL\t%%ecx\n", elt_size);
-    pop_add(stream, 0);
+    pop_add(stream, 0, 4);
     dereference(stream, need_lval);
 }
 
-pop_assign(stream) {
+pop_assign(stream, sz) {
     start_binop(stream, 1, 0);
-    fputs("\tMOVL\t%ecx,(%eax)\n", stream);
+    fprintf(stream, "\tMOV%c\t%s, (%%eax)\n", 
+            sz_suffix(sz), sz_aux_reg(sz));
 }
 
 

@@ -17,7 +17,9 @@ compile(output) {
 }
 
 static
-cli_error(fmt) {
+cli_error(fmt) 
+    char *fmt;
+{
     extern stderr;
     vfprintf(stderr, fmt, &fmt);
     exit(1);
@@ -27,9 +29,13 @@ usage() {
     cli_error("Usage: cc -S [--compat] [-o filename.s] filename.c\n");
 }
 
-main(argc, argv) {
+main(argc, argv) 
+    int argc;
+    char **argv;
+{
     extern stdout;
-    auto filename = 0, l, i = 0, has_s = 0, outname = 0, freeout = 0;
+    auto char *filename = 0, *outname = 0;
+    auto int l, i = 0, has_s = 0, freeout = 0;
 
     while ( ++i < argc ) {
         if ( strcmp( argv[i], "-S" ) == 0 ) 
@@ -51,7 +57,8 @@ main(argc, argv) {
 
         else {
             if ( filename )
-                cli_error("cc: multiple input files specified\n");
+                cli_error("cc: multiple input files specified: '%s' and '%s'\n",
+                          filename, argv[i]);
             filename = argv[i];
         }
     }

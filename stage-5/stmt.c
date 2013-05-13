@@ -89,7 +89,7 @@ switch_stmt( fn, loop ) {
 
     /* The 3rd "operand" is the switch table which is built up as case and
      * default statements are encountered.  */
-    node[5] = new_node('swtb');
+    node[5] = new_node('swtb', 0);
 
     node[4] = stmt( fn, loop, node );
     return node;
@@ -255,15 +255,18 @@ prefix_decl(decl) {
  *  declarator ::= postfx-decl */
 static
 declarator(dclt) {
-    auto decl = new_node('decl');
-    decl[1] = 3; /* the operands are: [3] type, [4] name, [5] init.
-                  * Note the [6] slot is used for fuction stack size. */
+    /* The 'decl' node has operands: 
+     * [3] type (during construction only), [4] name, [5] init.
+     * Note the [6] slot is used as an int for the fuction stack size. */
+    auto decl = new_node('decl', 3);
 
     decl[3] = add_ref(dclt);
     prefix_decl(decl);
 
-    /* Also store the type in decl[2], the node type field */
-    decl[2] = add_ref(decl[3]);
+    /* Move the type into decl[2], the node type field.
+     * This could do with being tidied up so it was generated there. */
+    decl[2] = decl[3];
+    decl[3] = 0;
 
     return decl;
 }
@@ -278,10 +281,8 @@ is_dclspec(t) {
 
 static
 set_dclt(decls, field) {
-    if (!decls[4]) {
-        decls[4] = new_node('dclt');    
-        decls[4][1] = 3;  /* arity */
-    }
+    if (!decls[4])
+        decls[4] = new_node('dclt', 3);
 
     else if ( decls[4][field] )
         error("Invalid combination of type specifiers");
@@ -298,15 +299,14 @@ set_dclt(decls, field) {
  */
 static
 decl_specs() {
-    auto decls = new_node('dcls');
-    decls[1] = 2;  /* arity */
+    auto decls = new_node('dcls', 2);
 
     /* The dcls node has ops:  
      *   dcls[3] = storage class:     { extern, static, auto }
      *   dcls[4] = a dclt node:
      *   dcls[5...] = the declarators
      *
-     * The dclt node has ops:
+     * The dclt node, created on demand by set_dclt(), has ops:
      *   dclt[3] = base of the type   { char, int }    --- always present
      *   dclt[4] = length modifier    { long, short }
      *   dclt[5] = signed modifier    { signed, unsigned }  */
@@ -324,7 +324,7 @@ decl_specs() {
         else if ( t == 'char' || t == 'int' )
             set_dclt(decls, 3);
         else if ( t == 'shor' || t == 'long' )
-            set_dclt(decls, 4); /* TODO:  long long will become valid */
+            set_dclt(decls, 4);
         else if ( t == 'sign' || t == 'unsi' )
             set_dclt(decls, 5);
 
@@ -336,7 +336,7 @@ decl_specs() {
      * (i) implicit int on functions, and (ii) the caller has checked.  */
 
     if ( !decls[4] ) decls[4] = add_ref( implct_int() );
-    else if ( !decls[4][3] ) decls[4][3] = new_node('int');
+    else if ( !decls[4][3] ) decls[4][3] = new_node('int', 0);
    
     if ( decls[4][3][0] == 'char' && decls[4][4] )
         error("Invalid combination of type specifiers");
@@ -373,8 +373,12 @@ declaration( fn ) {
     while (1) {
         auto decl = declarator(decls[4]), name = &decl[4][3];
         
-        /* Automatic declarations need space reserving in the frame. */
-        if ( decls[3] && ( decls[3][0] == 'auto' || decls[3][0] == 'regi' ) ) {
+        /* Automatic declarations need space reserving in the frame. 
+         * A variable has automatic storage duration if (i) it is declared
+         * with 'auto' or 'register', or (ii) if it declared at function scope
+         * with no storage specifier and is not a function. */
+        if ( decls[3] && ( decls[3][0] == 'auto' || decls[3][0] == 'regi' ) ||
+             fn && !decls[3] && decl[2][0] != '()' ) {
             /* TODO:  This is valid: auto x[] = { 1, 2, 3 }; */
             if (decl[2] && decl[2][0] == '[]' && !decl[2][4])
                 error("Automatic array of unknown size");
@@ -487,7 +491,7 @@ stmt( fn, loop, swtch ) {
 
 /* block ::= '{' stmt-or-decl* '}' */
 block( fn, loop, swtch ) {
-    auto n = new_node('{}');
+    auto n = new_node('{}', 0);
 
     start_block();
     skip_node('{');
@@ -504,7 +508,7 @@ block( fn, loop, swtch ) {
 /*  param-list ::= ( identifier ( ',' identifier )* )? */
 static
 param_list() {
-    auto  p = new_node('()');
+    auto  p = new_node('()', 0);
     p = vnode_app( p, 0 );  /* Place holder for return type */
 
     if ( peek_token() == ')' ) 
@@ -551,8 +555,7 @@ replc_param( fn_decl, pdecl ) {
 
         if ( strcmp( &name[3], &pdecl[4][3] ) == 0 ) {
             if ( n[0] == 'decl' ) 
-                error("Multiple declarations for parameter '%s'", &name[2]);
-
+                error("Multiple declarations for parameter '%s'", &name[3]);
             free_node( fn_decl[3+i] );
             fn_decl[3+i] = pdecl;
             return;
@@ -574,10 +577,10 @@ fini_params( fn_decl ) {
         auto n = fn_decl[3+i];
 
         if ( n[0] == 'id' ) {
-            auto decl = new_node('decl');
-            decl[1] = 3; /* operands are: type, name, init. */
+            auto decl = new_node('decl', 3);
             decl[2] = add_ref( implct_int() );
-            decl[3] = add_ref( decl[2] );
+            /* operands are: type, name, init (which is null here). */
+            decl[3] = add_ref( implct_int() );
             decl[4] = n;
             fn_decl[3+i] = decl;
         }
@@ -586,9 +589,9 @@ fini_params( fn_decl ) {
     }
 }
 
+/* Handle K&R style parameter declarations */
 static
-fn_defn( decl ) {
-    /* Handle K&R style parameter declarations */
+knr_params( decl ) {
     while ( peek_token() != '{' ) {
         auto pdecls = decl_specs();
    
@@ -596,7 +599,8 @@ fn_defn( decl ) {
             error("Storage specifiers not allowed on parameter declarations");
 
         while (1) {
-            auto pdecl = declarator( pdecls[4] ), name = &pdecl[4][3];
+            auto pdecl = declarator( pdecls[4] );
+            auto name = &pdecl[4][3];
        
             if (pdecl[2][0] == '()')
                 error("Parameter declared as a function");
@@ -614,7 +618,11 @@ fn_defn( decl ) {
         free_node(pdecls);
     }
     fini_params( decl[2] );
+}
 
+static
+fn_defn( decl ) {
+    knr_params( decl );
     start_fn( decl[2] );
     decl[5] = block( decl, 0, 0 );
 

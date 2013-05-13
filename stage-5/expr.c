@@ -39,7 +39,7 @@ primry_expr() {
 /*  arg-list ::= ( expr ( ',' expr )* )? */
 static
 arg_list(fn) {
-    auto p = new_node('()');
+    auto p = new_node('()', 0);
     p = vnode_app( p, fn );
 
     if ( peek_token() == ')' ) 
@@ -142,8 +142,7 @@ unary_expr() {
         else if (t == '++' || t == '--' || t == '&') {
             req_lvalue( p[3] );
             if (t == '&') {
-                p[2] = new_node('*');
-                p[2][1] = 1; /* arity */
+                p[2] = new_node('*', 1);
                 p[2][3] = add_ref( p[3][2] );
             }
             else p[2] = add_ref( p[3][2] );

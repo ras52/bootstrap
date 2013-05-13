@@ -40,6 +40,9 @@ $(INIT):
 %1.s:	%.c cc1
 	cc1 -S --compat -o $@ $<
 
+# The ultimate objective is to remove the --compat flag on this build,
+# as it will then check that our code is typesafe.  But we cannot do 
+# that until the compiler supports structs.
 %2.s:	%.c cc
 	cc -S --compat -o $@ $<
 

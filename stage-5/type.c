@@ -28,19 +28,16 @@ static s_char = 0;
 static s_ulong = 0;
 
 init_stypes() {
-    s_int = new_node('dclt');
-    s_int[1] = 3; /* arity */
-    s_int[3] = new_node('int');
+    s_int = new_node('dclt', 3);
+    s_int[3] = new_node('int', 0);
 
-    s_char = new_node('dclt');
-    s_char[1] = 3; /* arity */
-    s_char[3] = new_node('char');
+    s_char = new_node('dclt', 3);
+    s_char[3] = new_node('char', 0);
 
-    s_ulong = new_node('dclt');
-    s_ulong[1] = 3; /* arity */
+    s_ulong = new_node('dclt', 3);
     s_ulong[3] = add_ref( s_int[3] );
-    s_ulong[4] = new_node('long');
-    s_ulong[5] = new_node('unsi');
+    s_ulong[4] = new_node('long', 0);
+    s_ulong[5] = new_node('unsi', 0);
 }
 
 fini_stypes() {
@@ -55,10 +52,9 @@ implct_int() {
 }
 
 chr_array_t(len) {
-    auto node = new_node('[]');
-    node[1] = 2; /* arity */
+    auto node = new_node('[]', 2);
     node[3] = add_ref( s_char );
-    node[4] = new_node('num');
+    node[4] = new_node('num', 0);
     node[4][3] = len;
     return node;
 }
@@ -84,7 +80,7 @@ type_size(type) {
     else if ( t == 'id' )
         return type_size( lookup_type( &type[3] ) );
 
-    else int_error( "Unknown type: %Mc", type[0] );
+    else int_error( "Cannot determine size of unknown type: %Mc", type[0] );
 }
 
 static
@@ -107,8 +103,6 @@ is_integral(type) {
 chk_subscr(node) {
     auto type1 = node[3][2], type2 = node[4][2];
     extern compat_flag;
-
-if (!type2) warning("Subscript has no type");
 
     if ( can_deref(type1) ) {
         /*if ( !is_integral(type2) )

@@ -118,7 +118,7 @@ subscript(stream, node, need_lval) {
 
 static
 binary_op(stream, node, need_lval) {
-    auto op = node[0];
+    auto op = node[0], sz = type_size( node[2] );
     expr_code( stream, node[3], is_assop(op) );
 
     /* Discard the l.h.s. of the , operator. */
@@ -130,8 +130,8 @@ binary_op(stream, node, need_lval) {
     else if ( op == '*'   ) pop_mult(stream, 0);
     else if ( op == '/'   ) pop_div(stream, 0);
     else if ( op == '%'   ) pop_mod(stream, 0);
-    else if ( op == '+'   ) pop_add(stream, 0);
-    else if ( op == '-'   ) pop_sub(stream, 0);
+    else if ( op == '+'   ) pop_add(stream, 0, sz);
+    else if ( op == '-'   ) pop_sub(stream, 0, sz);
     else if ( op == '<<'  ) pop_lshift(stream, 0);
     else if ( op == '>>'  ) pop_rshift(stream, 0);
     else if ( op == '<'   ) pop_lt(stream);
@@ -140,21 +140,21 @@ binary_op(stream, node, need_lval) {
     else if ( op == '>='  ) pop_ge(stream);
     else if ( op == '=='  ) pop_eq(stream);
     else if ( op == '!='  ) pop_ne(stream);
-    else if ( op == '&'   ) pop_bitand(stream, 0);
-    else if ( op == '|'   ) pop_bitor(stream, 0);
-    else if ( op == '^'   ) pop_bitxor(stream, 0);
+    else if ( op == '&'   ) pop_bitand(stream, 0, sz);
+    else if ( op == '|'   ) pop_bitor(stream, 0, sz);
+    else if ( op == '^'   ) pop_bitxor(stream, 0, sz);
 
-    else if ( op == '='   ) pop_assign(stream);
+    else if ( op == '='   ) pop_assign(stream, sz);
     else if ( op == '*='  ) pop_mult(stream, 1);
     else if ( op == '/='  ) pop_div(stream, 1);
     else if ( op == '%='  ) pop_mod(stream, 1);
-    else if ( op == '+='  ) pop_add(stream, 1);
-    else if ( op == '-='  ) pop_sub(stream, 1);
+    else if ( op == '+='  ) pop_add(stream, 1, sz);
+    else if ( op == '-='  ) pop_sub(stream, 1, sz);
     else if ( op == '<<=' ) pop_lshift(stream, 1);
     else if ( op == '>>=' ) pop_rshift(stream, 1);
-    else if ( op == '&='  ) pop_bitand(stream, 1);
-    else if ( op == '|='  ) pop_bitor(stream, 1);
-    else if ( op == '^='  ) pop_bitxor(stream, 1);
+    else if ( op == '&='  ) pop_bitand(stream, 1, sz);
+    else if ( op == '|='  ) pop_bitor(stream, 1, sz);
+    else if ( op == '^='  ) pop_bitxor(stream, 1, sz);
 
     else if ( op != ','   ) int_error("Unknown operator: '%Mc'", op);
 
@@ -413,6 +413,9 @@ stmt_code(stream, node, brk, cont, ret) {
 
     auto op = node[0];
 
+    /* For debugging purposes, put a blank line between each statement. */
+    fputs("\n", stream);
+
     if      ( op == 'dcls' ) declaration( stream, node );
 
     else if ( op == 'brea' ) branch( stream, brk );
@@ -509,7 +512,7 @@ codegen(stream, node) {
          * added to the symbol table by the parser. */
         /* TODO:  tentative definitions, duplicate definitions */
         if (init || storage == 'stat' ) {
-            auto type = decl[3], name = &decl[4][3];
+            auto type = decl[2], name = &decl[4][3];
             set_storage( stream, storage, name );
 
             if (type[0] == 'dclt')

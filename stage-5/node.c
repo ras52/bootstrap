@@ -58,7 +58,7 @@ add_ref(ptr) {
 }
 
 /* Allocate a new node of type TYPE. */
-new_node(type) {
+new_node(type, arity) {
     /* struct node { int type; int nops; node* type; node* op[4]; } 
      *
      * For binary operators, op[0] is the lhs and op[1] the rhs; for unary 
@@ -71,7 +71,7 @@ new_node(type) {
      * "operator" (init, test, incr, stmt). */
     auto n = rc_alloc(28);
 
-    n[0] = type; n[1] = 0;
+    n[0] = type; n[1] = arity;
 
     /* The type and payload (operands) will get filled in by the parser */
     memset( &n[2], 0, 20 );

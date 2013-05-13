@@ -145,7 +145,7 @@ node_lchar( node_ptr, len_ptr, chr ) {
 static
 get_word(stream, c) {
     /* struct node { int type; int dummy; char str[]; } */
-    auto node = new_node('id');
+    auto node = new_node('id', 0);
     auto i = 0;
 
     node_lchar( &node, &i, c );
@@ -198,7 +198,7 @@ static
 get_number(stream,c) {
     auto buf[16], nptr;
     /* struct node { int type; int dummy; int val; }; */
-    auto node = new_node('num');
+    auto node = new_node('num', 0);
 
     read_number( stream, buf, c );
     node[3] = strtol( buf, &nptr, 0 );
@@ -212,7 +212,7 @@ get_number(stream,c) {
 
 /* Test whether the two characters in the multicharacter literal, OP, is a 
  * valid lexical representation of an operator.  So '[]' does not  */
-static 
+static
 is_2charop(op) {
     /* TODO: digraphs, trigraphs, and '->' */
     auto mops[19] = { 
@@ -244,7 +244,7 @@ get_multiop(stream, c) {
      * TODO: '...' breaks that assumption. */
     if ( !is_2charop(c) ) {
         ungetc( rchar( &c, 1 ), stream );
-        return new_node( rchar( &c, 0 ) );
+        return new_node( rchar( &c, 0 ), 0 );
     }
 
     /* Is it a <<= or >>= operator? */
@@ -254,7 +254,7 @@ get_multiop(stream, c) {
         else ungetc(c2, stream);
     }
 
-    return new_node(c);
+    return new_node(c, 0);
 }
 
 /* Convert a quoted character literal in STR (complete with single quotes,
@@ -273,8 +273,8 @@ parse_chr(str) {
         else if ( c == '\\' ) {
             c = rchar( str, i++ );
             if ( c == 'n' ) c = '\n';
-            else if ( c == 't' ) c == '\t';
-            else if ( c == '0' ) c == '\0';
+            else if ( c == 't' ) c = '\t';
+            else if ( c == '0' ) c = '\0';
         }
         val += c << (bytes++ << 3);
     }
@@ -291,7 +291,7 @@ static
 get_qlit(stream, q) {
     auto i = 0, l = 0, c;
     /* struct node { int type; int dummy; char str[]; } */
-    auto node = new_node( q == '"' ? 'str' : 'chr' );
+    auto node = new_node( q == '"' ? 'str' : 'chr', 0 );
 
     node_lchar( &node, &i, q );
     
