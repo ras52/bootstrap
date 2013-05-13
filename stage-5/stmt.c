@@ -194,23 +194,35 @@ init_array( type, req_const ) {
     return init;
 }
 
-/*  primry-decl ::= name */
+/*  primry-decl ::= name | '(' prefix-decl ')' */
 static
-primry_decl(decl) {
-    decl[4] = take_node(0);
-    if (decl[4][0] != 'id') error("Expected identifier in declaration");
+primry_decl(decl, phead) {
+    auto t = peek_token();
+
+    if ( t == 'id' ) {
+        decl[4] = take_node(0);
+    }
+    else if ( t == '(') {
+        skip_node('(');
+        phead = prefix_decl(decl, phead);
+        skip_node(')');
+    }
+    else
+        error("Expected an identifier while parsing declarator");
+
+    return phead;
 }
 
 /*  postfx-decl ::= primry-decl ( '[' number ']' | '(' param-list ')' )? */
 static
-postfx_decl(decl) {
-    primry_decl(decl);
+postfx_decl(decl, phead) {
+    phead = primry_decl(decl, phead);
 
     /* Iterate through the declarator postfixes building up the type.  
      * The innermost part of the type is the root, so, for example, 
      * foo[3][5] is an array of 3 elements.  Once we've parsed a postfix
      * on to the root of the decl tree, we therefore never alter that
-     * and DECL tracks up to the lowest alterable point. */
+     * and HEAD tracks up to the lowest alterable point. */
     while (1) {
         auto postfix, t = peek_token();
 
@@ -233,21 +245,33 @@ postfx_decl(decl) {
 
         else break;
 
-        postfix[3] = decl[3];
-        decl = decl[3] = postfix;
+        postfix[3] = *phead;
+        *phead = postfix;
+        phead = &postfix[3];
     }
+
+    return phead;
 }
 
 /*  prefix-decl ::= '*'* postfx-decl */
 static
-prefix_decl(decl) {
+prefix_decl(decl, phead) {
+    auto base = 0, newphead = 0;
+
     while (peek_token() == '*') {
         auto p = take_node(1);
-        p[3] = decl[3];
-        decl[3] = p;
+        if (!newphead) newphead = &p[3];
+        else p[3] = base;
+        base = p;
     }
 
-    postfx_decl(decl);
+    phead = postfx_decl(decl, phead);
+
+    if (newphead) {
+        *phead = base;
+        return newphead;
+    }
+    else return phead;
 }
 
 /*  Parse a declarator into a new 'decl' node.
@@ -255,18 +279,12 @@ prefix_decl(decl) {
  *  declarator ::= postfx-decl */
 static
 declarator(dclt) {
-    /* The 'decl' node has operands: 
-     * [3] type (during construction only), [4] name, [5] init.
+    /* The 'decl' node has operands: [3] UNUSED, [4] name, [5] init.
      * Note the [6] slot is used as an int for the fuction stack size. */
     auto decl = new_node('decl', 3);
 
-    decl[3] = add_ref(dclt);
-    prefix_decl(decl);
-
-    /* Move the type into decl[2], the node type field.
-     * This could do with being tidied up so it was generated there. */
-    decl[2] = decl[3];
-    decl[3] = 0;
+    auto phead = prefix_decl(decl, &decl[2]);
+    *phead = add_ref(dclt);
 
     return decl;
 }

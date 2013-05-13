@@ -14,14 +14,15 @@ primry_expr() {
 
     else if ( t == 'id' ) {
         n = take_node(0);
-        /* If the identifier is undeclared, the type will be null. */
+        /* If the identifier is undeclared, the type will be null. 
+         * This happens when calling undeclared functions. */
         n[2] = lookup_type( &n[3] ); 
         if ( n[2] ) add_ref( n[2] );
     }
 
     else if ( t == 'chr' ) {
         n = take_node(0);
-        /* Convert it into a integer literal */
+        /* Convert it into a integer literal: in C, char lits have type int. */
         n[0] = 'num';
         n[3] = parse_chr( &n[3] );
     }
@@ -113,8 +114,7 @@ postfx_expr() {
             p = arg_list(p);
             skip_node(')');
 
-            /* TODO handle return types. */
-            p[2] = add_ref( implct_int() );
+            chk_call(p);
         }
 
         else break;
@@ -183,7 +183,9 @@ test_level( t, ap ) {
  * It is a variadic function, and the varargs are operator tokens in 
  * the predence level, followed by a 0 end marker. */
 static
-bin_level( chain, type ) {
+bin_level( chain, type ) 
+    int (*chain)(), (*type)();
+{
     auto p = chain();
 
     /* Left-to-right associatibity: a, b, c == (a, b), c */

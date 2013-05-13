@@ -105,17 +105,15 @@ chk_subscr(node) {
     extern compat_flag;
 
     if ( can_deref(type1) ) {
-        /*if ( !is_integral(type2) )
-            error( "Attempted to use a non-integral type as a subscript" );*/
+        if ( !is_integral(type2) )
+            error( "Attempted to use a non-integral type as a subscript" );
     }
     /* C allows the subscript arguments to be either way around. 
      * If they're the unorthodox way, swap them. */
-    /* XXX swap the node[3] and node[4] too */
-    /*else if ( is_integral(type1) && can_deref(type2) ) {
-        auto tmp = type1;
-        type1 = type2;
-        type2 = tmp;
-    }*/
+    else if ( is_integral(type1) && can_deref(type2) ) {
+        auto tmp = type1; type1 = type2; type2 = tmp;
+        tmp = node[3]; node[3] = node[4]; node[4] = tmp;
+    }
     else
         error( "Attempted to dereference a non-pointer type" );
    
@@ -182,42 +180,55 @@ type_eq(type1, type2) {
         && node0_eq(type1[4], type2[4]) && node0_eq(type1[5], type2[5]);
 }
 
-/* Do the 'usual arithmetic conversions', per C99 6.3.1.8. */
-/* TODO: Check this is correct for C90 */
+/* Do the 'usual arithmetic conversions', per C90 6.2.1.5 */
 usual_conv(type1, type2) {
-    /* The integral promotions get rid of any chars or shorts. */
+    /* The integral promotions get rid of any chars or shorts. 
+     * And because we canonicalise types to remove 'signed' (except on char),
+     * testing whether typeN[5] is non-null checks for unsigned; similarly 
+     * testing whether typeN[4] is non-null checks for long.  */
     type1 = prom_type(type1);
     type2 = prom_type(type2);
 
-    if (type_eq(type1, type2))
-        return type1;
+    /* If either is a ulong, use that type. */
+    if ( type1[5] && type1[4] ) return type1;
+    if ( type2[5] && type2[4] ) return type2;
 
-    /* Are they both signed or both unsigned?  Because there are no chars, 
-     * and signed {short,int,long}s are canonicalised to remove the signed, 
-     * we just test for the presence or absence of any signed modifier. */
-    if ( !type1[5] == !type2[5] )
-        /* They're not equal, and shorts have been removed, so one must be 
-         * a long and one an int.  Just test for a length modifier. */
-        return type1[4] ? type1 : type2;
+    /* If one is a uint and one is a long. 
+     * Note that on this arch, sizeof(long) == sizeof(int), so a long cannot
+     * represent all the values of a uint. */
+    if ( type1[5] && type2[4] ) return s_ulong;
+    if ( type2[5] && type1[4] ) return s_ulong;
+    
+    /* If one is a long. */
+    if ( type1[4] ) return type1;
+    if ( type2[4] ) return type2;
 
-    /* We have a signed and unsigned type.  Make it so that type1 is signed. */
-    if ( type1[5] ) {
-        auto tmp = type1; type1 = type2; type2 = tmp;
+    /* If one is a uint. */
+    if ( type1[5] ) return type1;
+    if ( type2[5] ) return type2;
+
+    /* They are both int. */
+    return type1;
+}
+
+/* Set the type of a function call expression */
+chk_call(p) {
+    /* If the thing being called is an identifier and its type is null, 
+     * the function is undeclared and it is assumed to return int. */
+    if ( p[3][0] == 'id' && !p[3][2] )
+        p[2] = add_ref( implct_int() );
+
+    else {
+        auto t = p[3][2]; /* lookup_type( &p[3][3] ); */
+    
+        /* Is it a function? */
+        if ( t[0] == '()' )
+            p[2] = add_ref( t[3] );
+
+        /* or a pointer to a function? */
+        else if ( t[0] == '*' && t[3][0] == '()' )
+            p[2] = add_ref( t[3][3] );
+
+        else error("Attempt to call a non-function");
     }
-
-    /* "Otherwise, if the operand that has unsigned integer type has rank 
-     * greater or equal to the rank of the type of the other operand" 
-     * i.e. if the unsigned one is long and/or the signed one is not long. */
-    if ( type2[4] || !type1[4] )
-        return type2;
-
-    /* "Otherwise, if the type of the operand with signed integer type can
-     * represent all of the values of the type of the operand with unsigned 
-     * integer type".   We can only now have an unsigned int and a signed long,
-     * and sizeof(int) == sizeof(long), so this cannot happen.
-     *
-     * "Otherwise, both operands are converted to the unsigned integer type
-     * corresponding to the type of the operand with signed integer type"
-     * i.e. to unsigned long. */
-    return s_ulong;
 }
