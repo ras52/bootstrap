@@ -74,7 +74,7 @@ check-malloc: cc as malloc.c malloc.o
 
 clean:
 	$(RM) -f as ld $(LIB0_OBJS) stdio.o memory.o libc0.o crt0.o 
-	$(RM) -f $(LIB1_OBJS) $(LIB1_OBJS:%.o=%.s) libc.o
+	$(RM) -f $(LIB1_OBJS) output.s input.s malloc.s signal.s libc.o
 	$(RM) -f $(CC_OBJS) cc0 cc
 	$(RM) -f output2.o output2.s input2.o input2.s malloc2.o malloc2.s
 
