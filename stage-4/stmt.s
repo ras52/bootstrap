@@ -346,7 +346,7 @@ init_int:
 	RET
 
 
-####	#  Function:	void auto_decl(int brk, int cont, int ret);
+####	#  Function:	void extern_decl(int brk, int cont, int ret);
 	#
 	#    ext-decl ::= name ( '[' ']' | '(' ')' )?
 	#
@@ -471,9 +471,9 @@ auto_decl:
 
 	#  Ignore any type specifiers
 	CALL	skip_type
-	MOVL	token, %eax
 .L15:
 	#  And skip any pointer declarators
+	MOVL	token, %eax
 	CMPL	'*', %eax
 	JNE	.L15a
 	CALL	next
@@ -536,7 +536,7 @@ auto_decl:
 	CMPL	',', %eax
 	JNE	.L17a
 	CALL	next
-	JE	.L15
+	JMP	.L15
 .L17a:
 	CALL	semicolon
 
