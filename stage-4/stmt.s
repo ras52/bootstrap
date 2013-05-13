@@ -802,12 +802,14 @@ param_decls:
 	CALL	skip_type
 	TESTL	%eax, %eax
 	JZ	.L25
-	MOVL	token, %eax
 
 .L26:
 	CALL	declarator
 	CMPL	',', %eax
-	JE	.L26
+	JNE	.L26a
+	CALL	next
+	JMP	.L26
+.L26a:
 	CALL	semicolon
 	JMP	.L24
 .L25:
