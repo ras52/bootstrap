@@ -452,6 +452,64 @@ skip_type:
 	RET
 
 
+####	#  Function:	int declarator(char* buf);
+	#
+	#  This doesn't aim to parse all possible C declarators, and in
+	#  any case, it ignores everything other than the name.  It 
+	#  understands just enough for forwards compatibility with stage-5.
+	#
+	#    declarator ::= '*'* ( name | '(' declarator ')' ) ( '(' ')' )?
+	#
+	#  Current token is '*', name, or '('.  Returns the next token.
+.local declarator
+declarator:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+.L30:
+	#  Skip any pointer declarators
+	MOVL	token, %eax
+	CMPL	'*', %eax
+	JNE	.L31
+	CALL	next
+	JMP	.L30
+.L31:
+	#  Do we have a parenthetic bit?	
+	CMPL	'(', %eax
+	JNE	.L32
+	CALL	next
+	PUSH	8(%ebp)
+	CALL	declarator
+	POP	%ecx
+	CMPL	')', %eax
+	JNE	_error
+	JMP	.L33
+.L32:
+	#  If not, we must hae an identifier: save it in BUF if it's not null.
+	CMPL	'id', %eax
+	JNE	_error
+	MOVL	8(%ebp), %ecx
+	TESTL	%ecx, %ecx
+	JZ	.L33
+	MOVL	$value, %eax
+	PUSH	%eax
+	PUSH	%ecx
+	CALL	strcpy
+	POP	%eax
+	POP	%eax
+.L33:
+	#  Skip an empty paremeter list
+	CALL	next
+	CMPL	'(', %eax
+	JNE	.L34
+	CALL	next
+	CMPL	')', %eax
+	JNE	_error
+	CALL	next
+.L34:
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	void auto_decl(int brk, int cont, int ret);
 	#
 	#    init-decl ::= '*'* name ( init-int | '[' number ']' init-array )
@@ -472,27 +530,7 @@ auto_decl:
 	#  Ignore any type specifiers
 	CALL	skip_type
 .L15:
-	#  And skip any pointer declarators
-	MOVL	token, %eax
-	CMPL	'*', %eax
-	JNE	.L15a
-	CALL	next
-	JMP	.L15
-
-.L15a:
-	CMPL	'id', %eax
-	JNE	_error
-
-	#  Copy the identifier into the temporary buffer
-	MOVL	$value, %eax
-	PUSH	%eax
-	LEA	-16(%ebp), %eax
-	PUSH	%eax
-	CALL	strcpy
-	POP	%eax
-	POP	%eax
-
-	CALL	next
+	CALL	declarator
 	CMPL	'[', %eax
 	JNE	.L16
 
@@ -750,28 +788,24 @@ block:
 
 ####	#  Function:	void param_decls(int brk, int cont, int ret);
 	#
-	#    param-decls ::= ( skip-type ( '*'* name ',' )* '*'* name ';' )*
+	#    param-decls ::= ( skip-type ( declarator ',' )* declarator ';' )*
 	#
 	#  Skip over parameter declarations.  Current token is a type or '{'.
 param_decls:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
+
+	#  Null pointer for call to declarator()
+	XORL	%eax, %eax
+	PUSH	%eax
 .L24:
 	CALL	skip_type
 	TESTL	%eax, %eax
 	JZ	.L25
 	MOVL	token, %eax
 
-.L26:	#  Skip pointer declarators
-	CMPL	'*', %eax
-	JNE	.L26a
-	CALL	next
-	JMP	.L26
-.L26a:
-	CMPL	'id', %eax
-	JNE	_error
-	
-	CALL	next
+.L26:
+	CALL	declarator
 	CMPL	',', %eax
 	JE	.L26
 	CALL	semicolon
