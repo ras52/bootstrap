@@ -419,11 +419,44 @@ extern_decl:
 	RET
 
 
+####	#  Function:	int skip_type();
+	#
+	#    skip-type ::= ( 'int' | 'char' )*
+	#
+	#  Current token is a type, if there is one.
+	#  Returns non-zero if a type was skipped, and zero otherwise.
+.local skip_type
+skip_type:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	#  The return value
+	XORL	%eax, %eax
+	PUSH	%eax
+
+	MOVL	token, %eax
+.L27:
+	CMPL	'int', %eax
+	JE	.L28
+	CMPL	'char', %eax
+	JE	.L28
+	JMP	.L29
+.L28:
+	CALL	next
+	INCL	-4(%ebp)
+	JMP	.L27
+
+.L29:
+	POP	%eax
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	void auto_decl(int brk, int cont, int ret);
 	#
 	#    init-decl ::= '*'* name ( init-int | '[' number ']' init-array )
 	#
-	#    auto-stmt ::= 'auto' 'int'? init-decl ( ',' init-decl )* ';'
+	#    auto-stmt ::= 'auto' skip-type init-decl ( ',' init-decl )* ';'
 	#
 	#  Current token is 'auto'
 .local auto_decl
@@ -437,15 +470,16 @@ auto_decl:
 	CALL	next
 
 	#  Ignore any type specifiers
-	CMPL	'int', %eax
-	JNE	.L15a
+	CALL	skip_type
+	MOVL	token, %eax
 .L15:
-	CALL	next
-.L15a:
 	#  And skip any pointer declarators
 	CMPL	'*', %eax
-	JE	.L15
+	JNE	.L15a
+	CALL	next
+	JMP	.L15
 
+.L15a:
 	CMPL	'id', %eax
 	JNE	_error
 
@@ -500,7 +534,10 @@ auto_decl:
 .L17:
 	MOVL	token, %eax
 	CMPL	',', %eax
+	JNE	.L17a
+	CALL	next
 	JE	.L15
+.L17a:
 	CALL	semicolon
 
 	LEAVE
@@ -537,6 +574,12 @@ expr_stmt:
 stmt:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
+
+	#  For debugging purposes, put a blank line between each statement.
+	MOVL	'\n', %eax
+	PUSH	%eax
+	CALL	putchar
+	POP	%eax
 
 	PUSH	16(%ebp)
 	PUSH	12(%ebp)
@@ -616,9 +659,35 @@ block:
 	JNE	_error
 	CALL	next
 
+	#  This is a hideous mess.  Because we generate code as we parse
+	#  without building up an AST, we cannot allocate enough space on 
+	#  the stack up front for all variables.  This means we have to
+	#  allocate it on the fly (by PUSHing each auto declaration we see),
+	#  and cleaning it up at the end of each block.  However, if we 
+	#  break and continue out of a block, we still need to ensure we 
+	#  clean up the stack from each block.  (Returns do not need this,
+	#  as the RET instruction doesn't care whether the stack is clean.)
+	#  To get around this we thunk the labels at the end of the block,
+	#  and pass the thunk labels to the statements in the block.
+
 	PUSH	16(%ebp)
-	PUSH	12(%ebp)
-	PUSH	8(%ebp)
+
+	#  Select the cont label
+	MOVL	12(%ebp), %eax
+	TESTL	%eax, %eax
+	JZ	.L1b
+	CALL	new_label
+.L1b:
+	PUSH	%eax			# -8(%ebp) cont thunk for 12(%ebp)
+
+	#  Select the break label
+	MOVL	8(%ebp), %eax
+	TESTL	%eax, %eax
+	JZ	.L1c
+	CALL	new_label
+.L1c:
+	PUSH	%eax			# -12(%ebp) brk thunk for 8(%ebp)
+
 .L1:
 	MOVL	token, %eax
 	CMPL	'}', %eax
@@ -626,13 +695,54 @@ block:
 	CALL	stmt	
 	JMP	.L1
 .L2:
-	CALL	end_scope
+	#  For debugging purposes, put a blank line here
+	MOVL	'\n', %eax
 	PUSH	%eax
+	CALL	putchar
+	POP	%eax
+
+	CALL	new_label
+	PUSH	%eax			# -16(%ebp) thunk bypass label 
+	CALL	end_scope
+	PUSH	%eax			# stack size
+
+	#  Ordinary cleanup, and thunk bypass
 	CALL	clear_stack
-	CALL	next
+	PUSH	-16(%ebp)
+	CALL	branch
+	POP	%eax
+
+	#  Write the cont thunk
+	CMPL	$0, 12(%ebp)
+	JE	.L2b
+	PUSH	-8(%ebp)
+	CALL	local_label
+	POP	%eax
+	CALL	clear_stack
+	PUSH	12(%ebp)
+	CALL	branch
+	POP	%eax
+.L2b:
+
+	#  Write the break thunk
+	CMPL	$0, 8(%ebp)
+	JE	.L2c
+	PUSH	-12(%ebp)
+	CALL	local_label
+	POP	%eax
+	CALL	clear_stack
+	PUSH	8(%ebp)
+	CALL	branch
+	POP	%eax
+.L2c:
+
+	POP	%ecx			# stack size
 	MOVL	$frame_size, %eax
-	POP	%ecx
 	ADDL	%ecx, (%eax)
+	CALL	local_label		# write thunk bypass label
+	POP	%eax
+
+	CALL	next
 
 	LEAVE
 	RET
@@ -640,21 +750,24 @@ block:
 
 ####	#  Function:	void param_decls(int brk, int cont, int ret);
 	#
-	#    param-decls ::= ( 'int' ( '*'* name ',' )* '*'* name ';' )*
+	#    param-decls ::= ( skip-type ( '*'* name ',' )* '*'* name ';' )*
 	#
-	#  Skip over parameter declarations.  Current token is 'int' or '{'.
+	#  Skip over parameter declarations.  Current token is a type or '{'.
 param_decls:
 	PUSH	%ebp	
 	MOVL	%esp, %ebp
 .L24:
+	CALL	skip_type
+	TESTL	%eax, %eax
+	JZ	.L25
 	MOVL	token, %eax
-	CMPL	'int', %eax
-	JNE	.L25
 
 .L26:	#  Skip pointer declarators
-	CALL	next
 	CMPL	'*', %eax
-	JE	.L26
+	JNE	.L26a
+	CALL	next
+	JMP	.L26
+.L26a:
 	CMPL	'id', %eax
 	JNE	_error
 	

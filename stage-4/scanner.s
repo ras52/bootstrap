@@ -282,6 +282,7 @@ get_word:
 .local keywords
 .align 12 
 keywords:
+	#  These are the supported keywords
 	.string "auto"		.align 12
 	.string "break"		.align 12
         .string "continue"      .align 12
@@ -289,10 +290,13 @@ keywords:
 	.string "else"		.align 12
 	.string "extern"	.align 12
 	.string "if"		.align 12
-	.string "int"		.align 12
 	.string "return"	.align 12
 	.string "static"	.align 12
 	.string "while"		.align 12
+
+	#  These keywords are not supported, but are skipped in some contexts
+	.string "char"          .align 12
+	.string "int"		.align 12
 	.byte  0	# <-- the end of table marker
 
 .text 
