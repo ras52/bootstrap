@@ -126,8 +126,11 @@ chk_subscr(node) {
 
     /* In compatibility mode, give an error if we're subscripting something 
      * that's not an array of dwords, as the elt size will change. */
-    if ( compat_flag && type_size(node[2]) != 4 )
-        error( "Element size has changed since stage-4" );
+    if ( compat_flag && type_size(node[2]) != 4 ) {
+        auto buf[8] = {0};
+        print_type( buf, 32, node[2] );
+        error( "Element size has changed since stage-4: %s", buf);
+    }
 
 }
 
@@ -231,4 +234,55 @@ chk_call(p) {
 
         else error("Attempt to call a non-function");
     }
+}
+
+static
+print_dclt(buf, sz, t) {
+    if (t[5]) {
+        if ( t[5][0] == 'unsi' ) strncat(buf, "unsigned", sz);
+        else if ( t[5][0] == 'sign' ) strncat(buf, "signed", sz);
+        strncat(buf, " ", sz);
+    }
+    if (t[4]) {
+        if ( t[4][0] == 'long' ) strncat(buf, "long", sz);
+        else if ( t[4][0] == 'shor' ) strncat(buf, "short", sz);
+        strncat(buf, " ", sz);
+    }
+    if ( t[3][0] == 'int' ) strncat(buf, "int", sz);
+    else if ( t[3][0] == 'char' ) strncat(buf, "char", sz);
+}
+
+static
+print_type1(buf, sz, t) {
+    if (!t) strncat(buf, "int", sz);
+    else if (t[0] == 'dclt') print_dclt(buf, sz, t);
+    else if (t[0] == '*') {
+        print_type1(buf, sz, t[3]); 
+        if (t[3] == '[]' || t[3] == '()') strncat(buf, "(", sz);
+        strncat(buf, "*", sz); 
+    }
+    else if (t[0] == '[]') { print_type1(buf, sz, t[3]); }
+    else if (t[0] == '()') { print_type1(buf, sz, t[3]); }
+}
+
+static
+print_type2(buf, sz, t) {
+    if (t[0] == '*') {
+        if (t[3] == '[]' || t[3] == '()') strncat(buf, ')', sz);
+        print_type2(buf, sz, t[3]);
+    }
+    else if (t[0] == '[]') {
+        strncat(buf, "[]", sz);
+        print_type2(buf, sz, t[3]); 
+    }
+    else if (t[0] == '()') {
+        strncat(buf, "()", sz);
+        print_type2(buf, sz, t[3]); 
+    }
+}
+
+print_type(buf, sz, t) {
+    print_type1(buf, sz, t);
+    print_type2(buf, sz, t);
+    return buf;
 }

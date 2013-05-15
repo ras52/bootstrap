@@ -8,23 +8,31 @@ static line = 1;
 static filename;
 
 static
-print_msg(fmt, ap) {
+print_msg(fmt, ap)
+    char *fmt;
+{
     extern stderr;
     fprintf(stderr, "%s:%d: ", filename, line);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
 }
 
-warning(fmt) {
+warning(fmt)
+    char *fmt;
+{
     print_msg(fmt, &fmt);
 }
 
-error(fmt) {
+error(fmt)
+    char *fmt;
+{
     print_msg(fmt, &fmt);
     exit(1);
 }
 
-int_error(fmt) {
+int_error(fmt)
+    char* fmt;
+{
     extern stderr;
     fputs("Internal error: ", stderr);
     vfprintf(stderr, fmt, &fmt);
@@ -96,33 +104,35 @@ isidchar(c) {
  * e.g. 'whil' for "while"); otherwise set NODE->type = 'id' for an 
  * identifier.   Returns NODE. */
 static
-chk_keyword(node) {
+chk_keyword(node)
+{
     /* Argument is:  struct node { int type; int dummy; char str[]; } */
     
-    auto keywords[28] = {
-        /* Complete list of keywords per K&R, minus 'entry'.
-         * C90 adds 'const', 'enum', 'signed', 'void', and 'volatile'
+    auto char *keywords[28] = {
+        /* Complete list of keywords per K&R, minus 'entry', plus 'signed'
+         * from C90.  C90 also adds 'const', 'enum', 'void', and 'volatile'.
          *
          * 'do' and 'if' have an extra NUL character to pad them to 4 bytes
-         * for casting to an int (i.e. a multicharacter literal). */
+         * for casting to an int (i.e. a multicharacter literal). 
+         *
+         * TODO: Not yet implemented: double, sizeof, struct, typedef, union. 
+         */
         "auto", "break", "case", "char", "continue", "default", "do\0", 
         "double", "else", "extern", "float", "for", "goto", "if\0", 
         "int", "long", "register", "return", "short", "sizeof", "static", 
         "struct", "switch", "typedef", "union", "unsigned", "while", 0
     };
 
-    /* TODO: Not yet implemented: double, sizeof, struct, typedef, union */
-
-    auto i = 0, str = &node[3];
-    while ( keywords[i] && strcmp(keywords[i], str) != 0 )
+    auto i = 0;
+    while ( keywords[i] && strcmp(keywords[i], &node[3]) != 0 )
         ++i;
 
     if ( keywords[i] ) {
         /* Change the id node to an op node. */
         node[0] = *keywords[i];
 
-        /* Zero the memory used by the string: it's now an node* array */
-        memset( str, 0, 16 );
+        /* Zero the memory used by the string: it's now an node* array[4]. */
+        memset( &node[3], 0, 16 );
     }
     
     return node;
@@ -132,7 +142,9 @@ chk_keyword(node) {
  * as a string with current length *LEN_PTR.  The value of *LEN_PTR is 
  * incremented.  The node may be reallocated. */
 static
-node_lchar( node_ptr, len_ptr, chr ) {
+node_lchar( node_ptr, len_ptr, chr )
+    int *len_ptr;
+{
     auto node = *node_ptr;
     node = grow_node( node, *len_ptr );
     lchar( &node[3], (*len_ptr)++, chr );
@@ -161,7 +173,9 @@ get_word(stream, c) {
 /* Read a number (in octal, hex or decimal) starting with digit C into BUF, 
  * which must be 16 bytes long (or longer). */
 static
-read_number(stream, buf, c) {
+read_number(stream, buf, c) 
+    char *buf;
+{
     auto i = 0;
     if ( c == '0' ) {
         lchar( buf, i++, c );
@@ -196,7 +210,7 @@ read_number(stream, buf, c) {
  * parse it into NODE->val, set NODE->type, and return NODE. */
 static
 get_number(stream,c) {
-    auto buf[16], nptr;
+    auto char buf[16], *nptr;
     /* struct node { int type; int dummy; int val; }; */
     auto node = new_node('num', 0);
 
@@ -259,7 +273,9 @@ get_multiop(stream, c) {
 
 /* Convert a quoted character literal in STR (complete with single quotes,
  * and escapes) into an integer, and return that. */
-parse_chr(str) {
+parse_chr(str)
+    char *str;
+{
     auto i = 0, val = 0, bytes = 0;
 
     if ( rchar( str, i++ ) != '\'' )
