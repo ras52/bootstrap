@@ -29,7 +29,12 @@ as ld:
 %.s:	%.c cc0
 	cc0 -S $<
 
+# LIB0_OBJS contain a minimal C library written entirely in assembler.
+# LIB1_OBJS are additional objects, most of which are written in C.
+
 LIB0_OBJS = string.o ctype.o exit.o unistd.o
+LIB1_OBJS = output.o input.o char.o malloc.o signal.o string2.o
+
 CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 
 libc0.o:	ld $(LIB0_OBJS) stdio.o memory.o
@@ -38,7 +43,6 @@ libc0.o:	ld $(LIB0_OBJS) stdio.o memory.o
 cc0:	ld libc0.o crt0.o $(CC_OBJS)
 	ld -o cc0 libc0.o crt0.o $(CC_OBJS)
 
-LIB1_OBJS = output.o input.o char.o malloc.o signal.o
 
 libc.o:	ld $(LIB0_OBJS) $(LIB1_OBJS)
 	ld -r -o libc.o $(LIB0_OBJS) $(LIB1_OBJS)

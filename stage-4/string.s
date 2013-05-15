@@ -113,12 +113,46 @@ strcpy:
 
 	MOVL	12(%ebp), %esi
 	MOVL	8(%ebp), %edi
-.L7:
+
+.L7:	#  We cannot use REP MOVSB because that does not check for a
+	#  terminating null character.
 	LODSB
 	STOSB
 	CMPB	$0, %al
 	JNE	.L7
   
+	MOVL	8(%ebp), %eax
+
+	POP	%edi
+	POP	%esi
+	POP	%ebp
+	RET
+
+
+####	#  Function:	int strncpy(char* dest, char const* str, size_t n);
+	#
+strncpy:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+	PUSH	%edi
+
+	MOVL	16(%ebp), %ecx
+	TESTL	%ecx, %ecx
+	JZ	.L9
+
+	MOVL	12(%ebp), %esi
+	MOVL	8(%ebp), %edi
+
+.L8:	#  We cannot use REP MOVSB because that does not check for a
+	#  terminating null character.
+	LODSB
+	STOSB
+	DECL	%ecx
+	JZ	.L9
+	CMPB	$0, %al
+	JNE	.L8
+.L9:
 	MOVL	8(%ebp), %eax
 
 	POP	%edi

@@ -1,4 +1,4 @@
-# unistd.s
+# unistd.s  --  Linux syscalls
 
 # Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
@@ -67,6 +67,7 @@ read:
 ####	#  Function:	void _exit(int status)
 	#
 	#  Terminate program execution with given status.
+.globl _exit
 _exit:
 	PUSH	%ebp
 	MOVL	%esp, %ebp

@@ -1,4 +1,4 @@
-# char.s
+# char.s  --  functions write/read a character to/from a string
 
 # Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
@@ -26,6 +26,7 @@ rchar:
 	RET
 
 ####	#  Function: char lchar(char* s, size_t n, char c);
+	#
 	#  B's lchar function.  Sets S[N] = C, and returns C, zero padded in 
 	#  a word.
 .globl lchar

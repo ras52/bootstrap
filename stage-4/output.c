@@ -1,4 +1,4 @@
-/* output.c
+/* output.c  --  output stdio functions
  *
  * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com> 
  * All rights reserved.
@@ -141,7 +141,7 @@ fputc( c, stream ) {
 
 /* The C library putc() */
 putc( s, stream ) {
-    return putc( s, stream );
+    return fputc( s, stream );
 }
 
 /* The C library putchar() */
