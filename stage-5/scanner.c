@@ -108,7 +108,7 @@ chk_keyword(node)
 {
     /* Argument is:  struct node { int type; int dummy; char str[]; } */
     
-    auto char *keywords[28] = {
+    auto char *keywords[29] = {
         /* Complete list of keywords per K&R, minus 'entry', plus 'signed'
          * from C90.  C90 also adds 'const', 'enum', 'void', and 'volatile'.
          *
@@ -119,8 +119,9 @@ chk_keyword(node)
          */
         "auto", "break", "case", "char", "continue", "default", "do\0", 
         "double", "else", "extern", "float", "for", "goto", "if\0", 
-        "int", "long", "register", "return", "short", "sizeof", "static", 
-        "struct", "switch", "typedef", "union", "unsigned", "while", 0
+        "int", "long", "register", "return", "signed", "short", "sizeof", 
+        "static", "struct", "switch", "typedef", "union", "unsigned", "while", 
+        0
     };
 
     auto i = 0;

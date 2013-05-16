@@ -239,27 +239,27 @@ chk_call(p) {
 static
 print_dclt(buf, sz, t) {
     if (t[5]) {
-        if ( t[5][0] == 'unsi' ) strncat(buf, "unsigned", sz);
-        else if ( t[5][0] == 'sign' ) strncat(buf, "signed", sz);
-        strncat(buf, " ", sz);
+        if ( t[5][0] == 'unsi' ) strlcat(buf, "unsigned", sz);
+        else if ( t[5][0] == 'sign' ) strlcat(buf, "signed", sz);
+        strlcat(buf, " ", sz);
     }
     if (t[4]) {
-        if ( t[4][0] == 'long' ) strncat(buf, "long", sz);
-        else if ( t[4][0] == 'shor' ) strncat(buf, "short", sz);
-        strncat(buf, " ", sz);
+        if ( t[4][0] == 'long' ) strlcat(buf, "long", sz);
+        else if ( t[4][0] == 'shor' ) strlcat(buf, "short", sz);
+        strlcat(buf, " ", sz);
     }
-    if ( t[3][0] == 'int' ) strncat(buf, "int", sz);
-    else if ( t[3][0] == 'char' ) strncat(buf, "char", sz);
+    if ( t[3][0] == 'int' ) strlcat(buf, "int", sz);
+    else if ( t[3][0] == 'char' ) strlcat(buf, "char", sz);
 }
 
 static
 print_type1(buf, sz, t) {
-    if (!t) strncat(buf, "int", sz);
+    if (!t) strlcat(buf, "int", sz);
     else if (t[0] == 'dclt') print_dclt(buf, sz, t);
     else if (t[0] == '*') {
         print_type1(buf, sz, t[3]); 
-        if (t[3] == '[]' || t[3] == '()') strncat(buf, "(", sz);
-        strncat(buf, "*", sz); 
+        if (t[3] == '[]' || t[3] == '()') strlcat(buf, "(", sz);
+        strlcat(buf, "*", sz); 
     }
     else if (t[0] == '[]') { print_type1(buf, sz, t[3]); }
     else if (t[0] == '()') { print_type1(buf, sz, t[3]); }
@@ -268,15 +268,15 @@ print_type1(buf, sz, t) {
 static
 print_type2(buf, sz, t) {
     if (t[0] == '*') {
-        if (t[3] == '[]' || t[3] == '()') strncat(buf, ')', sz);
+        if (t[3] == '[]' || t[3] == '()') strlcat(buf, ')', sz);
         print_type2(buf, sz, t[3]);
     }
     else if (t[0] == '[]') {
-        strncat(buf, "[]", sz);
+        strlcat(buf, "[]", sz);
         print_type2(buf, sz, t[3]); 
     }
     else if (t[0] == '()') {
-        strncat(buf, "()", sz);
+        strlcat(buf, "()", sz);
         print_type2(buf, sz, t[3]); 
     }
 }

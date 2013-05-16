@@ -127,9 +127,9 @@ binary_op(stream, node, need_lval) {
     expr_code( stream, node[4], 0);
 
     if      ( op == '[]'  ) subscript(stream, node, need_lval);
-    else if ( op == '*'   ) pop_mult(stream, 0);
-    else if ( op == '/'   ) pop_div(stream, 0);
-    else if ( op == '%'   ) pop_mod(stream, 0);
+    else if ( op == '*'   ) pop_mult(stream, 0, node[2][5]);
+    else if ( op == '/'   ) pop_div(stream, 0, node[2][5]);
+    else if ( op == '%'   ) pop_mod(stream, 0, node[2][5]);
     else if ( op == '+'   ) pop_add(stream, 0, sz);
     else if ( op == '-'   ) pop_sub(stream, 0, sz);
     else if ( op == '<<'  ) pop_lshift(stream, 0);

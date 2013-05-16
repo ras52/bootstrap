@@ -103,31 +103,33 @@ start_binop(stream, is_assign, is_sym) {
     else fputs("\tMOVL\t%eax, %ecx\n\tPOPL\t%eax\n", stream);
 }
 
-pop_mult(stream, is_assign) {
+pop_mult(stream, is_assign, is_unsigned) {
     fputs("\tPOPL\t%ecx\n", stream);
-    fprintf(stream, "\tIMULL\t%s\n", is_assign ? "(%ecx)" : "%ecx");
+    fprintf(stream, "\t%s%c\t%s\n", is_unsigned ? "MUL" : "IMUL", 'L',
+            is_assign ? "(%ecx)" : "%ecx");
     if (is_assign)
         fputs("\tMOVL\t%eax, (%ecx)\n\tMOVL\t%ecx, %eax\n", stream);
 }
 
 static
-common_div(stream, is_assign) {
+common_div(stream, is_assign, is_unsigned) {
     if (is_assign)
         fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%esp), %eax\nMOVL\t(%eax), %eax\n", 
               stream);
     else
         fputs("\tMOVL\t%eax, %ecx\n\tPOPL\t%eax\n", stream);
-    fputs("\tXORL\t%edx, %edx\n\tIDIVL\t%ecx\n", stream);
+    fputs("\tXORL\t%edx, %edx\n", stream);
+    fprintf(stream, "\t%s%c\t%%ecx\n", is_unsigned ? "DIV" : "IDIV", 'L');
 }
 
-pop_div(stream, is_assign) {
-    common_div(stream, is_assign);
+pop_div(stream, is_assign, is_unsigned) {
+    common_div(stream, is_assign, is_unsigned);
     if (is_assign)
         fputs("\tPOPL\t%ecx\nMOVL\t%eax, (%ecx)\nMOVL\t%ecx, %eax\n", stream);
 }
 
-pop_mod(stream, is_assign) {
-    common_div(stream, is_assign);
+pop_mod(stream, is_assign, is_unsigned) {
+    common_div(stream, is_assign, is_unsigned);
     if (is_assign)
         fputs("\tPOPL\t%eax\nMOVL\t%edx, (%eax)\n", stream);
     else

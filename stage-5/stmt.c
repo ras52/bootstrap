@@ -359,7 +359,7 @@ decl_specs() {
     if ( decls[4][3][0] == 'char' && decls[4][4] )
         error("Invalid combination of type specifiers");
 
-    if ( decls[4][3][0] == 'int' && decls[4][5] == 'sign' ) {
+    if ( decls[4][3][0] == 'int' && decls[4][5] && decls[4][5][0] == 'sign' ) {
         free_node( decls[4][5] );
         decls[4][5] = 0;
     }
