@@ -81,20 +81,25 @@ dereference(stream, need_lval) {
     if (!need_lval) fputs("\tMOVL\t(%eax), %eax\n", stream);
 }
 
-increment(stream) {
-    fputs("\tINCL\t(%eax)\n\tMOVL\t(%eax), %eax\n", stream);
+static
+do_inc(stream, reg, n) {
+    if (n == 0)
+        ;
+    else if (n == 1 || n == -1)
+        fprintf(stream, "\t%s%c\t(%s)\n", n == 1 ? "INC" : "DEC", 'L', reg);
+    else
+        fprintf(stream, "\t%s%c\t$%d, (%s)\n", 
+                n > 0 ? "ADD" : "SUB", 'L', abs(n), reg);
 }
 
-decrement(stream) {
-    fputs("\tDECL\t(%eax)\n\tMOVL\t(%eax), %eax\n", stream);
+increment(stream, n) {
+    do_inc(stream, "%eax", n);
+    dereference(stream, 0);
 }
 
-postfix_inc(stream) {
-    fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%eax), %eax\n\tINCL\t(%ecx)\n", stream);
-}
-
-postfix_dec(stream) {
-    fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%eax), %eax\n\tDECL\t(%ecx)\n", stream);
+postfix_inc(stream, n) {
+    fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%eax), %eax\n", stream);
+    do_inc(stream, "%ecx", n);
 }
 
 static

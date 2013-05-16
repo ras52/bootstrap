@@ -89,15 +89,13 @@ postfx_expr() {
 
 
         if ( t == '++' || t == '--' ) {
-            req_lvalue(p);
-
             /* Postfix ++ and -- are marked as binary operators.  This is 
              * what distinguishes them from the prefix versions which are 
              * marked as unary.  This is inspired by C++'s idea of
              * T operator++(T&, int) vs. T& operator++(T&). */
             p = do_binop( p );
 
-            p[2] = add_ref( p[3][2] );
+            chk_incdec(p);
         }
     
         else if ( t == '[' ) {
@@ -135,18 +133,22 @@ unary_expr() {
         auto p = take_node(1);
         req_token();
         p[3] = unary_expr();
+
         if (t == '+' || t == '-' || t == '~')
             p[2] = add_ref( prom_type( p[3][2] ) );
+
         else if (t == '!')
             p[2] = add_ref( implct_int() );
-        else if (t == '++' || t == '--' || t == '&') {
+
+        else if (t == '&') {
             req_lvalue( p[3] );
-            if (t == '&') {
-                p[2] = new_node('*', 1);
-                p[2][3] = add_ref( p[3][2] );
-            }
-            else p[2] = add_ref( p[3][2] );
+            p[2] = new_node('*', 1);
+            p[2][3] = add_ref( p[3][2] );
         }
+
+        else if (t == '++' || t == '--')
+            chk_incdec(p);
+
         else if (t == '*')
             chk_deref(p);
         return p;

@@ -127,7 +127,7 @@ chk_subscr(node) {
     /* In compatibility mode, give an error if we're subscripting something 
      * that's not an array of dwords, as the elt size will change. */
     if ( compat_flag && type_size(node[2]) != 4 ) {
-        auto buf[8] = {0};
+        auto buf[8];
         print_type( buf, 32, node[2] );
         error( "Element size has changed since stage-4: %s", buf);
     }
@@ -236,6 +236,26 @@ chk_call(p) {
     }
 }
 
+/* Set the type of a prefix or postfix increment or decrement expression */
+chk_incdec(p) {
+    extern compat_flag;
+
+    req_lvalue( p[3] );
+
+    /* Its type is its argument's type. */
+    p[2] = add_ref( p[3][2] );
+
+    /* In stage-4, increments were always done as if on an int.  This 
+     * means that int* now increments differently.  Warn about that. */
+    if ( compat_flag && ( p[2][0] == '[]' || p[2][0] == '*' )
+         && type_size( p[2][3] ) != 1 ) {
+        auto buf[8];
+        print_type( buf, 32, p[2][3] );
+        error( "Element size has changed since stage-4: %s", buf);
+    }
+        
+}
+
 static
 print_dclt(buf, sz, t) {
     if (t[5]) {
@@ -282,6 +302,7 @@ print_type2(buf, sz, t) {
 }
 
 print_type(buf, sz, t) {
+    lchar(buf, 0, '\0');
     print_type1(buf, sz, t);
     print_type2(buf, sz, t);
     return buf;

@@ -50,11 +50,19 @@ leaf_code(stream, node, need_lval) {
 }
 
 static
+ptr_inc_sz(type) {
+    if ( type[0] == '[]' || type[0] == '*' )
+        return type_size( type[3] );
+    else
+        return 1;
+}
+
+static
 unary_post(stream, node, need_lval) {
     expr_code( stream, node[3], 1 );
 
-    if      ( node[0] == '++' ) postfix_inc(stream);
-    else if ( node[0] == '--' ) postfix_dec(stream);
+    if      ( node[0] == '++' ) postfix_inc( stream,  ptr_inc_sz(node[2]) );
+    else if ( node[0] == '--' ) postfix_inc( stream, -ptr_inc_sz(node[2]) );
     else int_error( "Unknown operator: '%Mc'", node[0] );
 }
 
@@ -70,8 +78,8 @@ unary_pre(stream, node, need_lval) {
     else if ( op == '!'  ) logic_not(stream);
     else if ( op == '&'  ) ;
     else if ( op == '*'  ) dereference(stream, need_lval);
-    else if ( op == '++' ) increment(stream);
-    else if ( op == '--' ) decrement(stream);
+    else if ( op == '++' ) increment(stream,  ptr_inc_sz(node[2]) );
+    else if ( op == '--' ) increment(stream, -ptr_inc_sz(node[2]) );
     else int_error("Unknown operator: '%Mc'", op);
 }
 
