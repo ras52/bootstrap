@@ -16,6 +16,6 @@ strlcat(dest, src, n) {
 strcat(dest, src) {
     auto l1 = strlen(dest), l2 = strlen(src);
     strcpy( dest + l1, src );
-    lchar(dest, l1 + l2);
+    lchar(dest, l1 + l2, '\0');
     return dest;
 }
