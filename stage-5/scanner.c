@@ -170,58 +170,71 @@ get_word(stream, c) {
     return chk_keyword( node );
 }
 
-
-/* Read a number (in octal, hex or decimal) starting with digit C into BUF, 
- * which must be 16 bytes long (or longer). */
+/* Read a preprocessor number into a new node that will be returned.  
+ * The pp-number will be converted into a proper number (or an error issued)
+ * in the get_number() function. */
 static
-read_number(stream, buf, c) 
-    char *buf;
-{
+get_ppnum(stream, c) {
     auto i = 0;
-    if ( c == '0' ) {
-        lchar( buf, i++, c );
-        c = fgetc(stream);
-        /* Is it hex? */
-        if ( c == 'x' ) {
-            lchar( buf, i++, c );
-            do lchar( buf, i++, c );
-            while ( i < 16 && isxdigit( c = fgetc(stream) ) );
+
+    /* struct node { int type; int dummy, dummy2; char str[]; }; */
+    auto node = new_node('ppno', 0);
+
+    node_lchar( &node, &i, c );
+
+    /* At this stage in processing, arbitrary suffixes (and infixes) are
+     * permitted, not just the 'u' and 'l' type suffixes, the '0x' prefix,
+     * the hex digits, and the 'e' expontent infix. */
+    while ( (c = fgetc(stream)) != -1 && ( c == '.' || isalnum(c) ) ) {
+        node_lchar( &node, &i, c );
+
+        /* 'E' and 'e' are for exponents, and can have a sign suffix.
+         * C99 adds 'P' and 'p'. */
+        if ( c == 'e' || c == 'E' ) {
+            c = fgetc(stream);
+            if (c == '+' || c == '-') node_lchar( &node, &i, c );
+            else if ( c == -1 ) break;
+            else ungetc(c, stream);
         }
-        /* Is it octal? */
-        else if ( isdigit(c) ) {
-            do lchar( buf, i++, c );
-            while ( i < 16 && isdigit( c = fgetc(stream) ) );
-        }
-        /* else it's a literal zero */
     }
-    /* It must be a decimal */
-    else {
-        do lchar( buf, i++, c );
-        while ( i < 16 && isdigit( c = fgetc(stream) ) );
-    }
-    if ( i == 16 )
-        error("Overflow reading number");
-    
-    lchar( buf, i, 0 );
+
+    node_lchar( &node, &i, 0 );
     ungetc(c, stream);
+
+    return node;
 }
 
 /* Create a node, NODE, which will be returned; read a number (oct / hex / dec)
  * starting with character C (which has already been checked by isdigit), 
  * parse it into NODE->val, set NODE->type, and return NODE. */
 static
-get_number(stream,c) {
-    auto char buf[16], *nptr;
-    /* struct node { int type; int dummy; int val; }; */
+get_number(stream, c) {
+    auto char *nptr;
+    auto ppnode = get_ppnum(stream, c);
+
+    /* struct node { int type; int dummy; node* type; int val; }; */
     auto node = new_node('num', 0);
 
-    read_number( stream, buf, c );
-    node[3] = strtol( buf, &nptr, 0 );
-    if ( rchar(nptr, 0) )
-        error("Unexpected character '%c' in string \"%s\"",
-              rchar(nptr, 0), buf);
-    
+    /* At present we only support integer constants.  Floats need 
+     * recognising and treating separately. */
+    node[3] = strtol( &ppnode[3], &nptr, 0 );
     node[2] = add_ref( implct_int() );
+
+    /* Process type suffixes */
+    while ( c = rchar(nptr, 0) ) {
+        if ( (c == 'u' || c == 'U') && !node[2][5] )
+            node[2][5] = new_node('unsi', 0);
+        else if ( (c == 'l' || c == 'L') && !node[2][4] )
+            node[2][4] = new_node('long', 0);
+        else break;
+        ++nptr;
+    }
+
+    if (c)
+        error("Unexpected character '%c' in number \"%s\"",
+              c, &ppnode[3]);
+
+    free_node(ppnode);
     return node;
 }
 
@@ -358,7 +371,7 @@ next() {
         token = 0;
     else if ( isidchar1(c) )
         token = get_word(stream, c);
-    else if ( isdigit(c) )
+    else if ( isdigit(c) || c == '.' )
         token = get_number(stream, c);
     else if ( c == '\'' || c == '"' )
         token = get_qlit(stream, c);
