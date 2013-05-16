@@ -140,11 +140,8 @@ unary_expr() {
         else if (t == '!')
             p[2] = add_ref( implct_int() );
 
-        else if (t == '&') {
-            req_lvalue( p[3] );
-            p[2] = new_node('*', 1);
-            p[2][3] = add_ref( p[3][2] );
-        }
+        else if (t == '&')
+            chk_addr(p);
 
         else if (t == '++' || t == '--')
             chk_incdec(p);

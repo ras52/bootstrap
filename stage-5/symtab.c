@@ -201,6 +201,12 @@ lookup_type( name ) {
     return e ? e[5][2] : 0;
 }
 
+/* Lookup the storage type for a name */
+lookup_strg( name ) {
+    auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
+    return e ? e[5][3] : 0;
+}
+
 /* Check whether another symbol called NAME exists in the current scope,
  * and if necessary give an error. */
 chk_dup_sym( name, has_linkage ) {

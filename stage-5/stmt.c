@@ -279,7 +279,7 @@ prefix_decl(decl, phead) {
  *  declarator ::= postfx-decl */
 static
 declarator(dclt) {
-    /* The 'decl' node has operands: [3] UNUSED, [4] name, [5] init.
+    /* The 'decl' node has operands: [3] storage, [4] name, [5] init.
      * Note the [6] slot is used as an int for the fuction stack size. */
     auto decl = new_node('decl', 3);
 
@@ -390,6 +390,11 @@ declaration( fn ) {
 
     while (1) {
         auto decl = declarator(decls[4]), name = &decl[4][3];
+
+        /* Store storage specifier: particularly important for 'register'
+         * so we can check it when taking the address of an identifier. */
+        if ( decls[3] )
+            decl[3] = add_ref( decls[3] );
         
         /* Automatic declarations need space reserving in the frame. 
          * A variable has automatic storage duration if (i) it is declared

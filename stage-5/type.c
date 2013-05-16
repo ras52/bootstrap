@@ -256,6 +256,19 @@ chk_incdec(p) {
         
 }
 
+chk_addr(p) {
+    req_lvalue( p[3] );
+
+    if ( p[3][0] == 'id' ) {
+        auto strg = lookup_strg( &p[3][3] );
+        if ( strg && strg[0] == 'regi' )
+            error("Cannot take address of variable with register storage");
+    }
+
+    p[2] = new_node('*', 1);
+    p[2][3] = add_ref( p[3][2] );
+}
+
 static
 print_dclt(buf, sz, t) {
     if (t[5]) {
