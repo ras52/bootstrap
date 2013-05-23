@@ -133,32 +133,101 @@ ungetchar( c ) {
     return ungetc( c, stdin );
 }
 
-/* The C library strtol() */
-strtol( nptr, endptr, base ) {
-    auto c = rchar( nptr, 0 ), n = 0;
+/* Skip whitespace and a sign, and return non-zero if negative */
+static
+skip_ws_sgn( str_ptr ) {
+    auto c, p = *str_ptr, sgn = 0;
 
-    if (c == '-') return -strtol( nptr+1, endptr, base);
-    else if (c == '+') c = rchar( ++nptr, 0 );
+    while ( isspace( c = rchar(p, 0) ) )
+        ++p;
 
-    /* Look for a base prefix */
+    if (c == '-') {
+        sgn = -1; ++p;
+    }
+    else if (c == '+')
+        ++p;
+
+    *str_ptr = p;
+    return sgn;
+}
+
+/* Common part of strtoul and strtol.  Returns non-zero if 32-bit overflow. */
+static
+strtoi32( val_ptr, str_ptr, base ) {
+    auto c, p = *str_ptr, overflow = 0;
+
+    c = rchar( p, 0 );
+
+    /* Look for a base prefix. */
     if ( (base == 0 || base == 16) && c == '0' ) {
-        c = rchar( ++nptr, 0 );
-        if (c == 'x') { base = 16; c = rchar( ++nptr, 0 ); }
+        c = rchar( ++p, 0 );
+        if (c == 'x') { base = 16; c = rchar( ++p, 0 ); }
         else if (base == 0) base = 8;
     }
     if ( base == 0 ) base = 10;
 
-    /* Read the number.  TODO Handle overflow */
-    while (1) {
+    /* Read the number. */
+    while (!overflow) {
+        /* Handling numbers > INTMAX and overflow is tricky because 
+         * in stage-4 all numbers are signed.  In particular, a * b
+         * involves an IMUL instruction.  We use __mul_add that uses
+         * MUL instead of IMUL, and detects overflow. */
         if ( c >= '0' && c <= '0' + (base <= 10 ? base - 1 : 9) )
-            n = n * base + c - '0';
-        else if ( base > 10 && c >= 'a' && c <= 'a' + base - 1 )
-            n = n * base + c - 'a' + 10;
-        else if ( base > 10 && c >= 'A' && c <= 'A' + base - 1 )
-            n = n * base + c - 'A' + 10;
+            overflow = __mul_add( val_ptr, base, c - '0' );
+        else if ( base > 10 && c >= 'a' && c <= 'a' + base - 11 )
+            overflow = __mul_add( val_ptr, base, c - 'a' + 10 );
+        else if ( base > 10 && c >= 'A' && c <= 'A' + base - 11 )
+            overflow = __mul_add( val_ptr, base, c - 'A' + 10 );
         else break;
 
-        c = rchar( ++nptr, 0 );
+        c = rchar( ++p, 0 );
+    }
+
+    *str_ptr = p;
+    return overflow;
+}
+
+/* The C library strtoul() */
+strtoul( nptr, endptr, base ) {
+    extern errno;
+    auto n = 0;
+
+    /* A negative sign is accepted on an unsigned number.  
+     * "-1" parses as a very big positive number. */
+    auto neg = skip_ws_sgn( &nptr );
+
+    if ( strtoi32( &n, &nptr, base ) ) {
+        n = 0xFFFFFFFF; /* ULONG_MAX */
+        errno = 34; /* ERANGE */
+    }
+    else if ( neg )
+        n = -n;
+
+    if ( endptr ) *endptr = nptr;
+    return n;           
+}
+
+/* The C library strtol() */
+strtol( nptr, endptr, base ) {
+    extern errno;
+    auto n = 0;
+
+    auto neg = skip_ws_sgn( &nptr );
+
+    /* We ignore the overflow return as it then returns 0xFFFFFFFF */
+    strtoi32( &n, &nptr, base );
+
+    if ( neg ) {
+        /* 0x70000000 is -INT_MIN, which is representable when negative */
+        if ( n & 0x70000000 && n != 0x70000000 ) {
+            n = 0x70000000; /* INT_MIN */
+            errno = 34; /* ERANGE */
+        }
+        else n = -n;
+    }
+    else if ( n & 0x70000000 ) {
+        n = 0x7FFFFFFF; /* INT_MAX */
+        errno = 34; /* ERANGE */
     }
 
     if ( endptr ) *endptr = nptr;

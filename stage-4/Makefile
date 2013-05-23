@@ -33,7 +33,7 @@ as ld:
 # LIB1_OBJS are additional objects, most of which are written in C.
 
 LIB0_OBJS = string.o ctype.o exit.o unistd.o
-LIB1_OBJS = output.o input.o char.o malloc.o signal.o string2.o stdlib.o
+LIB1_OBJS = output.o input.o char.o malloc.o signal.o string2.o imath.o
 
 CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 
