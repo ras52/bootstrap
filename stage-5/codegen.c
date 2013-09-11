@@ -67,6 +67,13 @@ unary_post(stream, node, need_lval) {
 }
 
 static
+member_bin(stream, node, need_lval) {
+    expr_code( stream, node[3], node[0] == '.' );
+    /* We've stored the member offset as an integer in node[5] */
+    mem_access( stream, node[5], need_lval );
+}
+
+static
 unary_pre(stream, node, need_lval) {
     auto op = node[0];
     auto op_needs_lv = op == '++' || op == '--' || op == '&';
@@ -125,6 +132,26 @@ subscript(stream, node, need_lval) {
 }
 
 static
+cmp_op(stream, node) {
+    auto op = node[0];
+    auto type = usual_conv( node[3][2], node[4][2] ), sz = type_size( type );
+    auto is_unsgn = type[5];
+
+    expr_code( stream, node[3], 0 );
+    promote( stream, is_unsgn, type_size( node[3][2] ), sz );
+    asm_push( stream );
+    expr_code( stream, node[4], 0 );
+    promote( stream, is_unsgn, type_size( node[4][2] ), sz );
+
+    if      ( op == '<'   ) pop_lt(stream, sz, is_unsgn);
+    else if ( op == '>'   ) pop_gt(stream, sz, is_unsgn);
+    else if ( op == '<='  ) pop_le(stream, sz, is_unsgn);
+    else if ( op == '>='  ) pop_ge(stream, sz, is_unsgn);
+    else if ( op == '=='  ) pop_eq(stream, sz);
+    else if ( op == '!='  ) pop_ne(stream, sz);
+}
+
+static
 binary_op(stream, node, need_lval) {
     auto op = node[0], sz = type_size( node[2] );
     expr_code( stream, node[3], is_assop(op) );
@@ -132,7 +159,7 @@ binary_op(stream, node, need_lval) {
     /* Discard the l.h.s. of the , operator. */
     if ( op != ',' ) asm_push( stream );
 
-    expr_code( stream, node[4], 0);
+    expr_code( stream, node[4], 0 );
 
     if      ( op == '[]'  ) subscript(stream, node, need_lval);
     else if ( op == '*'   ) pop_mult(stream, 0, node[2][5]);
@@ -142,12 +169,6 @@ binary_op(stream, node, need_lval) {
     else if ( op == '-'   ) pop_sub(stream, 0, sz);
     else if ( op == '<<'  ) pop_lshift(stream, 0);
     else if ( op == '>>'  ) pop_rshift(stream, 0);
-    else if ( op == '<'   ) pop_lt(stream);
-    else if ( op == '>'   ) pop_gt(stream);
-    else if ( op == '<='  ) pop_le(stream);
-    else if ( op == '>='  ) pop_ge(stream);
-    else if ( op == '=='  ) pop_eq(stream);
-    else if ( op == '!='  ) pop_ne(stream);
     else if ( op == '&'   ) pop_bitand(stream, 0, sz);
     else if ( op == '|'   ) pop_bitor(stream, 0, sz);
     else if ( op == '^'   ) pop_bitxor(stream, 0, sz);
@@ -188,7 +209,15 @@ opexpr_code(stream, node, need_lval) {
     /* These operators are handled separately because of short-circuiting */
     else if ( op == '&&' || op == '||' )
         logical_bin( stream, node );
-    
+
+    /* And these are because they don't evaluate their second argument */
+    else if ( op == '->' || op == '.' )
+        member_bin( stream, node, need_lval );
+   
+    else if ( op == '<' || op == '>' || op == '<=' || op == '>='
+              || op == '==' || op == '!=' )
+        cmp_op( stream, node );
+
     /* Binary operators */
     else if ( node[1] == 2 )
         binary_op( stream, node, need_lval );
@@ -357,11 +386,6 @@ switch_stmt(stream, node, brk, cont, ret) {
 }
 
 static
-extern_decl(stream, decl) {
-    save_sym( decl, 0 );
-}
-
-static
 auto_decl(stream, decl) {
     auto sz = decl_var(decl);
     auto offset = frame_off();
@@ -402,7 +426,7 @@ declaration(stream, node) {
     while ( i < node[1] ) {
         auto decl = node[ 3 + i++ ];
         if ( node[3] && node[3][0] == 'exte' )
-            extern_decl( stream, decl );
+            extern_decl( decl );
         else
             auto_decl( stream, decl );
     }
@@ -503,7 +527,7 @@ array_decl(stream, decl) {
             zero_direct( stream, sz - 4*init[1] );
     }
 
-    save_sym( decl, 0 );
+    extern_decl( decl );
 }
 
 /* This is only callled on top-level declarations */

@@ -80,23 +80,38 @@ type_size(type) {
     else if ( t == 'id' )
         return type_size( lookup_type( &type[3] ) );
 
+    else if ( t == 'stru' )
+        return struct_size( &type[3][3] );
+
     else int_error( "Cannot determine size of unknown type: %Mc", type[0] );
 }
 
 static
-can_deref(type) {
+is_pointer(type) {
     auto t = type[0];
-    extern compat_flag;
+    return t == '*' || t == '[]';
+}
 
-    /* For (hopefully temporary) compatibility with stage-4, we allow an 
-     * implicit int to be a pointer.  Explicit int is not so treated. */
-    return t == '[]' || t == '*' && type[1] == 1 || 
-        compat_flag && type == s_int;
+/* For (hopefully temporary) compatibility with stage-4, we allow an 
+ * implicit int to be dereferenced like a pointer.  Explicit int is not 
+ * so treated. */
+static
+can_deref(type) {
+    extern compat_flag;
+    return is_pointer(type) || compat_flag && type == s_int;
 }
 
 static
 is_integral(type) {
-    /* At present, all dclt types are integral.  Floats will change that. */
+    /* At present, all dclt types are integral.  
+     * Floats and struct may change that. */
+    return type[0] == 'dclt';
+}
+
+static 
+is_arith(type) {
+    /* At present, all dclt types are arithmetic.  
+     * Structs may change that. */
     return type[0] == 'dclt';
 }
 
@@ -131,7 +146,6 @@ chk_subscr(node) {
         print_type( buf, 32, node[2] );
         error( "Element size has changed since stage-4: %s", buf);
     }
-
 }
 
 chk_deref(node) {
@@ -146,7 +160,28 @@ chk_deref(node) {
         node[2] = add_ref(s_int);
     else 
         node[2] = add_ref(type[3]); 
+}
 
+chk_member(node) {
+    auto type1 = node[3][2];
+
+    if ( node[0] == '->' ) {
+        if ( !is_pointer(type1) ) 
+            error( "Attempted to dereference a non-pointer type" );
+
+        type1 = type1[3];
+    }
+
+    if ( type1[0] != 'stru' )
+        error( "Attempted member access of a non-struct type: %Mc", type1[0] );
+    if ( type1[3][0] != 'id' )
+        int_error("Struct name is not an identifier");
+    if ( node[4][0] != 'id' )
+        int_error("Member name is not an identifier");
+
+    /* Stored the member offset as an integer in node[5]; it won't be deleted
+     * because the arity is 2, and node[5] is the 3rd arg slot. */
+    node[2] = add_ref( member_type( &type1[3][3], &node[4][3], &node[5] ) );
 }
 
 /* Do an integral promotion, per C90 6.2.1.1 */
@@ -183,6 +218,13 @@ type_eq(type1, type2) {
         && node0_eq(type1[4], type2[4]) && node0_eq(type1[5], type2[5]);
 }
 
+static
+op_type_err(type, op) {
+    auto char buf[32];
+    print_type(buf, 32, type);
+    error("Invalid operand type '%s' to %Mc operator", buf, op);
+}
+
 /* Do the 'usual arithmetic conversions', per C90 6.2.1.5 */
 usual_conv(type1, type2) {
     /* The integral promotions get rid of any chars or shorts. 
@@ -214,7 +256,69 @@ usual_conv(type1, type2) {
     return type1;
 }
 
-/* Set the type of a function call expression */
+static
+req_type( type_pred, type, op ) 
+    int (*type_pred)();
+{
+    if ( !type_pred(type) )
+        op_type_err(type, op);
+}
+
+static
+req_type2( type_pred, type1, type2, op )
+    int (*type_pred)();
+{
+        req_type( type_pred, type1, op );
+        req_type( type_pred, type2, op );
+}
+
+/* Type checking for multiplicative operators (*, / and %) */
+chk_mult(p) {
+    auto type1 = p[3][2], type2 = p[4][2], op = p[0];
+   
+    if ( op == '%' )
+        req_type2( is_integral, type1, type2, op );
+    else 
+        req_type2( is_arith, type1, type2, op );
+
+    p[2] = add_ref( usual_conv(type1, type2) );
+}
+
+/* Type checking for binary bit operators (&, | and ^). */
+chk_bitop(p) {
+    auto type1 = p[3][2], type2 = p[4][2];
+    req_type2( is_integral, type1, type2, p[0] );
+    p[2] = add_ref( usual_conv(type1, type2) );
+}
+
+/* Determine the type of an + or - expression. */
+chk_add(p) {
+    auto type1 = p[3][2], type2 = p[4][2], op = p[0];
+
+    /* Handle case of: ptr +/- int. */
+    if (is_pointer(type1) && is_integral(type2)) 
+        p[2] = add_ref(type1);
+
+    /* Canonicalise case of: int + ptr => ptr + int. */
+    else if (op == '+' && is_pointer(type2) && is_integral(type1)) {
+        auto tmp = p[3]; p[3] = p[4]; p[4] = tmp;
+        p[2] = add_ref(type2);
+    }
+
+    /* Handle case of: ptr - ptr. */
+    else if (op == '-' && is_pointer(type1) && is_pointer(type2)) {
+       /* TODO: Check pointers are compatible. */
+       /* We choose ptrdiff_t to be int. */
+       p[2] = add_ref( implct_int() );
+    }
+
+    else {
+        req_type2( is_arith, type1, type2, op );
+        p[2] = add_ref( usual_conv(type1, type2) );
+    }   
+}
+
+/* Type checking for call expressions */
 chk_call(p) {
     /* If the thing being called is an identifier and its type is null, 
      * the function is undeclared and it is assumed to return int. */
@@ -222,7 +326,7 @@ chk_call(p) {
         p[2] = add_ref( implct_int() );
 
     else {
-        auto t = p[3][2]; /* lookup_type( &p[3][3] ); */
+        auto t = p[3][2];
     
         /* Is it a function? */
         if ( t[0] == '()' )
@@ -236,7 +340,7 @@ chk_call(p) {
     }
 }
 
-/* Set the type of a prefix or postfix increment or decrement expression */
+/* Type checking for prefix or postfix increment or decrement operators */
 chk_incdec(p) {
     extern compat_flag;
 
@@ -267,6 +371,30 @@ chk_addr(p) {
 
     p[2] = new_node('*', 1);
     p[2][3] = add_ref( p[3][2] );
+}
+
+/* Type checking for shift operators */
+chk_shift(p) {
+    auto type1 = p[3][2], type2 = p[4][2];
+
+    /* Both arguments shall be integers */
+    req_type2( is_integral, type1, type2, p[0] );
+
+    /* The standard says the rhs is promoted, but this is irrelevant,
+     * as only values 0 <= rhs < 32 are valid, and when we do the shift
+     * only the bits in %cl are actually used. */
+
+    /* The type of a shift expression is the lhs type, promoted. */
+    p[2] = add_ref( prom_type( p[3][2] ) );
+}
+
+chk_comma(p) {
+    /* The type of a shift expression is the rhs type, unpromoted. */
+    p[2] = add_ref( prom_type( p[4] ) );
+}
+
+chk_int(p) {
+    p[2] = add_ref( implct_int() );
 }
 
 static

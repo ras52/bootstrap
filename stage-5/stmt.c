@@ -294,7 +294,7 @@ static
 is_dclspec(t) {
     return t == 'stat' || t == 'exte' || t == 'auto' || t == 'regi' ||
         t == 'char' || t == 'int' || t == 'shor' || t == 'long' ||
-        t == 'sign' || t == 'unsi';
+        t == 'sign' || t == 'unsi' || t == 'stru';
 }
 
 static
@@ -302,16 +302,55 @@ set_dclt(decls, field) {
     if (!decls[4])
         decls[4] = new_node('dclt', 3);
 
+    else if ( decls[4][0] != 'dclt' )
+        error("Invalid combination of type specifiers");
+
     else if ( decls[4][field] )
         error("Invalid combination of type specifiers");
 
     decls[4][field] = take_node(0);
 }
 
+/*  Parse a struct tag or struct declaration.
+ *
+ *  struct-spec  ::= 'struct' ( name | name? '{' struct-decl-list '}' )
+ */
+static
+struct_spec() {
+    /* Struct node has one op:  stru[3] = name */
+    auto stru = take_node(1), t;
+
+    if ( peek_token() != 'id' )
+        error("Expected a tag name in struct declaration");
+    stru[3] = take_node(0);
+    t = peek_token();
+    save_tag( &stru[3][3], t == '{' );
+
+    if ( t == '{' ) {
+        skip_node('{');
+        t = peek_token();
+        if ( peek_token() == '}' )
+            error("Empty structs are not allowed");
+
+        do {
+            auto decl = declaration( 0, stru );
+            /* TODO:  Do something with the members */
+            free_node( decl );
+        } while ( peek_token() != '}' );
+        skip_node('}');
+
+        /* TODO Now define the type */
+  
+        seal_tag( &stru[3][3] );
+    }
+
+    return stru;
+}
+
 /*  Parse a list of declaration specifiers, and return them in a 'dcls' node.
  *  Errors are given for invalid combinations.
  * 
- *  decl-specs   ::= ( storage-spec | type-spec )*
+ *  decl-specs   ::= ( storage-spec | type-spec | struct-spec )*
  *  storage-spec ::= 'extern' | 'static' | 'auto' | 'register'
  *  type-spec    ::= 'int' | 'char' | 'long' | 'short' | 'signed' | 'unsigned'
  */
@@ -321,10 +360,11 @@ decl_specs() {
 
     /* The dcls node has ops:  
      *   dcls[3] = storage class:     { extern, static, auto }
-     *   dcls[4] = a dclt node:
+     *   dcls[4] = a type node:       { 'stru' or 'dclt' }
      *   dcls[5...] = the declarators
      *
-     * The dclt node, created on demand by set_dclt(), has ops:
+     * For a basic type, the dclt node, which is created on demand by 
+     * set_dclt(), has ops:
      *   dclt[3] = base of the type   { char, int }    --- always present
      *   dclt[4] = length modifier    { long, short }
      *   dclt[5] = signed modifier    { signed, unsigned }  */
@@ -337,6 +377,13 @@ decl_specs() {
                 error("Multiple storage class specifiers found");
 
             decls[3] = take_node(0);
+        }
+
+        else if ( t == 'stru' ) {
+            if (decls[4])
+                error("Invalid combination of type specifiers");
+
+            decls[4] = struct_spec();
         }
 
         else if ( t == 'char' || t == 'int' )
@@ -353,23 +400,29 @@ decl_specs() {
      * We don't check that at least one decl-spec is present because 
      * (i) implicit int on functions, and (ii) the caller has checked.  */
 
-    if ( !decls[4] ) decls[4] = add_ref( implct_int() );
-    else if ( !decls[4][3] ) decls[4][3] = new_node('int', 0);
-   
-    if ( decls[4][3][0] == 'char' && decls[4][4] )
-        error("Invalid combination of type specifiers");
+    if ( !decls[4] )
+        decls[4] = add_ref( implct_int() );
 
-    if ( decls[4][3][0] == 'int' && decls[4][5] && decls[4][5][0] == 'sign' ) {
-        free_node( decls[4][5] );
-        decls[4][5] = 0;
+    if ( decls[4][0] == 'dclt' ) {
+        if ( !decls[4][3] ) decls[4][3] = new_node('int', 0);
+       
+        if ( decls[4][3][0] == 'char' && decls[4][4] )
+            error("Invalid combination of type specifiers");
+    
+        if ( decls[4][3][0] == 'int' && decls[4][5] 
+               && decls[4][5][0] == 'sign' ) {
+            free_node( decls[4][5] );
+            decls[4][5] = 0;
+        }
     }
 
     return decls;
 }
 
-/*  Parse a declaration inside function FN or at global scope (in which case
- *  FN is null), and add it to the VNODE representing a storage class 
- *  ('extern' or 'auto'), or a 'dcls' vnode if the storage class is implicit.  
+/*  Parse a declaration inside a function FN, struct STRCT, or at global scope 
+ *  (in which case bath FN and STRCT are null); add it to the VNODE 
+ *  representing a storage class ('extern' or 'auto'), or a 'dcls' vnode 
+ *  if the storage class is implicit.  
  *  Current token is the first token of the declaration, e.g. 'auto'.
  *
  *  intialiser     ::= init-array | assign-expr
@@ -378,8 +431,11 @@ decl_specs() {
  *  declaration    ::= decl-specs ( init-decl-list ';' | declarator block )
  */
 static
-declaration( fn ) {
+declaration( fn, strct ) {
     auto decls = decl_specs();
+ 
+    if ( strct && decls[3] )
+        error("Declartion specifiers are not allowed on struct members");
 
     if ( !fn && decls[3] && ( decls[3][0] == 'auto' || decls[3][0] == 'regi' ) )
         error("Automatic variables are not allowed at file scope");
@@ -388,7 +444,13 @@ declaration( fn ) {
     if ( fn && decls[3] && decls[3][0] == 'stat' )
         error("Block-scope statics are not supported");
 
-    while (1) {
+    /* Struct declarations needn't have declarators. */
+    if ( !strct && peek_token() == ';' && decls[4][0] == 'stru' )
+        /* stage-4 cc doesn't have goto, so use a sneaky else 
+         * clause to get us to the skip_node(';') call. */ 
+        ;
+
+    else while (1) {
         auto decl = declarator(decls[4]), name = &decl[4][3];
 
         /* Store storage specifier: particularly important for 'register'
@@ -409,11 +471,21 @@ declaration( fn ) {
             chk_dup_sym( name, 0 );
             decl_var(decl);
         }
+
         /* External declarations still need storing in the symbol table */
-        else {
-            /* TODO:  Check for duplicate defintions at file scope */
+        else if (!strct) {
+            /* TODO:  Check for duplicate definitions at file scope. 
+             * This is complicated by tentative definitions. */
             if (fn) chk_dup_sym( name, 1 );
-            save_sym( decl, 0 );
+            extern_decl( decl );
+        }
+
+        /* Struct members need storing in the symbol table for the struct */ 
+        else {
+            if (decl[2][0] == '()')
+                error("Function declarations not permitted as struct members");
+
+            decl_mem( &strct[3][3], decl );
         }
 
         /* Handle function definitions */
@@ -438,7 +510,9 @@ declaration( fn ) {
         if ( peek_token() == '=' ) {
             auto type = decl[2];
             skip_node('=');
-            if ( type && type[0] == '[]' )
+            if ( strct ) 
+                error("Initialiser not allowed on struct member");
+            else if ( type && type[0] == '[]' )
                 decl[5] = init_array( type, !fn );
             else if ( type && type[0] == '()' )
                 error("Function declarations cannot have initialiser lists");
@@ -450,6 +524,7 @@ declaration( fn ) {
         if ( peek_token() == ';') break;
         skip_node(',');
     }
+
     skip_node(';');
     return decls;
 }
@@ -474,7 +549,7 @@ label_stmt( fn, loop, swtch ) {
 static
 stmt_or_dcl( fn, loop, swtch ) {
     if ( is_dclspec( peek_token() ) ) 
-        return declaration( fn );
+        return declaration( fn, 0 );
     else
         return stmt( fn, loop, swtch );
 }
@@ -655,5 +730,5 @@ fn_defn( decl ) {
 }
 
 top_level() {
-    return declaration( 0 );
+    return declaration( 0, 0 );
 }

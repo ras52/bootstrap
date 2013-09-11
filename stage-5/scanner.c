@@ -174,13 +174,14 @@ get_word(stream, c) {
  * The pp-number will be converted into a proper number (or an error issued)
  * in the get_number() function. */
 static
-get_ppnum(stream, c) {
+get_ppnum(stream, c, c2) {
     auto i = 0;
 
     /* struct node { int type; int dummy, dummy2; char str[]; }; */
     auto node = new_node('ppno', 0);
 
     node_lchar( &node, &i, c );
+    if (c2) node_lchar( &node, &i, c2 );
 
     /* At this stage in processing, arbitrary suffixes (and infixes) are
      * permitted, not just the 'u' and 'l' type suffixes, the '0x' prefix,
@@ -208,17 +209,30 @@ get_ppnum(stream, c) {
  * starting with character C (which has already been checked by isdigit), 
  * parse it into NODE->val, set NODE->type, and return NODE. */
 static
-get_number(stream, c) {
+get_number(stream, c, c2) {
     auto char *nptr;
-    auto ppnode = get_ppnum(stream, c);
+    auto ppnode = get_ppnum(stream, c, c2);
 
     /* struct node { int type; int dummy; node* type; int val; }; */
     auto node = new_node('num', 0);
 
+
     /* At present we only support integer constants.  Floats need 
      * recognising and treating separately. */
-    node[3] = strtol( &ppnode[3], &nptr, 0 );
-    node[2] = add_ref( implct_int() );
+    extern errno;
+    errno = 0;
+    node[3] = strtoul( &ppnode[3], &nptr, 0 );
+    if ( errno ) error("Overflow in integer constant");
+
+    /* We only use the implicit int type if we don't have a type suffix.
+     * Conceptually a suffix makes it no longer implicit.  And practically
+     * we don't want to alter the implicit int type. */
+    if ( !rchar(nptr, 0) )
+        node[2] = add_ref( implct_int() );
+    else {
+        node[2] = new_node('dclt', 3);
+        node[2][3] = new_node('int', 0);
+    } 
 
     /* Process type suffixes */
     while ( c = rchar(nptr, 0) ) {
@@ -229,6 +243,9 @@ get_number(stream, c) {
         else break;
         ++nptr;
     }
+
+    /* TODO: Check for signed overflow.
+     * Also, hex constants without 'u' may still be unsigned. */
 
     if (c)
         error("Unexpected character '%c' in number \"%s\"",
@@ -242,11 +259,11 @@ get_number(stream, c) {
  * valid lexical representation of an operator.  So '[]' does not  */
 static
 is_2charop(op) {
-    /* TODO: digraphs, trigraphs, and '->' */
-    auto mops[19] = { 
+    /* TODO: digraphs and trigraphs */
+    auto mops[20] = { 
         /* 0     1     2     3     4     5     6     7     8     9 */
         '++', '--', '<<', '>>', '<=', '>=', '==', '!=', '&&', '||',
-        '*=', '%=', '/=', '+=', '-=', '&=', '|=', '^=',  0 
+        '*=', '%=', '/=', '+=', '-=', '&=', '|=', '^=',  '->', 0 
     };
 
     /* Search for two-character operator name in the mops[] list, above */
@@ -263,7 +280,7 @@ static
 get_multiop(stream, c) {
     /* Fetch the second character */
     auto c2 = fgetc(stream);
-    if ( c2 == -1 ) return c;
+    if ( c2 == -1 ) return new_node( c, 0 );
     else lchar( &c, 1, c2 );
 
     /* If it's not a two-character operator, it must be a single character 
@@ -327,6 +344,8 @@ get_qlit(stream, q) {
     
     while ( (c = fgetc(stream)) != -1 && c != q ) {
         node_lchar( &node, &i, c );
+        /* TODO: The handling of escapes is not conformant.  Also, share
+         * code with parse_chr(), above. */
         if ( c == '\\' ) {
             if ( (c = fgetc(stream)) == -1 ) break;
             node_lchar( &node, &i, c );
@@ -371,8 +390,18 @@ next() {
         token = 0;
     else if ( isidchar1(c) )
         token = get_word(stream, c);
-    else if ( isdigit(c) || c == '.' )
-        token = get_number(stream, c);
+    else if ( isdigit(c) )
+        token = get_number(stream, c, 0);
+    else if ( c == '.' ) {
+        /* A . could be the start of a ppnumber, or a '.' operator  */
+        auto c2 = fgetc(stream);
+        if ( isdigit(c2) )
+            token = get_number(stream, c, c2);
+        else {
+            ungetc(c2, stream);
+            token = new_node( c, 0 );
+        }
+    }        
     else if ( c == '\'' || c == '"' )
         token = get_qlit(stream, c);
     else 

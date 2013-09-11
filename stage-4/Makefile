@@ -37,6 +37,11 @@ LIB1_OBJS = output.o input.o char.o malloc.o signal.o string2.o imath.o
 
 CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 
+# libc0.o is the primative libc, written solely in assembler.
+# cc0     is the compiler linked against the libc0.o.
+# libc.o  is the complete stage-4 libc, with some C code compiled using cc0.
+# cc      is the compiler relinked against the new libc.o.
+
 libc0.o:	ld $(LIB0_OBJS) stdio.o memory.o
 	ld -r -o libc0.o $(LIB0_OBJS) stdio.o memory.o
 

@@ -1,4 +1,4 @@
-/* main.c  --  code to tokenising C input stream
+/* main.c  --  code to parse command line and initialise the compiler
  *
  * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
@@ -43,6 +43,9 @@ main(argc, argv)
 
         else if ( strcmp( argv[i], "-o" ) == 0 ) {
             if ( ++i == argc ) usage();
+            if ( outname ) cli_error(
+                "cc: multiple output files specified: '%s' and '%s'\n",
+                outname, argv[i]);
             outname = argv[i];
         }
 
@@ -56,9 +59,9 @@ main(argc, argv)
             cli_error("cc: unknown option: %s\n", argv[i]);
 
         else {
-            if ( filename )
-                cli_error("cc: multiple input files specified: '%s' and '%s'\n",
-                          filename, argv[i]);
+            if ( filename ) cli_error(
+                "cc: multiple input files specified: '%s' and '%s'\n",
+                filename, argv[i]);
             filename = argv[i];
         }
     }
@@ -69,12 +72,15 @@ main(argc, argv)
     if ( !filename )
         cli_error("cc: no input file specified\n");
 
-    l = strlen(filename);
-    if ( rchar( filename, l-1 ) != 'c' || rchar( filename, l-2 ) != '.' )
-        cli_error("cc: input filename must have .c extension\n");
     init_scan(filename);
 
     if (!outname) {
+        /* We allow .c or .i filenames: .i is used for preprocessed source. */
+        l = strlen(filename);
+        if ( rchar( filename, l-1 ) != 'c' && rchar( filename, l-1 ) != 'i'
+             || rchar( filename, l-2 ) != '.' )
+            cli_error("cc: input filename must have .c extension\n");
+
         outname = strdup( filename );
         freeout = 1;
         lchar( outname, l-1, 's' );

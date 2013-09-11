@@ -11,7 +11,7 @@ sz_suffix(sz) {
 
     /* Stage 4 treated everything as an int. */
     if (compat_flag) 
-        error("Operand size has changed since stage-4");
+        error("Operand size has changed since stage-4", sz);
 
     if (sz == 2) return 'W';
     else if (sz == 1) return 'B';
@@ -32,6 +32,11 @@ sz_aux_reg(sz) {
     else if (sz == 2) return "%cx";
     else if (sz == 1) return "%cl";
     int_error("Unexpected size register requested: %d", sz);
+}
+
+static
+acc_to_aux(stream) {
+    fputs("\tMOVL\t%eax, %ecx\n", stream);
 }
 
 load_num(stream, num) {
@@ -98,14 +103,18 @@ increment(stream, n) {
 }
 
 postfix_inc(stream, n) {
-    fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%eax), %eax\n", stream);
+    acc_to_aux(stream);
+    dereference(stream, 0);
     do_inc(stream, "%ecx", n);
 }
 
 static
 start_binop(stream, is_assign, is_sym) {
     if (is_sym && !is_assign) fputs("\tPOPL\t%ecx\n", stream);
-    else fputs("\tMOVL\t%eax, %ecx\n\tPOPL\t%eax\n", stream);
+    else {
+        acc_to_aux(stream);
+        fputs("\tPOPL\t%eax\n", stream);
+    }
 }
 
 pop_mult(stream, is_assign, is_unsigned) {
@@ -116,13 +125,15 @@ pop_mult(stream, is_assign, is_unsigned) {
         fputs("\tMOVL\t%eax, (%ecx)\n\tMOVL\t%ecx, %eax\n", stream);
 }
 
+/* Note that this *only* POPs the first argument if !is_assign. 
+ * Otherwise doing so is the caller's responsibility. */
 static
 common_div(stream, is_assign, is_unsigned) {
+    acc_to_aux(stream);
     if (is_assign)
-        fputs("\tMOVL\t%eax, %ecx\n\tMOVL\t(%esp), %eax\nMOVL\t(%eax), %eax\n", 
-              stream);
+        fputs("\tMOVL\t(%esp), %eax\nMOVL\t(%eax), %eax\n", stream);
     else
-        fputs("\tMOVL\t%eax, %ecx\n\tPOPL\t%eax\n", stream);
+        fputs("\tPOPL\t%eax\n", stream);
     fputs("\tXORL\t%edx, %edx\n", stream);
     fprintf(stream, "\t%s%c\t%%ecx\n", is_unsigned ? "DIV" : "IDIV", 'L');
 }
@@ -151,17 +162,18 @@ pop_lshift(stream, is_assign) { pop_shift(stream, "SALL", is_assign); }
 pop_rshift(stream, is_assign) { pop_shift(stream, "SARL", is_assign); }
 
 static
-pop_rel(stream, mnemonic) {
-    fprintf(stream, "\tPOPL\t%%ecx\n\tCMPL\t%%eax, %%ecx\n");
-    fprintf(stream, "\t%s\t%%al\n\tMOVZBL\t%%al, %%eax\n", mnemonic);
+pop_rel(stream, sz, cond) {
+    fprintf( stream, "\tPOPL\t%%ecx\n\tCMP%c\t%s, %s\n", 
+             sz_suffix(sz), sz_accum(sz), sz_aux_reg(sz) );
+    fprintf( stream, "\tSET%s\t%%al\n\tMOVZBL\t%%al, %%eax\n", cond );
 }
 
-pop_gt(stream) { pop_rel(stream, "SETG");  }
-pop_lt(stream) { pop_rel(stream, "SETL");  }
-pop_ge(stream) { pop_rel(stream, "SETGE"); }
-pop_le(stream) { pop_rel(stream, "SETLE"); }
-pop_eq(stream) { pop_rel(stream, "SETE");  }
-pop_ne(stream) { pop_rel(stream, "SETNE"); }
+pop_gt(stream, sz, is_unsgn) { pop_rel(stream, sz, is_unsgn ? "A"  : "G" ); }
+pop_lt(stream, sz, is_unsgn) { pop_rel(stream, sz, is_unsgn ? "B"  : "L" ); }
+pop_ge(stream, sz, is_unsgn) { pop_rel(stream, sz, is_unsgn ? "AE" : "GE"); }
+pop_le(stream, sz, is_unsgn) { pop_rel(stream, sz, is_unsgn ? "BE" : "LE"); }
+pop_eq(stream, sz) { pop_rel(stream, sz, "E");  }
+pop_ne(stream, sz) { pop_rel(stream, sz, "NE"); }
 
 static
 pop_binop(stream, mnemonic, is_assign, is_sym, sz) {
@@ -191,6 +203,11 @@ ilog2(i) {
     auto l = 0;
     while (i >>= 1) ++l;
     return l;
+}
+
+mem_access(stream, offset, need_addr) {
+    fprintf(stream, "\t%s\t%d(%%eax), %%eax\n", 
+            need_addr ? "LEA" : "MOVL", offset);
 }
 
 pop_subscr(stream, elt_size, need_lval) {
@@ -300,3 +317,9 @@ zero_direct(stream, n) {
     fprintf(stream, "\t.zero %d\n", n);
 }
 
+promote(stream, is_unsgn, oldsz, newsz) {
+    if ( oldsz != newsz )
+        fprintf( stream, "\tMOV%c%c%c\t%s, %s\n", is_unsgn ? 'Z' : 'S',
+                 sz_suffix(oldsz), sz_suffix(newsz), 
+                 sz_accum(oldsz), sz_accum(newsz) );
+}

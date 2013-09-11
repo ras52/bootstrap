@@ -38,7 +38,8 @@ Stage 4 -- cc, crt0.o & libc.o
 
 Stage 5 -- cc
 
-  The compiler is rewritten in its source language.
+  The compiler is rewritten in its source language, and a type system
+  added.
 
 
 The code in this project is copyright (C) Richard Smith, 2009-13.

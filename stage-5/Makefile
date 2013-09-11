@@ -33,33 +33,37 @@ $(INIT):
 %.o:	%.s as
 	as $<
 
-%.s:	%.c cc0
-	cc0 -S $<
+%0.s:	%.c cc0
+	cc0 -S -o $@ $<
 
 # The --compat option enables compatibility with the stage-4 cc.
 %1.s:	%.c cc1
 	cc1 -S --compat -o $@ $<
 
-# The ultimate objective is to remove the --compat flag on this build,
-# as it will then check that our code is typesafe.  But we cannot do 
-# that until the compiler supports structs.
+# Ideally we'd like to remove the --compat flag on this build, as it will 
+# then check that our code is typesafe.  But in practice we cannot do that 
+# unless the code uses structs, and that's not possible because it would
+# be difficult to add struct support to the stage-4 cc.
 %2.s:	%.c cc
 	cc -S --compat -o $@ $<
+
+%.s:	%.c cc
+	cc -S -o $@ $<
 
 CC_OBJS  = scanner.o node.o symtab.o expr.o stmt.o type.o i386.o \
            codegen.o main.o
 
-cc1:	ld libc.o crt0.o $(CC_OBJS)
-	ld -o cc1 libc.o crt0.o $(CC_OBJS)
+cc1:	ld libc.o crt0.o $(CC_OBJS:%.o=%0.o)
+	ld -o cc1 libc.o crt0.o $(CC_OBJS:%.o=%0.o)
 
 cc:	ld libc.o crt0.o $(CC_OBJS:%.o=%1.o)
 	ld -o cc libc.o crt0.o $(CC_OBJS:%.o=%1.o)
 
-.INTERMEDIATE:  $(CC_OBJS) $(CC_OBJS:%.o=%1.o) cc1
+.INTERMEDIATE:  $(CC_OBJS:%.o=%0.o) $(CC_OBJS:%.o=%1.o) cc1
 
 clean:
 	$(RM) -f $(INIT)
-	$(RM) -f $(CC_OBJS:%.o=%.s) $(CC_OBJS) cc1
+	$(RM) -f $(CC_OBJS:%.o=%0.s) $(CC_OBJS:%.o=%0.o) cc1
 	$(RM) -f $(CC_OBJS:%.o=%1.s) $(CC_OBJS:%.o=%1.o) cc
 	$(RM) -f $(CC_OBJS:%.o=%2.s) $(CC_OBJS:%.o=%2.o) cc2
 
