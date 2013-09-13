@@ -1,4 +1,4 @@
-/* node.c  --  code for manipulating AST nodes
+/* node.c  --  low-level code for manipulating AST nodes
  *
  * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
@@ -99,6 +99,7 @@ free_node(node) {
 
 /* If SIZE is equal to the capacity of NODE, then reallocate it with twice
  * capacity, and return the new node. */
+static
 grow_node(node, size) {
     /* 12 is the size of the node before the payload. */
 
@@ -116,6 +117,23 @@ vnode_app( v, n ) {
     v = grow_node(v, v[1] * 4);
     v[ 3 + v[1]++ ] = n;
     return v;
+}
+
+/* Returns a pointer to the string payload of a node */
+node_str(node) {
+    return &node[3];
+}
+
+/* Append character CHR to the payload of the node *NODE_PTR which is treated 
+ * as a string with current length *LEN_PTR.  The value of *LEN_PTR is 
+ * incremented.  The node may be reallocated. */
+node_lchar( node_ptr, len_ptr, chr )
+    int *len_ptr;
+{
+    auto node = *node_ptr;
+    node = grow_node( node, *len_ptr );
+    lchar( node_str(node), (*len_ptr)++, chr );
+    *node_ptr = node;
 }
 
 

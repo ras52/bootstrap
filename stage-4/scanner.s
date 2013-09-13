@@ -297,6 +297,7 @@ keywords:
 	#  These keywords are not supported, but are skipped in some contexts
 	.string "char"          .align 12
 	.string "int"		.align 12
+	.string "struct"	.align 12
 	.byte  0	# <-- the end of table marker
 
 .text 

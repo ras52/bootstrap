@@ -207,8 +207,6 @@ primry_decl(decl, phead) {
         phead = prefix_decl(decl, phead);
         skip_node(')');
     }
-    else
-        error("Expected an identifier while parsing declarator");
 
     return phead;
 }
@@ -280,6 +278,7 @@ prefix_decl(decl, phead) {
 static
 declarator(dclt) {
     /* The 'decl' node has operands: [3] storage, [4] name, [5] init.
+     * The storage slot is filled in by the caller, where applicable.
      * Note the [6] slot is used as an int for the fuction stack size. */
     auto decl = new_node('decl', 3);
 
@@ -290,7 +289,6 @@ declarator(dclt) {
 }
 
 /* Test whether the current token is a decl spec. */
-static
 is_dclspec(t) {
     return t == 'stat' || t == 'exte' || t == 'auto' || t == 'regi' ||
         t == 'char' || t == 'int' || t == 'shor' || t == 'long' ||
@@ -332,15 +330,14 @@ struct_spec() {
         if ( peek_token() == '}' )
             error("Empty structs are not allowed");
 
-        do {
-            auto decl = declaration( 0, stru );
-            /* TODO:  Do something with the members */
-            free_node( decl );
-        } while ( peek_token() != '}' );
+        /* We have defined the struct members inside the declaration() 
+         * function, so there's nothing further to do here. */
+        do free_node( declaration( 0, stru ) );
+        while ( peek_token() != '}' );
+
         skip_node('}');
 
-        /* TODO Now define the type */
-  
+        /* Mark the type complete. */
         seal_tag( &stru[3][3] );
     }
 
@@ -380,6 +377,7 @@ decl_specs() {
         }
 
         else if ( t == 'stru' ) {
+            /* 'int struct s' is never allowed. */
             if (decls[4])
                 error("Invalid combination of type specifiers");
 
@@ -451,7 +449,9 @@ declaration( fn, strct ) {
         ;
 
     else while (1) {
-        auto decl = declarator(decls[4]), name = &decl[4][3];
+        auto decl = declarator(decls[4]), name; 
+        if ( !decl[4] ) error("Declarator does not declare anything");
+        name = &decl[4][3];
 
         /* Store storage specifier: particularly important for 'register'
          * so we can check it when taking the address of an identifier. */
@@ -529,6 +529,20 @@ declaration( fn, strct ) {
     return decls;
 }
 
+type_name() {
+    auto decls, decl;
+    decls = decl_specs();
+    if ( decls[3] ) error("Declartion specifiers not allowed on type name");
+
+    decl = declarator(decls[4]);
+    if ( decl[4] ) error("Type name must not declare an object");
+    if ( decl[5] ) error("Type name must not have an initialiser");
+
+    free_node(decls);
+
+    return decl;
+}
+
 /* label-stmt ::= identifier ':' stmt */
 static
 label_stmt( fn, loop, swtch ) {
@@ -573,18 +587,20 @@ stmt( fn, loop, swtch ) {
     else if (t == 'case' 
           || t == 'defa') return case_stmt( fn, loop, swtch );
 
-    /* We either have a labelled statement or we have a (possibly null)
-     * expression statement.  Both can start with an identifier, so
-     * we use peek_char() to look at the next non-whitespace character.
-     * This works because the only use of : is in label or the second
-     * part of a ternary, and we cannot get the ternary use here.  Note
-     * that C++'s :: scope operator will break this. */
-    else {
-        if (t == 'id' && peek_char() == ':') 
-            return label_stmt( fn, loop, swtch );
-        else 
-            return expr_stmt();
+    else if (t == 'id') {
+        /* We either have a labelled statement or we have a (possibly null)
+         * expression statement.  Both can start with an identifier, so
+         * we use peek_token() to look at the following token.
+         * This works because the only use of : is in label or the second
+         * part of a ternary, and we cannot get the ternary use here. */
+        auto id = take_node(0);
+        auto is_label = peek_token() == ':';
+        unget_token(id);
+
+        if (is_label) return label_stmt( fn, loop, swtch );
+        else return expr_stmt();
     }
+    else return expr_stmt();
 }
 
 /* block ::= '{' stmt-or-decl* '}' */
@@ -697,8 +713,10 @@ knr_params( decl ) {
             error("Storage specifiers not allowed on parameter declarations");
 
         while (1) {
-            auto pdecl = declarator( pdecls[4] );
-            auto name = &pdecl[4][3];
+            auto pdecl = declarator( pdecls[4] ), name;
+            if ( !pdecl[4] ) 
+                error("Parameter declarator does not declare anything");
+            name = &pdecl[4][3];
        
             if (pdecl[2][0] == '()')
                 error("Parameter declared as a function");

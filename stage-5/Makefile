@@ -11,7 +11,7 @@ LN_S  = /bin/ln -sf
 MAKE  = /usr/bin/make
 CMP   = /usr/bin/cmp
 
-all:	cc
+all:	cc cpp
 
 INIT = as ld cc0 libc.o crt0.o
 
@@ -19,7 +19,8 @@ init:	$(INIT)
 
 # cc0 is the compiler symlinked from stage 4.
 # cc1 is this stage's compiler (written in the cc0 language) compiled with cc0.
-# cc  is the same code compiled by itself (by cc1), and is therefore smaller.
+# cc  is nearly the same code, though with a replacement node.c, compiled 
+#       by itself (by cc1), and is therefore smaller.
 # cc2 is a test compiler produced by cc; it should be binary identical to cc.
 
 $(INIT):
@@ -40,41 +41,55 @@ $(INIT):
 %1.s:	%.c cc1
 	cc1 -S --compat -o $@ $<
 
-# Ideally we'd like to remove the --compat flag on this build, as it will 
-# then check that our code is typesafe.  But in practice we cannot do that 
-# unless the code uses structs, and that's not possible because it would
-# be difficult to add struct support to the stage-4 cc.
+# We cannot remove the --compat flag on this build, because of the untyped
+# use of structs-as-arrays in the code.  They should be coded as structs,
+# but that's not possible because it would be too difficult to add struct 
+# support to the stage-4 cc.
 %2.s:	%.c cc
 	cc -S --compat -o $@ $<
 
 %.s:	%.c cc
 	cc -S -o $@ $<
 
-CC_OBJS  = scanner.o node.o symtab.o expr.o stmt.o type.o i386.o \
-           codegen.o main.o
+CC_OBJS  = scanbase.o scanner.o symtab.o expr.o stmt.o type.o \
+           codegen.o i386.o main.o
 
-cc1:	ld libc.o crt0.o $(CC_OBJS:%.o=%0.o)
-	ld -o cc1 libc.o crt0.o $(CC_OBJS:%.o=%0.o)
+# We replace node.o with a new version written using structs (and so that
+# won't compile using stage-4 cc), partly as a test of the stage-4 cc.
+CC0_OBJS = $(CC_OBJS) node.o
+CC1_OBJS = $(CC_OBJS) nodenew.o
 
-cc:	ld libc.o crt0.o $(CC_OBJS:%.o=%1.o)
-	ld -o cc libc.o crt0.o $(CC_OBJS:%.o=%1.o)
+cc1:	ld libc.o crt0.o $(CC0_OBJS:%.o=%0.o)
+	ld -o $@ libc.o crt0.o $(CC0_OBJS:%.o=%0.o)
 
-.INTERMEDIATE:  $(CC_OBJS:%.o=%0.o) $(CC_OBJS:%.o=%1.o) cc1
+cc:	ld libc.o crt0.o $(CC1_OBJS:%.o=%1.o)
+	ld -o $@ libc.o crt0.o $(CC1_OBJS:%.o=%1.o)
+
+CPP_OBJS = scanbase.o cpp.o nodenew.o
+
+cpp:	ld libc.o crt0.o $(CPP_OBJS)
+	ld -o $@ libc.o crt0.o $(CPP_OBJS)
+
+.INTERMEDIATE:  $(CC0_OBJS:%.o=%0.o) $(CC1_OBJS:%.o=%1.o) cc1
 
 clean:
 	$(RM) -f $(INIT)
-	$(RM) -f $(CC_OBJS:%.o=%0.s) $(CC_OBJS:%.o=%0.o) cc1
-	$(RM) -f $(CC_OBJS:%.o=%1.s) $(CC_OBJS:%.o=%1.o) cc
-	$(RM) -f $(CC_OBJS:%.o=%2.s) $(CC_OBJS:%.o=%2.o) cc2
+	$(RM) -f $(CC0_OBJS:%.o=%0.s) $(CC0_OBJS:%.o=%0.o) cc1
+	$(RM) -f $(CC1_OBJS:%.o=%1.s) $(CC1_OBJS:%.o=%1.o) cc
+	$(RM) -f $(CC1_OBJS:%.o=%2.s) $(CC1_OBJS:%.o=%2.o) cc2
+	$(RM) -f $(CPP_OBJS:%.o=%.s) $(CPP_OBJS) cpp
 
-check:	check-cc
+check:	check-cc check-cpp
 
-cc2:	ld libc.o crt0.o $(CC_OBJS:%.o=%2.o)
-	ld -o cc2 libc.o crt0.o $(CC_OBJS:%.o=%2.o)
+cc2:	ld libc.o crt0.o $(CC1_OBJS:%.o=%2.o)
+	ld -o cc2 libc.o crt0.o $(CC1_OBJS:%.o=%2.o)
 
 check-cc:	cc2
 	$(CMP) cc2 cc
-	$(RM) -f $(CC_OBJS:%.o=%2.s) $(CC_OBJS:%.o=%2.o) cc2
+	$(RM) -f $(CC1_OBJS:%.o=%2.s) $(CC1_OBJS:%.o=%2.o) cc2
+
+# TODO: put some tests here
+check-cpp:	cpp
 
 world:
 	$(MAKE) clean

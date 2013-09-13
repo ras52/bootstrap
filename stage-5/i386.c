@@ -210,16 +210,18 @@ mem_access(stream, offset, need_addr) {
             need_addr ? "LEA" : "MOVL", offset);
 }
 
-pop_subscr(stream, elt_size, need_lval) {
+scale_elt(stream, elt_size, dir) {
     if ( elt_size == 1 )
         ;
     else if ( (elt_size & (elt_size-1)) == 0 )
         /* If the size is a power of two, then use SHLL for speed */
-        fprintf(stream, "\tMOVB\t$%d, %%cl\n\tSHLL\t%%eax\n", ilog2(elt_size));
-    else
-        fprintf(stream, "\tMOVL\t$%d, %%ecx\n\tMULL\t%%ecx\n", elt_size);
-    pop_add(stream, 0, 4);
-    dereference(stream, need_lval);
+        fprintf(stream, "\tMOVB\t$%d, %%cl\n\t%sL\t%%eax\n", ilog2(elt_size),
+                dir > 0 ? "SHL" : "SHR");
+    else {
+        if (dir < 0) fputs("\tXORL\t%edx, %edx\n", stream);
+        fprintf(stream, "\tMOVL\t$%d, %%ecx\n\t%sL\t%%ecx\n", elt_size,
+                dir > 0 ? "MUL" : "DIV");
+    }
 }
 
 pop_assign(stream, sz) {
@@ -227,7 +229,6 @@ pop_assign(stream, sz) {
     fprintf(stream, "\tMOV%c\t%s, (%%eax)\n", 
             sz_suffix(sz), sz_aux_reg(sz));
 }
-
 
 load_zero(stream) {
     fputs("\tXORL\t%eax, %eax\n", stream);

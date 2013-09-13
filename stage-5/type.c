@@ -18,12 +18,15 @@ req_lvalue(node) {
                   &node[3]);
     }
 
-    else if ( type != '*' && type != '[]')
+    /* This isn't quite right either.  The C standard says the result of 
+     * the . operator is an lvalue iff its first argument is one. */
+    else if ( type != '*' && type != '[]' && type != '.' && type != '->' )
         error("Non-lvalue expression used as lvalue");
 }
 
 /* Static types */
 static s_int = 0;
+static s_uint = 0;
 static s_char = 0;
 static s_ulong = 0;
 
@@ -31,17 +34,22 @@ init_stypes() {
     s_int = new_node('dclt', 3);
     s_int[3] = new_node('int', 0);
 
+    s_uint = new_node('dclt', 3);
+    s_uint[3] = add_ref( s_int[3] );
+    s_uint[5] = new_node('unsi', 0);
+
     s_char = new_node('dclt', 3);
     s_char[3] = new_node('char', 0);
 
     s_ulong = new_node('dclt', 3);
     s_ulong[3] = add_ref( s_int[3] );
     s_ulong[4] = new_node('long', 0);
-    s_ulong[5] = new_node('unsi', 0);
+    s_ulong[5] = add_ref( s_uint[5] );
 }
 
 fini_stypes() {
     free_node(s_int);
+    free_node(s_uint);
     free_node(s_char);
     free_node(s_ulong);
 }
@@ -49,6 +57,10 @@ fini_stypes() {
 
 implct_int() {
     return s_int;
+}
+
+size_t_type() {
+    return s_uint;
 }
 
 chr_array_t(len) {
@@ -86,7 +98,6 @@ type_size(type) {
     else int_error( "Cannot determine size of unknown type: %Mc", type[0] );
 }
 
-static
 is_pointer(type) {
     auto t = type[0];
     return t == '*' || t == '[]';
@@ -101,7 +112,6 @@ can_deref(type) {
     return is_pointer(type) || compat_flag && type == s_int;
 }
 
-static
 is_integral(type) {
     /* At present, all dclt types are integral.  
      * Floats and struct may change that. */
@@ -293,6 +303,7 @@ chk_bitop(p) {
 
 /* Determine the type of an + or - expression. */
 chk_add(p) {
+    extern compat_flag;
     auto type1 = p[3][2], type2 = p[4][2], op = p[0];
 
     /* Handle case of: ptr +/- int. */
@@ -307,15 +318,25 @@ chk_add(p) {
 
     /* Handle case of: ptr - ptr. */
     else if (op == '-' && is_pointer(type1) && is_pointer(type2)) {
-       /* TODO: Check pointers are compatible. */
-       /* We choose ptrdiff_t to be int. */
-       p[2] = add_ref( implct_int() );
+        /* TODO: Properly check pointers are compatible.  
+         * But for now, just check they have the same size. */
+        if ( type_size( type1[3] ) != type_size( type2[3] ) )
+            error("Cannot take difference of incompatible pointers");
+
+        /* We choose ptrdiff_t to be int. */
+        p[2] = add_ref( implct_int() );
     }
 
     else {
         req_type2( is_arith, type1, type2, op );
         p[2] = add_ref( usual_conv(type1, type2) );
-    }   
+    }
+
+    if ( compat_flag && is_pointer( p[2] ) && type_size( p[2][3] ) != 1 ) {
+        auto buf[8];
+        print_type( buf, 32, p[2][3] );
+        error( "Element size has changed since stage-4: %s", buf );
+    }
 }
 
 /* Type checking for call expressions */
@@ -351,8 +372,7 @@ chk_incdec(p) {
 
     /* In stage-4, increments were always done as if on an int.  This 
      * means that int* now increments differently.  Warn about that. */
-    if ( compat_flag && ( p[2][0] == '[]' || p[2][0] == '*' )
-         && type_size( p[2][3] ) != 1 ) {
+    if ( compat_flag && is_pointer( p[2] ) && type_size( p[2][3] ) != 1 ) {
         auto buf[8];
         print_type( buf, 32, p[2][3] );
         error( "Element size has changed since stage-4: %s", buf);
@@ -394,6 +414,19 @@ chk_comma(p) {
 }
 
 chk_int(p) {
+    /* TODO: Replace calls to this with something more appropriate. */
+    p[2] = add_ref( implct_int() );
+}
+
+chk_cmp(p) {
+    auto type1 = p[3][2], type2 = p[4][2];
+    if ( is_integral(type1) && is_integral(type2) )
+        ;
+    /* TODO: Check types are compatible */
+    else if ( is_pointer(type1) && is_pointer(type2) )
+        ;
+    else
+        error("Unable to compare incompatible types");
     p[2] = add_ref( implct_int() );
 }
 

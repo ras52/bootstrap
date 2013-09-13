@@ -132,7 +132,7 @@ postfx_expr() {
 
 /*  unary-op   ::= '+' | '-' | '~' | '!' | '*' | '&' | '++' | '--'
  *  unary-expr ::= unary-op unary-expr | postfx-expr 
- *  TODO: sizeof */
+ *                   | 'sizeof' '(' type-name ')'                           */
 static
 unary_expr() {
     auto t = peek_token();
@@ -160,14 +160,55 @@ unary_expr() {
         return p;
     }
 
+    else if ( t == 'size' ) {
+        /* We'll overwrite the node to the type size */
+        auto p = take_node(0), decl; 
+        skip_node('(');
+        decl = type_name();
+        skip_node(')');
+
+        p[0] = 'num';
+        p[2] = add_ref( size_t_type() );
+        p[3] = type_size( decl[2] );
+
+        free_node(decl);
+        return p;
+    }
+
     else return postfx_expr();
 }
 
-/* cast-expr ::= unary-expr
- * TODO: cast expression */
+/* cast-expr ::= '(' type-name ')' cast-expr | unary-expr */
 static
 cast_expr() {
-    return unary_expr();
+    if ( peek_token() == '(' ) {
+        auto brack = take_node(0);
+
+        /* We don't yet know that we have a cast expression.  It might be 
+         * the opening '(' of a primary-expr.    */
+        if ( !is_dclspec( peek_token() ) ) {
+            /* We can't just call skip_token('('); expr(); skip_token(')');
+             * beacuse that doesn't cope with (*x)++ where we need the 
+             * call stack to handle the postfix operator on the way back 
+             * down the call stack. */
+            unget_token(brack);            
+            return unary_expr();
+        }
+        else {
+            auto type = type_name(), p;
+            skip_node(')');
+
+            p = cast_expr();
+            free_node(p[2]);
+            p[2] = add_ref( type[2] );
+
+            free_node(type);
+            free_node(brack);
+            return p;
+        }
+    }
+
+    else return unary_expr();
 }
 
 static
@@ -232,16 +273,16 @@ shift_expr() {
    rel-expr ::= shift-expr ( rel-op shift-expr )* */
 static
 rel_expr() {
-    extern chk_int();
-    return bin_level( shift_expr, chk_int, '<', '<=', '>', '>=', 0 );
+    extern chk_cmp();
+    return bin_level( shift_expr, chk_cmp, '<', '<=', '>', '>=', 0 );
 }
 
 /* eq-op   ::= '==' | '!='
    eq-expr ::= rel-expr ( eq-op rel-expr )* */
 static
 eq_expr() {
-    extern chk_int();
-    return bin_level( rel_expr, chk_int, '==', '!=', 0 );
+    extern chk_cmp();
+    return bin_level( rel_expr, chk_cmp, '==', '!=', 0 );
 }
 
 /* bitand-expr ::= eq-expr ( '&' eq-expr )* */

@@ -364,6 +364,15 @@ ext_decl:
 	INCL	-20(%ebp)		# is_static = 1
 	CALL	next
 .L8:
+	CALL	skip_type
+.L8a:
+	#  Skip any pointer declarators
+	MOVL	token, %eax
+	CMPL	'*', %eax
+	JNE	.L8b
+	CALL	next
+	JMP	.L8a
+.L8b:
 	#  Check that we've read a identifier first
 	CMPL	'id', %eax
 	JNE	_error

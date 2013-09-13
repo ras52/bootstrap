@@ -421,11 +421,10 @@ extern_decl:
 
 ####	#  Function:	int skip_type();
 	#
-	#    skip-type ::= ( 'int' | 'char' )*
+	#    skip-type ::= ( 'int' | 'char' | 'struct' name )*
 	#
 	#  Current token is a type, if there is one.
 	#  Returns non-zero if a type was skipped, and zero otherwise.
-.local skip_type
 skip_type:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -440,7 +439,14 @@ skip_type:
 	JE	.L28
 	CMPL	'char', %eax
 	JE	.L28
+	CMPL	'stru', %eax
+	JE	.L28a
 	JMP	.L29
+.L28a:
+	# A struct, so skip the next token too
+	CALL	next
+	CMPL	'id', %eax
+	JNE	_error
 .L28:
 	CALL	next
 	INCL	-4(%ebp)
@@ -461,7 +467,6 @@ skip_type:
 	#    declarator ::= '*'* ( name | '(' declarator ')' ) ( '(' ')' )?
 	#
 	#  Current token is '*', name, or '('.  Returns the next token.
-.local declarator
 declarator:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
@@ -484,7 +489,7 @@ declarator:
 	JNE	_error
 	JMP	.L33
 .L32:
-	#  If not, we must hae an identifier: save it in BUF if it's not null.
+	#  If not, we must have an identifier: save it in BUF if it's not null.
 	CMPL	'id', %eax
 	JNE	_error
 	MOVL	8(%ebp), %ecx

@@ -128,7 +128,28 @@ subscript(stream, node, need_lval) {
     auto elt_sz = compat_flag && type == implct_int() ? 4 
         : type_size( type[3] );        /* remove * or [] from type */
 
-    pop_subscr(stream, elt_sz, need_lval);
+    scale_elt(stream, elt_sz, 1);
+    pop_add(stream, 0, 4);
+    dereference(stream, need_lval);
+}
+
+static
+add_op(stream, node, is_ass, argsz) {
+    auto op = node[0];
+
+    /* Pointer plus integer needs scaling.  We canonicalised this during
+     * parsing so the pointer is always the first arg which is in node[3]. */
+    if ( is_pointer( node[3][2] ) && is_integral( node[4][2] ) )
+        scale_elt( stream, type_size( node[3][2][3] ), 1 );
+   
+    if ( op == '-' || op == '-=' )
+        pop_sub(stream, is_ass, argsz);
+    else 
+        pop_add(stream, is_ass, argsz);
+
+    /* Pointer minus pointer needs scaling down. */
+    if ( is_pointer( node[3][2] ) && is_pointer( node[4][2] ) )
+        scale_elt( stream, type_size( node[3][2][3] ), -1 );
 }
 
 static
@@ -165,8 +186,8 @@ binary_op(stream, node, need_lval) {
     else if ( op == '*'   ) pop_mult(stream, 0, node[2][5]);
     else if ( op == '/'   ) pop_div(stream, 0, node[2][5]);
     else if ( op == '%'   ) pop_mod(stream, 0, node[2][5]);
-    else if ( op == '+'   ) pop_add(stream, 0, sz);
-    else if ( op == '-'   ) pop_sub(stream, 0, sz);
+    else if ( op == '+'   ) add_op(stream, node, 0, sz);
+    else if ( op == '-'   ) add_op(stream, node, 0, sz);
     else if ( op == '<<'  ) pop_lshift(stream, 0);
     else if ( op == '>>'  ) pop_rshift(stream, 0);
     else if ( op == '&'   ) pop_bitand(stream, 0, sz);
@@ -177,8 +198,8 @@ binary_op(stream, node, need_lval) {
     else if ( op == '*='  ) pop_mult(stream, 1);
     else if ( op == '/='  ) pop_div(stream, 1);
     else if ( op == '%='  ) pop_mod(stream, 1);
-    else if ( op == '+='  ) pop_add(stream, 1, sz);
-    else if ( op == '-='  ) pop_sub(stream, 1, sz);
+    else if ( op == '+='  ) add_op(stream, node, 1, sz);
+    else if ( op == '-='  ) add_op(stream, node, 1, sz);
     else if ( op == '<<=' ) pop_lshift(stream, 1);
     else if ( op == '>>=' ) pop_rshift(stream, 1);
     else if ( op == '&='  ) pop_bitand(stream, 1, sz);
@@ -547,7 +568,7 @@ codegen(stream, node) {
             auto type = decl[2], name = &decl[4][3];
             set_storage( stream, storage, name );
 
-            if (type[0] == 'dclt')
+            if (type[0] == 'dclt' || type[0] == '*')
                 int_decl( stream, name, init );
             else if (type[0] == '()')
                 fn_decl( stream, name, type, init, decl[6] );

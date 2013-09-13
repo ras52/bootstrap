@@ -1,102 +1,9 @@
-/* scanner.c  --  code for tokenising the C input stream
+/* scanner.c  --  code for converting preprocessor tokens to C ones
  *
  * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
-static line = 1;
-static filename;
-
-static
-print_msg(fmt, ap)
-    char *fmt;
-{
-    extern stderr;
-    fprintf(stderr, "%s:%d: ", filename, line);
-    vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
-}
-
-warning(fmt)
-    char *fmt;
-{
-    print_msg(fmt, &fmt);
-}
-
-error(fmt)
-    char *fmt;
-{
-    print_msg(fmt, &fmt);
-    exit(1);
-}
-
-int_error(fmt)
-    char* fmt;
-{
-    extern stderr;
-    fputs("Internal error: ", stderr);
-    vfprintf(stderr, fmt, &fmt);
-    fputc('\n', stderr);
-    fflush(stderr);
-    abort();
-}
-
-
-/* A version of fgetc() that increments LINE if a '\n' is found */
-static
-fgetcl(stream) {
-    auto c = fgetc(stream);
-    if ( c == '\n' ) ++line;
-    return c;
-}
-
-/* Skips over a C-style comment (the opening / and * are already read). */
-static
-skip_ccomm(stream) {
-    auto c;
-
-    do {
-        do c = fgetcl(stream);
-        while ( c != -1 && c != '*' );
-        c = fgetcl(stream);
-    } while ( c != -1 && c != '/' );
-
-    if ( c == -1 )
-        error("Unexpected EOF during comment");
-}
-
-/* Skips over whitespace, including comments, and returns the next character
- * without ungetting it. */
-static
-skip_white(stream) {
-    auto c;
-    while (1) {
-        do c = fgetcl(stream);
-        while ( isspace(c) ); 
-
-        if (c == '/') {
-            auto c2 = fgetc(stream);
-            if ( c2 != '*' ) {
-                ungetc(c2, stream);
-                return c;
-            }
-            skip_ccomm(stream);
-        }
-        else return c;
-    }
-}
-
-/* Is C a valid character to start an identifier (or keyword)? */
-static
-isidchar1(c) {
-    return c == '_' || isalpha(c);
-}
-
-/* Is C a valid character to continue an identifier (or keyword)? */
-static
-isidchar(c) {
-    return c == '_' || isalnum(c);
-}
 
 /* Check whether the null-terminated string, NODE->str, is a keyword, and 
  * if so set NODE->type to the keyword token (which is a multicharacter 
@@ -115,7 +22,7 @@ chk_keyword(node)
          * 'do' and 'if' have an extra NUL character to pad them to 4 bytes
          * for casting to an int (i.e. a multicharacter literal). 
          *
-         * TODO: Not yet implemented: double, sizeof, struct, typedef, union. 
+         * TODO: Not yet implemented: double, typedef, union. 
          */
         "auto", "break", "case", "char", "continue", "default", "do\0", 
         "double", "else", "extern", "float", "for", "goto", "if\0", 
@@ -136,72 +43,6 @@ chk_keyword(node)
         memset( &node[3], 0, 16 );
     }
     
-    return node;
-}
-
-/* Append character CHR to the payload of the node *NODE_PTR which is treated 
- * as a string with current length *LEN_PTR.  The value of *LEN_PTR is 
- * incremented.  The node may be reallocated. */
-static
-node_lchar( node_ptr, len_ptr, chr )
-    int *len_ptr;
-{
-    auto node = *node_ptr;
-    node = grow_node( node, *len_ptr );
-    lchar( &node[3], (*len_ptr)++, chr );
-    *node_ptr = node;
-}
-
-/* Create a node, NODE, which will be returned; read a word (i.e. identifier 
- * or keyword) starting with C (which has already been checked by isidchar1) 
- * into NODE->str, set NODE->type, and return NODE. */
-static
-get_word(stream, c) {
-    /* struct node { int type; int dummy; char str[]; } */
-    auto node = new_node('id', 0);
-    auto i = 0;
-
-    node_lchar( &node, &i, c );
-    while ( isidchar( c = fgetc(stream) ) )
-        node_lchar( &node, &i, c );
-
-    ungetc(c, stream);
-    node_lchar( &node, &i, 0 );
-    return chk_keyword( node );
-}
-
-/* Read a preprocessor number into a new node that will be returned.  
- * The pp-number will be converted into a proper number (or an error issued)
- * in the get_number() function. */
-static
-get_ppnum(stream, c, c2) {
-    auto i = 0;
-
-    /* struct node { int type; int dummy, dummy2; char str[]; }; */
-    auto node = new_node('ppno', 0);
-
-    node_lchar( &node, &i, c );
-    if (c2) node_lchar( &node, &i, c2 );
-
-    /* At this stage in processing, arbitrary suffixes (and infixes) are
-     * permitted, not just the 'u' and 'l' type suffixes, the '0x' prefix,
-     * the hex digits, and the 'e' expontent infix. */
-    while ( (c = fgetc(stream)) != -1 && ( c == '.' || isalnum(c) ) ) {
-        node_lchar( &node, &i, c );
-
-        /* 'E' and 'e' are for exponents, and can have a sign suffix.
-         * C99 adds 'P' and 'p'. */
-        if ( c == 'e' || c == 'E' ) {
-            c = fgetc(stream);
-            if (c == '+' || c == '-') node_lchar( &node, &i, c );
-            else if ( c == -1 ) break;
-            else ungetc(c, stream);
-        }
-    }
-
-    node_lchar( &node, &i, 0 );
-    ungetc(c, stream);
-
     return node;
 }
 
@@ -255,53 +96,6 @@ get_number(stream, c, c2) {
     return node;
 }
 
-/* Test whether the two characters in the multicharacter literal, OP, is a 
- * valid lexical representation of an operator.  So '[]' does not  */
-static
-is_2charop(op) {
-    /* TODO: digraphs and trigraphs */
-    auto mops[20] = { 
-        /* 0     1     2     3     4     5     6     7     8     9 */
-        '++', '--', '<<', '>>', '<=', '>=', '==', '!=', '&&', '||',
-        '*=', '%=', '/=', '+=', '-=', '&=', '|=', '^=',  '->', 0 
-    };
-
-    /* Search for two-character operator name in the mops[] list, above */
-    auto i = 0;
-    while ( mops[i] && mops[i] != op )
-        ++i;
-
-    return mops[i] ? 1 : 0;
-}
-
-/* Read an operator, starting with character C, and return a node with
- * NODE->type set to the operator as a multicharacter literal. */
-static
-get_multiop(stream, c) {
-    /* Fetch the second character */
-    auto c2 = fgetc(stream);
-    if ( c2 == -1 ) return new_node( c, 0 );
-    else lchar( &c, 1, c2 );
-
-    /* If it's not a two-character operator, it must be a single character 
-     * operator -- node that the only three-character operators and two-
-     * character operators with an extra character appended.  
-     * TODO: '...' breaks that assumption. */
-    if ( !is_2charop(c) ) {
-        ungetc( rchar( &c, 1 ), stream );
-        return new_node( rchar( &c, 0 ), 0 );
-    }
-
-    /* Is it a <<= or >>= operator? */
-    if ( c == '<<' || c == '>>' ) {
-        c2 = fgetc(stream);
-        if ( c2 == '=' ) lchar( &c, 2, c2 );
-        else ungetc(c2, stream);
-    }
-
-    return new_node(c, 0);
-}
-
 /* Convert a quoted character literal in STR (complete with single quotes,
  * and escapes) into an integer, and return that. */
 parse_chr(str)
@@ -332,97 +126,76 @@ parse_chr(str)
     return val;
 }
 
-/* Read a string or character literal into VALUE, beginning with quote mark, 
- * Q, and return the appropriate token type ('str' or 'chr'). */
-static
-get_qlit(stream, q) {
-    auto i = 0, l = 0, c;
-    /* struct node { int type; int dummy; char str[]; } */
-    auto node = new_node( q == '"' ? 'str' : 'chr', 0 );
-
-    node_lchar( &node, &i, q );
-    
-    while ( (c = fgetc(stream)) != -1 && c != q ) {
-        node_lchar( &node, &i, c );
-        /* TODO: The handling of escapes is not conformant.  Also, share
-         * code with parse_chr(), above. */
-        if ( c == '\\' ) {
-            if ( (c = fgetc(stream)) == -1 ) break;
-            node_lchar( &node, &i, c );
-        }
-        ++l;
-    }
-
-    if ( c == -1 )
-        error("Unexpected EOF during %s literal",
-              q == '"' ? "string" : "character");
-
-    node_lchar( &node, &i, q );
-    node_lchar( &node, &i, 0 );
-
-    /* Character literals have type int in C. */
-    if (q == '\'') 
-        node[2] = add_ref( implct_int() );
-    /* String literals have type char[N] */
-    else 
-        node[2] = chr_array_t(l);
-
-    return node;
-}
-
 static input_strm;
 
 /* Contains the token most recently read by next() */
 static token;
 
-peek_char() {
-    auto stream = input_strm;
-    auto c = skip_white(input_strm);
-    ungetc(c, stream);
-    return c;
-}
+/* Contains a single push-back token */
+static pb_token;
 
 /* Read the next lexical element as a syntax tree node */
-next() {
-    auto stream = input_strm;
-    auto c = skip_white(stream);
-    if ( c == -1 )
-        token = 0;
-    else if ( isidchar1(c) )
-        token = get_word(stream, c);
-    else if ( isdigit(c) )
-        token = get_number(stream, c, 0);
-    else if ( c == '.' ) {
-        /* A . could be the start of a ppnumber, or a '.' operator  */
-        auto c2 = fgetc(stream);
-        if ( isdigit(c2) )
-            token = get_number(stream, c, c2);
-        else {
-            ungetc(c2, stream);
-            token = new_node( c, 0 );
+static
+do_next() {
+    auto stream = input_strm, c;
+    do {
+        c = skip_white(stream);
+        if ( c == -1 )
+            token = 0;
+        else if ( c == '\n#' )
+            start_ppdir(stream);
+        else if ( isidchar1(c) )
+            token = chk_keyword( get_word(stream, c) );
+        else if ( isdigit(c) )
+            token = get_number(stream, c, 0);
+        else if ( c == '.' ) {
+            /* A . could be the start of a ppnumber, or a '.' operator  */
+            auto c2 = fgetc(stream);
+            if ( isdigit(c2) )
+                token = get_number(stream, c, c2);
+            else {
+                ungetc(c2, stream);
+                token = new_node( c, 0 );
+            }
+        }        
+        else if ( c == '\'' || c == '"' ) {
+            auto int l;
+            token = get_qlit(stream, c, &l);
+    
+            /* Character literals have type int in C. */
+            if (c == '\'') 
+                token[2] = add_ref( implct_int() );
+            /* String literals have type char[N] */
+            else 
+                token[2] = chr_array_t(l);
         }
-    }        
-    else if ( c == '\'' || c == '"' )
-        token = get_qlit(stream, c);
-    else 
-        token = get_multiop(stream, c);
+        else 
+            token = get_multiop(stream, c);
+    } while ( c == '\n#' );
+}
+
+static
+next() {
+    if (pb_token) {
+        token = pb_token;
+        pb_token = 0;
+    }
+    else do_next();
     return token;
+}
+
+unget_token(t) {
+    if (pb_token) int_error("Token push-back slot already in use");
+    pb_token = token;
+    token = t;
 }
 
 init_scan(in_filename) {
     extern stdin;
     freopen( in_filename, "r", stdin );
-    filename = in_filename;
+    set_file( in_filename );
     input_strm = stdin;
     next();
-}
-
-/* Test whether token type OP is an operator in the syntax tree. */
-is_op(op) {
-    /* TODO: '.', ',' */
-    return strnlen(&op, 4) == 1 && strchr("&*+-~!/%<>^|=,", op)
-        || is_2charop(op) || op == '?:' || op == '[]' 
-        || op == '>>=' || op == '<<=';
 }
 
 /* Skip over a piece of syntax, deallocating its node */
@@ -448,11 +221,62 @@ take_node(arity) {
 /* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
  * Returns P. */
 req_token() {
-    if (!token) error("Unexpected EOF");
+    if (!token) error("Unexpected end of file");
     return token;
 }
 
 peek_token() {
     return token ? token[0] : 0;
 }
+
+/* Handle a #pragma directive */
+prgm_direct(stream) {
+    auto struct node* tok;
+    auto char* str;
+    auto int c = skip_hwhite(stream);
+
+    /* The standard requires unrecognised #pragmas to be allowed, but
+     * this is a bit silly. */
+    if ( !isidchar1(c) ) {
+        warning("Unfamiliar form of #pragma directive");
+        pp_slurp(stream);
+        return;
+    }
+   
+    tok = get_word(stream, c);
+    str = node_str(tok);
+
+    /* Our #pragmas all live in the RBC namespace (for Richard's Bootstrap 
+     * Compiler). */
+    if ( strcmp( str, "RBC" ) != 0 ) {
+        /* An unknown pragma: silently ignore it. */
+        pp_slurp(stream);
+        free_node(tok);
+        return;
+    }
+    free_node(tok);
+
+    c = skip_hwhite(stream);
+    if ( !isidchar1(c) )
+        error("#pragma RBC requires a command argument");
+    tok = get_word(stream, c);
+    str = node_str(tok);
+    
+    /* We only know about #pragma RBC compatibility */
+    if ( strcmp( str, "compatibility" ) == 0 ) {
+        extern compat_flag;
+        auto int n = pp_dir_num(stream);
+        if ( n < 4 || n > 5 )
+            error("Compatibility with stage %d not supported", n);
+        compat_flag = ( n == 4 );
+        free_node(tok);
+    }
+    else {
+        warning("Unhandled #pragma RBC %s", str);
+        pp_slurp(stream);
+        free_node(tok);
+        return;
+    }
+}
+
 
