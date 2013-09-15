@@ -10,7 +10,6 @@
  * literal containing at most the first four characters of the keyword, 
  * e.g. 'whil' for "while"); otherwise set NODE->type = 'id' for an 
  * identifier.   Returns NODE. */
-static
 chk_keyword(node)
 {
     /* Argument is:  struct node { int type; int dummy; char str[]; } */
@@ -49,7 +48,6 @@ chk_keyword(node)
 /* Create a node, NODE, which will be returned; read a number (oct / hex / dec)
  * starting with character C (which has already been checked by isdigit), 
  * parse it into NODE->val, set NODE->type, and return NODE. */
-static
 get_number(stream, c, c2) {
     auto char *nptr;
     auto ppnode = get_ppnum(stream, c, c2);
@@ -126,108 +124,6 @@ parse_chr(str)
     return val;
 }
 
-static input_strm;
-
-/* Contains the token most recently read by next() */
-static token;
-
-/* Contains a single push-back token */
-static pb_token;
-
-/* Read the next lexical element as a syntax tree node */
-static
-do_next() {
-    auto stream = input_strm, c;
-    do {
-        c = skip_white(stream);
-        if ( c == -1 )
-            token = 0;
-        else if ( c == '\n#' )
-            start_ppdir(stream);
-        else if ( isidchar1(c) )
-            token = chk_keyword( get_word(stream, c) );
-        else if ( isdigit(c) )
-            token = get_number(stream, c, 0);
-        else if ( c == '.' ) {
-            /* A . could be the start of a ppnumber, or a '.' operator  */
-            auto c2 = fgetc(stream);
-            if ( isdigit(c2) )
-                token = get_number(stream, c, c2);
-            else {
-                ungetc(c2, stream);
-                token = new_node( c, 0 );
-            }
-        }        
-        else if ( c == '\'' || c == '"' ) {
-            auto int l;
-            token = get_qlit(stream, c, &l);
-    
-            /* Character literals have type int in C. */
-            if (c == '\'') 
-                token[2] = add_ref( implct_int() );
-            /* String literals have type char[N] */
-            else 
-                token[2] = chr_array_t(l);
-        }
-        else 
-            token = get_multiop(stream, c);
-    } while ( c == '\n#' );
-}
-
-static
-next() {
-    if (pb_token) {
-        token = pb_token;
-        pb_token = 0;
-    }
-    else do_next();
-    return token;
-}
-
-unget_token(t) {
-    if (pb_token) int_error("Token push-back slot already in use");
-    pb_token = token;
-    token = t;
-}
-
-init_scan(in_filename) {
-    extern stdin;
-    freopen( in_filename, "r", stdin );
-    set_file( in_filename );
-    input_strm = stdin;
-    next();
-}
-
-/* Skip over a piece of syntax, deallocating its node */
-skip_node(type) {
-    if (!token)
-        error("Unexpected EOF when expecting '%Mc'", type);
-
-    else if (token[0] != type)
-        error("Expected a '%Mc'", type);
-    
-    free_node(token);
-    return next();
-}
-
-/* Take ownership of the current node, and call next() */
-take_node(arity) {
-    auto node = token;
-    node[1] = arity;
-    next();
-    return node;
-}
-
-/* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
- * Returns P. */
-req_token() {
-    if (!token) error("Unexpected end of file");
-    return token;
-}
-
-peek_token() {
-    return token ? token[0] : 0;
-}
 
 /* Handle a #pragma directive */
 prgm_direct(stream) {
@@ -240,7 +136,7 @@ prgm_direct(stream) {
     if ( !isidchar1(c) ) {
         warning("Unfamiliar form of #pragma directive");
         pp_slurp(stream);
-        return;
+        return 0;
     }
    
     tok = get_word(stream, c);
@@ -252,7 +148,7 @@ prgm_direct(stream) {
         /* An unknown pragma: silently ignore it. */
         pp_slurp(stream);
         free_node(tok);
-        return;
+        return 0;
     }
     free_node(tok);
 
@@ -275,8 +171,25 @@ prgm_direct(stream) {
         warning("Unhandled #pragma RBC %s", str);
         pp_slurp(stream);
         free_node(tok);
-        return;
     }
+
+    /* The return is a null node*, and indicates that we have handled
+     * (or ignored) the #pragma, and not to include it in the output
+     * token stream produced by the scanner. */
+    return 0;
+}
+
+do_get_qlit(stream, c) {
+    auto int l;
+    auto tok = get_qlit(stream, c, &l);
+
+    /* Character literals have type int in C. */
+    if (c == '\'') 
+        tok[2] = add_ref( implct_int() );
+    /* String literals have type char[N] */
+    else 
+        tok[2] = chr_array_t(l);
+    return tok;
 }
 
 

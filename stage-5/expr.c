@@ -195,16 +195,17 @@ cast_expr() {
             return unary_expr();
         }
         else {
-            auto type = type_name(), p;
+            auto type = type_name();
             skip_node(')');
 
-            p = cast_expr();
-            free_node(p[2]);
-            p[2] = add_ref( type[2] );
+            /* Use a unary-plus, as that's the identity op. */
+            brack[0] = '+';
+            brack[1] = 1;
+            brack[2] = add_ref( type[2] );
+            brack[3] = cast_expr();
 
             free_node(type);
-            free_node(brack);
-            return p;
+            return brack;
         }
     }
 

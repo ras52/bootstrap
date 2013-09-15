@@ -45,8 +45,11 @@ $(INIT):
 # use of structs-as-arrays in the code.  They should be coded as structs,
 # but that's not possible because it would be too difficult to add struct 
 # support to the stage-4 cc.
-%2.s:	%.c cc
+%2.s:	%.i cc
 	cc -S --compat -o $@ $<
+
+%.i:	%.c cpp
+	cpp $< > $@
 
 %.s:	%.c cc
 	cc -S -o $@ $<
@@ -76,8 +79,9 @@ clean:
 	$(RM) -f $(INIT)
 	$(RM) -f $(CC0_OBJS:%.o=%0.s) $(CC0_OBJS:%.o=%0.o) cc1
 	$(RM) -f $(CC1_OBJS:%.o=%1.s) $(CC1_OBJS:%.o=%1.o) cc
-	$(RM) -f $(CC1_OBJS:%.o=%2.s) $(CC1_OBJS:%.o=%2.o) cc2
 	$(RM) -f $(CPP_OBJS:%.o=%.s) $(CPP_OBJS) cpp
+	$(RM) -f $(CC1_OBJS:%.o=%2.s) $(CC1_OBJS:%.o=%2.i) $(CC1_OBJS:%.o=%2.o)
+	$(RM) -f cc2
 
 check:	check-cc check-cpp
 

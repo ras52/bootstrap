@@ -72,7 +72,7 @@ main(argc, argv)
     if ( !filename )
         cli_error("cc: no input file specified\n");
 
-    init_scan(filename);
+    init_scan(filename);  next();
 
     if (!outname) {
         /* We allow .c or .i filenames: .i is used for preprocessed source. */

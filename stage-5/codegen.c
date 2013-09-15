@@ -68,7 +68,13 @@ unary_post(stream, node, need_lval) {
 
 static
 member_bin(stream, node, need_lval) {
+extern stderr;
     expr_code( stream, node[3], node[0] == '.' );
+
+    /* This is a bit of a fudge.  In 'struct foo { int x[2] };', x is an
+     * address even though it's not an lvalue, per se. */
+    if ( node[2][0] == '[]' ) need_lval = 1;
+
     /* We've stored the member offset as an integer in node[5] */
     mem_access( stream, node[5], need_lval );
 }

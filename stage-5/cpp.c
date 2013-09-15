@@ -1,50 +1,70 @@
-/* main.c  --  the C preprocessor
+/* cpp.c  --  the C preprocessor
  *
  * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
-static input_strm;
+/* The preprocessor does not know about keywords. */
+chk_keyword(node) 
+    struct node* node;
+{
+    return node;
+}
 
-/* Contains the token most recently read by next() */
-static token;
+/* The preprocessor doesn't need to understand pp-numbers, just parse them. */
+get_number(stream, c1, c2) 
+{
+    return get_ppnum(stream, c1, c2);
+}
 
-/* Read the next lexical element as a syntax tree node */
-next() {
-    auto stream = input_strm;
-    auto c = skip_white(stream);
-    if ( c == -1 )
-        token = 0;
-    else if ( isidchar1(c) )
-        token = get_word(stream, c);
-    else if ( isdigit(c) )
-        token = get_ppnum(stream, c, 0);
-    else if ( c == '.' ) {
-        /* A . could be the start of a ppnumber, or a '.' operator  */
-        auto c2 = fgetc(stream);
-        if ( isdigit(c2) )
-            token = get_ppnum(stream, c, c2);
-        else {
-            ungetc(c2, stream);
-            token = new_node( c, 0 );
+do_get_qlit(stream, c) {
+    return get_qlit(stream, c, 0);
+}
+
+/* Null handling of pragma directive.  We only need to understand this in C. */
+prgm_direct(stream) {
+    struct node* node = new_node('prgm', 0);
+    int i = 0;
+    while (1) {
+        int c = fgetc(stream);
+        if ( c == -1 )
+            error("End of file during preprocessor directive");
+        else if ( c == '\n' ) {
+            ungetc(c, stream);
+            break;
         }
-    }        
-    else if ( c == '\'' || c == '"' )
-        token = get_qlit(stream, c, 0);
-    else 
-        token = get_multiop(stream, c);
-    return token;
+        else node_lchar(&node, &i, c);
+    }
+    /* Null terminate */
+    node_lchar( &node, &i, 0 );
+    return node;
 }
 
-init_scan(in_filename) {
-    extern stdin;
-    freopen( in_filename, "r", stdin );
-    set_file( in_filename );
-    input_strm = stdin;
-    next();
+static
+preprocess(output) {
+    struct node* node;
+    int out_line = 1;
+    while ( node = next() ) {
+        int in_line = get_line(), c;
+        if ( out_line > in_line || out_line < in_line - 4 ) 
+            fprintf(output, "\n#line %d\n", out_line = in_line);
+        else if ( out_line == in_line ) 
+            fputc(' ', output);
+        else while ( out_line < in_line ) { 
+            fputc('\n', output); ++out_line;
+        }
+        
+        c = node_code(node);
+        if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
+            fputs( node_str(node), output );
+        else if ( c == 'prgm' )
+            fprintf( output, "#pragma %s", node_str(node) );
+        else
+            fprintf( output, "%Mc", c );
+
+        free_node( node );
+    }
 }
-
-
 
 static
 cli_error(fmt) 
@@ -63,6 +83,7 @@ main(argc, argv)
     int argc;
     char **argv;
 {
+    extern stdout;
     char *filename = 0, *outname = 0;
     int i = 0;
 
@@ -90,9 +111,10 @@ main(argc, argv)
         cli_error("cpp: no input file specified\n");
     init_scan( filename );
 
+    preprocess( stdout );
+
+    rc_done();
     return 0;
 }
 
-/* Null handling of pragma directive.  We only need to understand this in C. */
-prgm_direct(stream) {
-}
+

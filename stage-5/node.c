@@ -124,6 +124,16 @@ node_str(node) {
     return &node[3];
 }
 
+/* Returns the node type.  This only exists to abstract the difference
+ * between t[0] (in stage-4) and t->code (in stage-5).  */
+node_code(node) {
+    return node[0];
+}
+
+set_arity(node, arity) {
+    node[1] = arity;
+}
+
 /* Append character CHR to the payload of the node *NODE_PTR which is treated 
  * as a string with current length *LEN_PTR.  The value of *LEN_PTR is 
  * incremented.  The node may be reallocated. */

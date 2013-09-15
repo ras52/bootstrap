@@ -13,6 +13,10 @@ set_file(name)
     filename = name;
 }
 
+get_line() {
+    return line;
+}
+
 static
 print_msg(fmt, ap)
     char *fmt;
@@ -119,14 +123,14 @@ pp_slurp(stream) {
 
 /* We've just read a #.  Read the rest of the directive. */
 start_ppdir(stream) {
-    auto struct node* tok;
+    auto struct node *tok, *ret = 0;
     auto char* str;
     auto int c = skip_hwhite(stream);
 
     /* The null directive -- just a '#' by itself on the line */
     if ( c == '\n' ) { 
         ungetc(c, stream); 
-        return; 
+        return ret; 
     }
    
     /* In principle this matches the non-directive syntax of C99 / C++1x,
@@ -142,7 +146,7 @@ start_ppdir(stream) {
         line_direct(stream);
 
     else if ( strcmp( str, "pragma" ) == 0 )
-        prgm_direct(stream);
+        ret = prgm_direct(stream);
 
     else
         error("Unknown preprocessor directive: %s", str);
@@ -155,6 +159,8 @@ start_ppdir(stream) {
     else if ( c != '\n' )
         error( "Unexpected content at end of #%s directive", str );
     ungetc(c, stream);
+
+    return ret;
 }
 
 /* Skips over whitespace, including comments, and returns the next character
@@ -338,4 +344,93 @@ is_op(op) {
         || op == '>>=' || op == '<<=';
 }
 
+static input_strm;
+
+/* Contains the token most recently read by next() */
+static token;
+
+/* Contains a single push-back token */
+static pb_token;
+
+/* Read the next lexical element as a syntax tree node */
+next() {
+    auto stream = input_strm, c;
+    if (pb_token) {
+        token = pb_token;
+        pb_token = 0;
+    }
+    else do {
+        c = skip_white(stream);
+        if ( c == -1 )
+            token = 0;
+        else if ( c == '\n#' ) {
+            /* If start_ppdir() returns a token, then we return that.
+             * This happens with #pragma in the preprocessor. */
+            if ( token = start_ppdir(stream) ) c = 0;
+        }
+        else if ( isidchar1(c) )
+            token = chk_keyword( get_word(stream, c) );
+        else if ( isdigit(c) )
+            token = get_number(stream, c, 0);
+        else if ( c == '.' ) {
+            /* A . could be the start of a ppnumber, or a '.' operator  */
+            auto c2 = fgetc(stream);
+            if ( isdigit(c2) )
+                token = get_number(stream, c, c2);
+            else {
+                ungetc(c2, stream);
+                token = new_node( c, 0 );
+            }
+        }        
+        else if ( c == '\'' || c == '"' )
+            token = do_get_qlit(stream, c);
+        else 
+            token = get_multiop(stream, c);
+    } while ( c == '\n#' );
+    return token;
+}
+
+unget_token(t) {
+    if (pb_token) int_error("Token push-back slot already in use");
+    pb_token = token;
+    token = t;
+}
+
+init_scan(in_filename) {
+    extern stdin;
+    freopen( in_filename, "r", stdin );
+    set_file( in_filename );
+    input_strm = stdin;
+}
+
+/* Skip over a piece of syntax, deallocating its node */
+skip_node(type) {
+    if (!token)
+        error("Unexpected EOF when expecting '%Mc'", type);
+
+    else if ( node_code(token) != type)
+        error("Expected a '%Mc'", type);
+    
+    free_node(token);
+    return next();
+}
+
+/* Take ownership of the current node, and call next() */
+take_node(arity) {
+    auto node = token;
+    set_arity( node, arity );
+    next();
+    return node;
+}
+
+/* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
+ * Returns P. */
+req_token() {
+    if (!token) error("Unexpected end of file");
+    return token;
+}
+
+peek_token() {
+    return token ? node_code(token) : 0;
+}
 
