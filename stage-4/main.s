@@ -531,3 +531,17 @@ main:
 	XORL	%eax, %eax
 	LEAVE
 	RET
+
+
+####	#  Function:	void _error()
+	#
+	#  All error handling is done here.  
+	#  NB. There is a duplicate (identical) defintion in libc0.o
+	#  (Note we can JMP here instead of CALLing it, as we never RET.)
+_error:
+	MOVL	$1, %eax
+	PUSH	%eax
+	CALL	exit
+	HLT
+
+

@@ -29,11 +29,13 @@ as ld:
 %.s:	%.c cc0
 	cc0 -S $<
 
-# LIB0_OBJS contain a minimal C library written entirely in assembler.
-# LIB1_OBJS are additional objects, most of which are written in C.
+# LIB_OBJS contain a minimal C library written entirely in assembler.
+# LIB0_OBJS adds bootstrap .o files written in assembler that will be replaced.
+# LIB1_OBJS adds replaces the bootstrap files above with versions written in C.
 
-LIB0_OBJS = string.o ctype.o exit.o unistd.o
-LIB1_OBJS = output.o input.o char.o malloc.o signal.o string2.o imath.o
+LIB_OBJS = string.o ctype.o unistd.o char.o imath.o
+LIB0_OBJS = $(LIB_OBJS) error.o stdio.o memory.o
+LIB1_OBJS = $(LIB_OBJS) exit.o output.o input.o malloc.o signal.o string2.o
 
 CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 
@@ -42,21 +44,20 @@ CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 # libc.o  is the complete stage-4 libc, with some C code compiled using cc0.
 # cc      is the compiler relinked against the new libc.o.
 
-libc0.o:	ld $(LIB0_OBJS) stdio.o memory.o
-	ld -r -o libc0.o $(LIB0_OBJS) stdio.o memory.o
+libc0.o:	ld $(LIB0_OBJS)
+	ld -r -o libc0.o $(LIB0_OBJS)
 
 cc0:	ld libc0.o crt0.o $(CC_OBJS)
 	ld -o cc0 libc0.o crt0.o $(CC_OBJS)
 
 
-libc.o:	ld $(LIB0_OBJS) $(LIB1_OBJS)
-	ld -r -o libc.o $(LIB0_OBJS) $(LIB1_OBJS)
+libc.o:	ld $(LIB1_OBJS)
+	ld -r -o libc.o $(LIB1_OBJS)
 
 cc:	ld libc.o crt0.o $(CC_OBJS)
 	ld -o cc libc.o crt0.o $(CC_OBJS)
 
-.INTERMEDIATE:	$(CC_OBJS) $(LIB0_OBJS) $(LIB1_OBJS) \
-	stdio.o memory.o libc0.o cc0
+.INTERMEDIATE:	$(CC_OBJS) $(LIB1_OBJS) $(LIB0_OBJS) libc0.o cc0
 
 check:	check-output check-input check-malloc
 
@@ -82,7 +83,7 @@ check-malloc: cc as malloc.c malloc.o
 	$(RM) malloc2.c malloc2.o malloc2.s
 
 clean:
-	$(RM) -f as ld $(LIB0_OBJS) stdio.o memory.o libc0.o crt0.o 
+	$(RM) -f as ld $(LIB0_OBJS)
 	$(RM) -f $(LIB1_OBJS) output.s input.s malloc.s signal.s libc.o
 	$(RM) -f $(CC_OBJS) cc0 cc
 	$(RM) -f output2.o output2.s input2.o input2.s malloc2.o malloc2.s

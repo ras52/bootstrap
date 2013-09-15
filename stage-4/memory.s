@@ -1,4 +1,4 @@
-# memory.s
+# memory.s  --  bootstrap code for memory handling
 
 # Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.

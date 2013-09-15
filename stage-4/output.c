@@ -22,28 +22,58 @@ stdout = __file1;
 stderr = __file2;
 
 
+/* An array of file* objects, indexed by file descriptor. */
+static __files = 0;
+/* Count of entries in the __files array */
+static __filec = 0;
+
+
 /* The C library fflush() */
 fflush( stream ) {
-    auto count = stream[2] - stream[3];
-    if ( count ) {
-        if ( write( stream[0], stream[3], count ) != count )
-            return -1;
-        stream[2] = stream[3];
+    /* Calling flush on an input stream is undefined behaviour.  We define
+     * it to be a no-op. */
+    if ( stream[5] ) {
+        auto count = stream[2] - stream[3];
+        if ( count ) {
+            if ( write( stream[0], stream[3], count ) != count )
+                return -1;
+            stream[2] = stream[3];
+        }
     }
     return 0;
 }
 
 /* The C library fclose() */
 fclose( stream ) {
-    auto rv;
-    /* Only flush output streams */
-    if ( stream[5] ) fflush( stream );
-    rv = close( stream[0] );
+    auto rv = -1;
+    if ( stream[0] != -1 ) {
+        fflush( stream );
+        rv = close( stream[0] );
+    }
+    if ( stream[0] < __filec )
+        __files[ stream[0] ] = 0;
+    /* Free any buffers associated with the stream */
     if ( stream[7] ) {
         free( stream[3] );
         free( stream );
     }
     return rv;
+}
+
+/* Flush standard output streams; gets registered with atexit by crt0.o */
+__io_flush() {
+    extern stdin;
+
+    auto i = 0;
+    while ( i < __filec ) {
+        auto f = __files[i];
+        if (f) fclose(f);
+        ++i;
+    }
+
+    fclose( stdin );
+    fclose( stdout );
+    fclose( stderr );
 }
 
 /* The C library freopen() */
@@ -52,11 +82,17 @@ freopen( filename, mode, stream ) {
     /* 0 == O_RDONLY */
     auto fmode = 0, fd;
 
-    /* stream->fd == -1 signifies a closed stream. */
-    if ( stream[0] != -1 && fclose( stream ) == -1 ) 
+    /* stream->fd == -1 signifies a closed stream.  This is true if we're
+     * called by fopen(). */
+    if ( stream[0] != -1 ) {
+        /* Don't call fclose because we want to retain the buffers. */
+        fflush( stream );
+        close( stream[0] );
+
         /* The standard does not state explicitly that errno is cleared, 
          * but it seems implied when it says that failure is ignored. */
         errno = 0;
+    }
 
     /* O_WRONLY=1 | O_CREAT=0x40 | O_TRUNC=0x200 */
     if ( rchar(mode, 0) == 'w' ) fmode |= 0x241;
@@ -78,6 +114,7 @@ freopen( filename, mode, stream ) {
     return stream;
 }
 
+/* The C library fopen() */
 fopen( filename, mode ) {
     auto stream = malloc(32); /* sizeof(struct FILE) */
     stream[0] = -1; /* an invalid file descriptor */
@@ -87,13 +124,21 @@ fopen( filename, mode ) {
     stream[6] = 0; /* _IOFBF */
     stream[7] = 1;
 
-    if ( freopen( filename, mode, stream ) )
-        return stream;
+    if ( freopen( filename, mode, stream ) == 0 ) {
+        /* It failed, so clean up. */
+        free( stream[3] );
+        free( stream );
+        return 0;
+    }
 
-    /* It failed, so clean up. */
-    free( stream[3] );
-    free( stream );
-    return 0;
+    /* Register the stream so it gets closed on exit */
+    if ( stream[0] >= __filec ) {
+        __filec = 1 + stream[0];
+        __files = realloc( __files, __filec * 4 ); /* 4 == sizeof(FILE*) */
+    }
+    __files[ stream[0] ] = stream;
+
+    return stream;
 }
 
 /* Implementation detail _fputsn() -- TODO declare this static */

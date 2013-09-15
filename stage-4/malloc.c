@@ -85,7 +85,7 @@ malloc( size ) {
 free( ptr ) {
     if (ptr) {
         auto p = ptr - 20;
-        if (p[1]) _error(); /* Double free */
+        if (p[1]) abort(); /* Double free */
         p[1] = 1;
         __defrag( p );
     }
@@ -93,6 +93,9 @@ free( ptr ) {
 
 /* The C library realloc() */
 realloc( ptr, size ) {
+    if ( !ptr ) 
+        return malloc( size );
+
     auto h = ptr - 20;
     if ( h[2] && h[4] == h[2][4] && h[2][1] && h[0] + h[2][0] + 20 >= size ) {
         __defrag2( h, h[2] );

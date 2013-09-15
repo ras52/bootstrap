@@ -10,6 +10,12 @@ _start:
 	XORL	%ebp, %ebp
 	PUSH	%ebp
 	MOVL	%esp, %ebp
+
+	MOVL	$__io_flush, %eax
+	PUSH	%eax
+	CALL	atexit
+	POP	%eax
+
 	LEA	8(%ebp), %eax		# argv
 	PUSH	%eax
 	PUSH	4(%ebp)			# argc

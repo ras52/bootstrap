@@ -1,4 +1,4 @@
-# stdio.s
+# stdio.s  --  bootstrap code for I/O
 
 # Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
@@ -265,15 +265,10 @@ getchar:
 	RET
 
 
-####	#  Function: void fflush( void* dummy );
-	#  
-	#  ABI compatible with the C library fflush, so the crt0.s can flush
-	#  stdout before we have buffering on stdout.
-fflush:
+__io_flush:
 	RET
 
 .data:
-stderr: .int 1  # These are nominally pointers and need to be distinguishable
 stdout: .int 1  # These are nominally pointers and need to be distinguishable
 stdin:	.int 1  # from the NULL pointer returned on error from e.g. freopen.
 
