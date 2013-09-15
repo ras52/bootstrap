@@ -49,7 +49,7 @@ $(INIT):
 	cc -S --compat -o $@ $<
 
 %.i:	%.c cpp
-	cpp $< > $@
+	cpp -o $@ $<
 
 %.s:	%.c cc
 	cc -S -o $@ $<

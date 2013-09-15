@@ -98,13 +98,15 @@ main(argc, argv)
     int argc;
     char **argv;
 {
-    extern stdout;
     char *filename = 0, *outname = 0;
     int i = 0;
 
     while ( ++i < argc ) {
         if ( strcmp( argv[i], "-o" ) == 0 ) {
             if ( ++i == argc ) usage();
+            if ( outname ) cli_error(
+                "cpp: multiple output files specified: '%s' and '%s'\n",
+                outname, argv[i]);
             outname = argv[i];
         }
 
@@ -126,7 +128,16 @@ main(argc, argv)
         cli_error("cpp: no input file specified\n");
     init_scan( filename );
 
-    preprocess( stdout );
+    if (outname) {
+        auto f = fopen( outname, "w" );
+        if (!f) cli_error( "cpp: unable to open file '%s'\n", outname );
+        preprocess(f);
+        fclose(f);
+    }
+    else {
+        extern stdout;
+        preprocess( stdout );
+    }
 
     close_scan();
 

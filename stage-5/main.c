@@ -33,9 +33,9 @@ main(argc, argv)
     int argc;
     char **argv;
 {
-    extern stdout;
     auto char *filename = 0, *outname = 0;
     auto int l, i = 0, has_s = 0, freeout = 0;
+    auto struct file* file;
 
     while ( ++i < argc ) {
         if ( strcmp( argv[i], "-S" ) == 0 ) 
@@ -88,11 +88,14 @@ main(argc, argv)
         freeout = 1;
         lchar( outname, l-1, 's' );
     }
-    freopen( outname, "w", stdout );
-    if (freeout) free(outname);
 
-    compile(stdout);
+    file = fopen( outname, "w" );
+    if (!file) cli_error( "cc: unable to open file '%s'\n", outname );
+    if (freeout) free( outname );
 
+    compile( file );
+
+    fclose( file );
     close_scan();
 
     fini_symtab();
