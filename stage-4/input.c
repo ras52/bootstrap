@@ -7,11 +7,12 @@
 /* Buffers for the output streams */
 static __buf0[32];
 
-/*                    0     1       2       3       4       5       6
- * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode    bmode } */
-static __file0[7] = { 0,    128,    __buf0, __buf0, __buf0, 0,      0    };
-/* MODE is as per the third argument to open(2).  
- * BMODE is an _IO?BF flag */
+/*                    0     1       2       3       4       5    6     7
+ * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode free } */
+static __file0[8] = { 0,    128,    __buf0, __buf0, __buf0, 0,   0,    0    };
+/* MODE is as per the second argument to open(2).  
+ * BMODE is an _IO?BF flag 
+ * FREE indicates whether the structure should be passed to free(3) in fclose */
 
 /* The stdio objects themselves.  
  * We can't just use the arrays themselves because we need to force make 

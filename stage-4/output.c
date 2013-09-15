@@ -8,11 +8,11 @@
 static __buf1[32];
 static __buf2[32];
 
-/*                    0     1       2       3       4       5       6
- * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode    bmode } */
-static __file1[7] = { 1,    128,    __buf1, __buf1, __buf1, 2,      0     };
-static __file2[7] = { 2,    128,    __buf2, __buf2, __buf2, 2,      2     };
-/* MODE is as per the third argument to open(2).  
+/*                    0     1       2       3       4       5    6     7
+ * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode free } */
+static __file1[8] = { 1,    128,    __buf1, __buf1, __buf1, 2,   0,    0    };
+static __file2[8] = { 2,    128,    __buf2, __buf2, __buf2, 2,   2,    0    };
+/* MODE is as per the second argument to open(2).  
  * BMODE is an _IO?BF flag */
 
 /* The stdio objects themselves.  
@@ -35,17 +35,25 @@ fflush( stream ) {
 
 /* The C library fclose() */
 fclose( stream ) {
+    auto rv;
     /* Only flush output streams */
     if ( stream[5] ) fflush( stream );
-    return close( stream[0] );
+    rv = close( stream[0] );
+    if ( stream[7] ) {
+        free( stream[3] );
+        free( stream );
+    }
+    return rv;
 }
 
 /* The C library freopen() */
 freopen( filename, mode, stream ) {
     extern errno;
+    /* 0 == O_RDONLY */
     auto fmode = 0, fd;
 
-    if ( fclose( stream ) == -1 ) 
+    /* stream->fd == -1 signifies a closed stream. */
+    if ( stream[0] != -1 && fclose( stream ) == -1 ) 
         /* The standard does not state explicitly that errno is cleared, 
          * but it seems implied when it says that failure is ignored. */
         errno = 0;
@@ -68,6 +76,24 @@ freopen( filename, mode, stream ) {
     stream[5] = fmode & 3;
 
     return stream;
+}
+
+fopen( filename, mode ) {
+    auto stream = malloc(32); /* sizeof(struct FILE) */
+    stream[0] = -1; /* an invalid file descriptor */
+    stream[1] = 128;
+    stream[2] = stream[3] = stream[4] = malloc( stream[1] );
+    stream[5] = 0; /* O_RDONLY */
+    stream[6] = 0; /* _IOFBF */
+    stream[7] = 1;
+
+    if ( freopen( filename, mode, stream ) )
+        return stream;
+
+    /* It failed, so clean up. */
+    free( stream[3] );
+    free( stream );
+    return 0;
 }
 
 /* Implementation detail _fputsn() -- TODO declare this static */
