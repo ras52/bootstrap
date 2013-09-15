@@ -40,12 +40,27 @@ prgm_direct(stream) {
     return node;
 }
 
+/* Hook for handling preprocessor directives other than #line and #pragma */
+pp_direct(stream, str) {
+    if ( strcmp( str, "include" ) == 0 )
+        incl_direct( stream );
+    else
+        error("Unknown preprocessor directive: %s", str);
+}
+
+
 static
 preprocess(output) {
     struct node* node;
     int out_line = 1;
+    char* out_file = 0;
     while ( node = next() ) {
         int in_line = get_line(), c;
+        char* in_file = getfilename();
+        if ( !out_file || strcmp( out_file, in_file ) != 0 )
+            /* TODO:  Properly escape the filename. */
+            fprintf(output, "\n#line %d \"%s\"\n", out_line = in_line,
+                    out_file = in_file );
         if ( out_line > in_line || out_line < in_line - 4 ) 
             fprintf(output, "\n#line %d\n", out_line = in_line);
         else if ( out_line == in_line ) 
@@ -113,8 +128,46 @@ main(argc, argv)
 
     preprocess( stdout );
 
+    close_scan();
+
     rc_done();
     return 0;
 }
 
 
+static int incl_stksz = 0;
+static struct scanner* incl_stack[256];
+
+static
+incl_direct(stream) {
+    auto int c = skip_hwhite(stream);
+    if ( c == '"' ) {
+        auto struct token* tok = get_qlit(stream, c, 0);
+        auto char* file = extract_str(tok);
+    
+        /* The C standard allows this to be as low as 15 [C99 5.2.4.1].
+         * It would be easy to allow an arbitrary include depth, but it's
+         * probably wise to prevent infinite #include recursion, and this 
+         * is a simple way of doing it.  */
+        if ( incl_stksz == 255 )
+            error( "Exceeded #include stack size" );
+
+        struct scanner* scanner = store_scan();
+        incl_stack[ incl_stksz++ ] = scanner;
+        init_scan(file);
+
+        free(file);
+        free_node(tok);
+    }
+    else
+        error( "Missing file name on #include" );
+}
+
+handle_eof() {
+    if ( incl_stksz ) {
+        struct scanner* scanner = incl_stack[ --incl_stksz ];
+        restorescan( scanner );
+        return 1;
+    } 
+    else return 0;
+}

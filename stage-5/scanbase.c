@@ -4,17 +4,17 @@
  * All rights reserved.
  */
 
-static int line = 0;
+static input_strm;
+static int line;
 static char* filename;
-
-set_file(name) 
-    char *name;
-{
-    filename = name;
-}
 
 get_line() {
     return line;
+}
+
+/* 11 character limit on external identifiers in stage-3 as & ld */
+getfilename() {
+    return filename;
 }
 
 static
@@ -102,12 +102,48 @@ pp_dir_num(stream) {
     return n;
 }
 
+extract_str(node) {
+    auto char* src = node_str(node);
+    auto int len = strlen(src);
+    auto char* dest = malloc(len + 1);
+    auto int i = 1, j = 0, c;
+
+    while (1) {
+        auto c = rchar( src, i++ );
+        if ( c == '\"' ) break;
+        else if ( c == '\\' ) {
+            c = rchar( src, i++ );
+            if ( c == 'n' ) c = '\n';
+            else if ( c == 't' ) c = '\t';
+            else if ( c == '0' ) c = '\0';
+        }
+        lchar( dest, j++, c );
+    }
+    lchar( dest, j++, 0 );
+
+    return dest;
+}
+
 /* Handle a #line directive */
 static
 line_direct(stream) {
+    auto int c;
+
     /* We subtract 1 from the line number because it'll get incremented
      * at the end of the line. */
     line = pp_dir_num(stream) - 1;
+
+    c = skip_hwhite(stream);
+    if ( c == '"' ) {
+        auto struct token* tok = get_qlit(stream, c, 0);
+        /* Don't free(filename) until after this, or we have problems reporting
+         * a problem with the string, e.g. if it contains invalid escapes. */
+        auto char* new_name = extract_str(tok);
+        free( filename ); filename = new_name;
+        free_node(tok);
+    }
+    else if ( c == '\n' )
+        ungetc(c, stream);
 }
 
 /* Ignore anything to the next new line */
@@ -144,19 +180,16 @@ start_ppdir(stream) {
 
     if ( strcmp( str, "line" ) == 0 )
         line_direct(stream);
-
     else if ( strcmp( str, "pragma" ) == 0 )
         ret = prgm_direct(stream);
-
     else
-        error("Unknown preprocessor directive: %s", str);
+        pp_direct(stream, str);
+
     free_node(tok);
 
     /* Eat all trailing space */
     c = skip_hwhite(stream);
-    if ( c == -1 )
-        error( "End of file during preprocessor directive" );
-    else if ( c != '\n' )
+    if ( c != '\n' )
         error( "Unexpected content at end of #%s directive", str );
     ungetc(c, stream);
 
@@ -344,7 +377,6 @@ is_op(op) {
         || op == '>>=' || op == '<<=';
 }
 
-static input_strm;
 
 /* Contains the token most recently read by next() */
 static token;
@@ -354,15 +386,19 @@ static pb_token;
 
 /* Read the next lexical element as a syntax tree node */
 next() {
-    auto stream = input_strm, c;
+    auto c;
     if (pb_token) {
         token = pb_token;
         pb_token = 0;
     }
     else do {
+        auto stream = input_strm;
         c = skip_white(stream);
-        if ( c == -1 )
+        if ( c == -1 ) {
             token = 0;
+            /* In the preprocessor, there might be another file to handle. */
+            if ( handle_eof() ) c = '\n#';
+        }
         else if ( c == '\n#' ) {
             /* If start_ppdir() returns a token, then we return that.
              * This happens with #pragma in the preprocessor. */
@@ -397,10 +433,34 @@ unget_token(t) {
 }
 
 init_scan(in_filename) {
-    extern stdin;
-    freopen( in_filename, "r", stdin );
-    set_file( in_filename );
-    input_strm = stdin;
+    filename = strdup( in_filename );
+    input_strm = fopen( filename, "r" );
+    line = 0;
+}
+
+close_scan() {
+    fclose( input_strm );
+    free( filename );
+}
+
+store_scan() {
+    /* struct scanner { char* filename; int line; FILE* stream }; */
+    auto int* data = malloc(12);
+    data[0] = filename;
+    data[1] = line;
+    data[2] = input_strm;
+    return data;
+}
+
+/* 11 character limit on external identifiers in stage-3 as & ld */
+restorescan(data) 
+    int* data;
+{
+    close_scan();
+    filename = data[0];
+    line = data[1];
+    input_strm = data[2];
+    free(data);
 }
 
 /* Skip over a piece of syntax, deallocating its node */

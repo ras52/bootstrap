@@ -35,8 +35,10 @@ chk_keyword(node)
         ++i;
 
     if ( keywords[i] ) {
-        /* Change the id node to an op node. */
-        node[0] = *keywords[i];
+        /* Change the id node to an op node, using the first four bytes
+         * of the keyword as the multicharacter node code. */
+        auto int* keyword = keywords[i];
+        node[0] = *keyword;
 
         /* Zero the memory used by the string: it's now an node* array[4]. */
         memset( &node[3], 0, 16 );
@@ -135,7 +137,9 @@ prgm_direct(stream) {
      * this is a bit silly. */
     if ( !isidchar1(c) ) {
         warning("Unfamiliar form of #pragma directive");
-        pp_slurp(stream);
+        /* A bare #pragma is a bit silly too */
+        if ( c == '\n' ) ungetc(c, stream);  
+        else pp_slurp(stream);
         return 0;
     }
    
@@ -179,6 +183,11 @@ prgm_direct(stream) {
     return 0;
 }
 
+/* Hook for handling preprocessor directives other than #line and #pragma */
+pp_direct(stream, str) {
+    error("Unknown preprocessor directive: %s", str);
+}
+
 do_get_qlit(stream, c) {
     auto int l;
     auto tok = get_qlit(stream, c, &l);
@@ -192,4 +201,6 @@ do_get_qlit(stream, c) {
     return tok;
 }
 
-
+handle_eof() {
+    return 0;
+}

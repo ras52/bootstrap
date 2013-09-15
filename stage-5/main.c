@@ -72,6 +72,9 @@ main(argc, argv)
     if ( !filename )
         cli_error("cc: no input file specified\n");
 
+    init_stypes();
+    init_symtab();
+
     init_scan(filename);  next();
 
     if (!outname) {
@@ -88,10 +91,9 @@ main(argc, argv)
     freopen( outname, "w", stdout );
     if (freeout) free(outname);
 
-    init_stypes();
-    init_symtab();
-
     compile(stdout);
+
+    close_scan();
 
     fini_symtab();
     fini_stypes();
