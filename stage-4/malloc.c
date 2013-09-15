@@ -101,7 +101,8 @@ realloc( ptr, size ) {
     }
     else {
         auto p = malloc(size);
-        memcpy( p, ptr, h[0] );
+        auto cpsz = h[0] < size ? h[0] : size;
+        memcpy( p, ptr, cpsz );
         free( ptr );
         return p;
     }
