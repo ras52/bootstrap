@@ -82,8 +82,10 @@ logic_not(stream) {
     fputs("\tTESTL\t%eax, %eax\n\tSETZ\t%al\n\tMOVZBL\t%al, %eax\n", stream);
 }
 
-dereference(stream, need_lval) {
-    if (!need_lval) fputs("\tMOVL\t(%eax), %eax\n", stream);
+dereference(stream, sz, need_lval) {
+    if (!need_lval) 
+        fprintf(stream, "\tMOV%c\t(%%eax), %s\n", sz_suffix(sz),
+                sz_accum(sz));
 }
 
 static
@@ -97,14 +99,14 @@ do_inc(stream, reg, n) {
                 n > 0 ? "ADD" : "SUB", 'L', abs(n), reg);
 }
 
-increment(stream, n) {
+increment(stream, sz, n) {
     do_inc(stream, "%eax", n);
-    dereference(stream, 0);
+    dereference(stream, sz, 0);
 }
 
-postfix_inc(stream, n) {
+postfix_inc(stream, sz, n) {
     acc_to_aux(stream);
-    dereference(stream, 0);
+    dereference(stream, sz, 0);
     do_inc(stream, "%ecx", n);
 }
 

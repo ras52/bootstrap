@@ -59,10 +59,12 @@ ptr_inc_sz(type) {
 
 static
 unary_post(stream, node, need_lval) {
+    auto sz = type_size(node[2]), elt_sz = ptr_inc_sz(node[2]);
+
     expr_code( stream, node[3], 1 );
 
-    if      ( node[0] == '++' ) postfix_inc( stream,  ptr_inc_sz(node[2]) );
-    else if ( node[0] == '--' ) postfix_inc( stream, -ptr_inc_sz(node[2]) );
+    if      ( node[0] == '++' ) postfix_inc( stream, sz,  elt_sz );
+    else if ( node[0] == '--' ) postfix_inc( stream, sz, -elt_sz );
     else int_error( "Unknown operator: '%Mc'", node[0] );
 }
 
@@ -83,6 +85,7 @@ static
 unary_pre(stream, node, need_lval) {
     auto op = node[0];
     auto op_needs_lv = op == '++' || op == '--' || op == '&';
+    auto sz = type_size(node[2]);
     expr_code( stream, node[3], op_needs_lv );
 
     if      ( op == '+'  ) ;
@@ -90,9 +93,9 @@ unary_pre(stream, node, need_lval) {
     else if ( op == '~'  ) bit_not(stream);
     else if ( op == '!'  ) logic_not(stream);
     else if ( op == '&'  ) ;
-    else if ( op == '*'  ) dereference(stream, need_lval);
-    else if ( op == '++' ) increment(stream,  ptr_inc_sz(node[2]) );
-    else if ( op == '--' ) increment(stream, -ptr_inc_sz(node[2]) );
+    else if ( op == '*'  ) dereference(stream, sz, need_lval);
+    else if ( op == '++' ) increment(stream, sz,  ptr_inc_sz(node[2]) );
+    else if ( op == '--' ) increment(stream, sz, -ptr_inc_sz(node[2]) );
     else int_error("Unknown operator: '%Mc'", op);
 }
 
@@ -134,9 +137,11 @@ subscript(stream, node, need_lval) {
     auto elt_sz = compat_flag && type == implct_int() ? 4 
         : type_size( type[3] );        /* remove * or [] from type */
 
+    auto sz = type_size( node[2] );
+
     scale_elt(stream, elt_sz, 1);
     pop_add(stream, 0, 4);
-    dereference(stream, need_lval);
+    dereference(stream, sz, need_lval);
 }
 
 static
@@ -218,7 +223,7 @@ binary_op(stream, node, need_lval) {
      * the C standard says they're not lvalues.  (The C++ standard has
      * them as lvalues.)  */
     if ( is_assop(op) )
-        dereference(stream, 0);
+        dereference(stream, type_size(node[2]), 0);
 }
 
 static
