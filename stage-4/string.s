@@ -201,3 +201,12 @@ memset:
 	RET
 
 
+####	#  __asm_std()  and  __asm_cld()  simply invoke those instructions.
+	#  They're used by memmove() to invoke memcpy backwards 
+__asm_std:
+	STD
+	RET
+__asm_cld:
+	CLD
+	RET
+

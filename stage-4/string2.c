@@ -19,3 +19,19 @@ strcat(dest, src) {
     lchar(dest, l1 + l2, '\0');
     return dest;
 }
+
+/* The C library memmove() */
+memmove(dest, src, n) {
+    /* If we're copying to earlier memory, or if the blocks do not overlap,
+     * then a forwards copy, as done by memcpy, will be fine. */
+    if ( dest < src || dest > src + n ) return memcpy(dest, src, n);
+ 
+    /* Otherwise we set the direction flag (DF), then call memcpy with the
+     * end pointers (which will then copy backwards), and clear DF. 
+     * We do not clear DF in memcpy because the ABI requires DF always to
+     * be cleared before library calls. */
+    __asm_std(); 
+    memcpy(dest+n-1, src+n-1, n); 
+    __asm_cld();
+    return dest;
+}
