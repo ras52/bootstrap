@@ -68,7 +68,7 @@ cc1:	ld libc.o crt0.o $(CC0_OBJS:%.o=%0.o)
 cc:	ld libc.o crt0.o $(CC1_OBJS:%.o=%1.o)
 	ld -o $@ libc.o crt0.o $(CC1_OBJS:%.o=%1.o)
 
-CPP_OBJS = scanbase.o cpp.o nodenew.o
+CPP_OBJS = scanbase.o cpp.o nodenew.o macros.o
 
 cpp:	ld libc.o crt0.o $(CPP_OBJS)
 	ld -o $@ libc.o crt0.o $(CPP_OBJS)

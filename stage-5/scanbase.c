@@ -160,6 +160,7 @@ pp_slurp(stream) {
 }
 
 /* We've just read a #.  Read the rest of the directive. */
+struct node*
 start_ppdir(stream) {
     extern struct node* get_word();
     extern struct node* prgm_direct();
@@ -247,6 +248,7 @@ isidchar(c) {
 /* Create a node, NODE, which will be returned; read a word (i.e. identifier 
  * or keyword) starting with C (which has already been checked by isidchar1) 
  * into NODE->str, set NODE->type, and return NODE. */
+struct node*
 get_word(stream, c) {
     /* struct node { int type; int dummy; char str[]; } */
     auto struct node* node = new_node('id', 0);
@@ -264,6 +266,7 @@ get_word(stream, c) {
 /* Read a preprocessor number into a new node that will be returned.  
  * The pp-number will be converted into a proper number (or an error issued)
  * in the get_number() function. */
+struct node*
 get_ppnum(stream, c, c2) {
     auto int i = 0;
 
@@ -351,6 +354,7 @@ is_2charop(op) {
 
 /* Read an operator, starting with character C, and return a node with
  * NODE->type set to the operator as a multicharacter literal. */
+struct node*
 get_multiop(stream, c) {
     /* Fetch the second character */
     auto c2 = fgetc(stream);
@@ -383,20 +387,21 @@ is_op(op) {
         || op == '>>=' || op == '<<=';
 }
 
-
 /* Contains the token most recently read by next() */
-static token;
-
-/* Contains a single push-back token */
-static pb_token;
+static struct node* token;
 
 /* Read the next lexical element as a syntax tree node */
 next() {
+    /* Oh! for headers */
+    extern struct node* chk_keyword();
+    extern struct node* get_number();
+    extern struct node* new_node();
+    extern struct node* do_get_qlit();
+    extern struct node* pb_pop();
+
     auto c;
-    if (pb_token) {
-        token = pb_token;
-        pb_token = 0;
-    }
+    if ( token = pb_pop() )
+        ;
     else do {
         auto struct FILE* stream = input_strm;
         c = skip_white(stream);
@@ -432,9 +437,10 @@ next() {
     return token;
 }
 
-unget_token(t) {
-    if (pb_token) int_error("Token push-back slot already in use");
-    pb_token = token;
+unget_token(t) 
+    struct node* t;
+{
+    pb_push(token);
     token = t;
 }
 

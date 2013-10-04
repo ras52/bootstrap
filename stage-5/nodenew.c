@@ -186,4 +186,30 @@ node_lchar( node_ptr, len_ptr, chr )
     *node_ptr = node;
 }
 
+/* Push-back facility doesn't really belong here, but having to keep 
+ * compatibility with the stage-4 cc is tricky. */
+static struct pb_slot {
+    struct node* node;
+    struct pb_slot* next;
+} *pb_stack = 0; 
 
+struct node*
+pb_pop() {
+    struct node* ret = 0;
+    if ( pb_stack ) {
+        struct pb_slot* old = pb_stack;
+        ret = pb_stack->node;
+        pb_stack = pb_stack->next;
+        free(old);
+    }
+    return ret;
+}
+
+pb_push(token) 
+    struct node* token;
+{
+    struct pb_slot* p = malloc( sizeof(struct pb_slot*) );
+    p->next = pb_stack;
+    p->node = token;
+    pb_stack = p;
+}

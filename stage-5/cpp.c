@@ -21,7 +21,7 @@ do_get_qlit(stream, c) {
     return get_qlit(stream, c, 0);
 }
 
-/* Null handling of pragma directive.  We only need to understand this in C. */
+/* Pass through #pragma directive to the compiler proper */
 prgm_direct(stream) {
     struct node* node = new_node('prgm', 0);
     int i = 0;
@@ -44,42 +44,66 @@ prgm_direct(stream) {
 pp_direct(stream, str) {
     if ( strcmp( str, "include" ) == 0 )
         incl_direct( stream );
+    else if ( strcmp( str, "define" ) == 0 )
+        defn_direct( stream );
     else
         error("Unknown preprocessor directive: %s", str);
 }
 
 struct node* next();
+struct node* take_node();
+
+static
+set_line( line_ptr, file_ptr, output )
+    int* line_ptr;
+    char** file_ptr;
+    struct FILE* output;
+{
+    /* Before handling the token, we need to get to the right line
+     * in the output.  We'll do this by emitting a few '\n's if 
+     * it's only a small difference, and for larger offsets, backwards
+     * offsets, or changes in filename, we emit an explicit #line.  */
+    int in_line = get_line();
+    char* in_file = getfilename();
+    if ( !*file_ptr || strcmp( *file_ptr, in_file ) != 0 )
+        /* TODO:  Properly escape the filename. */
+        fprintf( output, "\n#line %d \"%s\"\n", *line_ptr = in_line,
+                 *file_ptr = in_file );
+    if ( *line_ptr > in_line || *line_ptr < in_line - 4 ) 
+        fprintf( output, "\n#line %d\n", *line_ptr = in_line );
+    else if ( *line_ptr == in_line ) 
+        fputc(' ', output);
+    else while ( *line_ptr < in_line ) { 
+        fputc('\n', output); 
+        ++*line_ptr;
+    }
+}
 
 static
 preprocess(output) {
-    struct node* node;
+    int c;
     int out_line = 1;
     char* out_file = 0;
-    while ( node = next() ) {
-        int in_line = get_line(), c;
-        char* in_file = getfilename();
-        if ( !out_file || strcmp( out_file, in_file ) != 0 )
-            /* TODO:  Properly escape the filename. */
-            fprintf(output, "\n#line %d \"%s\"\n", out_line = in_line,
-                    out_file = in_file );
-        if ( out_line > in_line || out_line < in_line - 4 ) 
-            fprintf(output, "\n#line %d\n", out_line = in_line);
-        else if ( out_line == in_line ) 
-            fputc(' ', output);
-        else while ( out_line < in_line ) { 
-            fputc('\n', output); ++out_line;
+
+    while ( c = peek_token() ) {
+        struct node* node;
+        /* Call set_line() before take_node() or we bump the line too soon. */
+        set_line( &out_line, &out_file, output );
+
+        node = take_node(0);
+        if ( c == 'id' ) {
+            if ( ! expand( node_str(node), output ) )
+                fputs( node_str(node), output );
         }
-        
-        c = node_code(node);
-        if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
+        else if ( c == 'ppno' || c == 'str' || c == 'chr' )
             fputs( node_str(node), output );
         else if ( c == 'prgm' )
             fprintf( output, "#pragma %s", node_str(node) );
         else
             fprintf( output, "%Mc", c );
-
         free_node( node );
     }
+    fputc('\n', output); /* file needs to end with '\n' */
 }
 
 static
@@ -128,7 +152,7 @@ main(argc, argv)
 
     if ( !filename )
         cli_error("cpp: no input file specified\n");
-    init_scan( filename );
+    init_scan( filename );  next();
 
     if (outname) {
         struct FILE* f = fopen( outname, "w" );
@@ -143,6 +167,7 @@ main(argc, argv)
 
     close_scan();
 
+    fini_macros();
     rc_done();
     return 0;
 }
@@ -156,9 +181,12 @@ struct scanner {
 static int incl_stksz = 0;
 static struct scanner* incl_stack[256];
 
+/* Handle a #include directive. */
 static
 incl_direct(stream) {
     int c = skip_hwhite(stream);
+    /* TODO:  We should handle #include <foo> and later the #include pp-toks 
+     * form of C90 (and later) that processes its args */
     if ( c == '"' ) {
         struct node* tok = get_qlit(stream, c, 0);
         char* file = extract_str(tok);
@@ -183,6 +211,9 @@ incl_direct(stream) {
         error( "Missing file name on #include" );
 }
 
+/* This is called by next() when we get EOF.  Returns 1 if EOF has been
+ * handled -- by which we mean we've been able to pop the include stack --
+ * or 0 if it really is EOF. */
 handle_eof() {
     if ( incl_stksz ) {
         close_scan();
@@ -194,3 +225,4 @@ handle_eof() {
     } 
     else return 0;
 }
+

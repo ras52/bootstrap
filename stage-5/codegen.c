@@ -166,8 +166,13 @@ add_op(stream, node, is_ass, argsz) {
 static
 cmp_op(stream, node) {
     auto op = node[0];
-    auto type = usual_conv( node[3][2], node[4][2] ), sz = type_size( type );
+
+    auto type; /* By this point the types must be compatible */
+    if ( node[3][2][0] == '*' ) type = node[3][2];
+    else type = usual_conv( node[3][2], node[4][2] );
+
     auto is_unsgn = type[5];
+    auto sz = type_size(type);
 
     expr_code( stream, node[3], 0 );
     promote( stream, is_unsgn, type_size( node[3][2] ), sz );
@@ -562,6 +567,17 @@ array_decl(stream, decl) {
     extern_decl( decl );
 }
 
+static
+struct_decl(stream, decl) {
+    auto name = &decl[4][3], init = decl[5], sz = type_size( decl[2] );
+
+    if ( init )
+        int_error("Struct initialiser not supported");
+
+    data_decl( stream, name );
+    zero_direct( stream, sz );
+}
+
 /* This is only callled on top-level declarations */
 codegen(stream, node) {
     auto decls = node, i = 2;
@@ -576,6 +592,9 @@ codegen(stream, node) {
          * added to the symbol table by the parser. */
         /* TODO:  tentative definitions, duplicate definitions */
         if (init || storage == 'stat' ) {
+            /* For debugging purposes, put a blank line between declarations. */
+            fputs("\n", stream);
+
             auto type = decl[2], name = &decl[4][3];
             set_storage( stream, storage, name );
 
@@ -585,8 +604,10 @@ codegen(stream, node) {
                 fn_decl( stream, name, type, init, decl[6] );
             else if (type[0] == '[]')
                 array_decl( stream, decl );
+            else if (type[0] == 'stru')
+                struct_decl( stream, decl );
             else 
-                int_error("Unexpected node in declaration");
+                int_error("Unexpected node in declaration %Mc", type[0]);
         }
     }
 }
