@@ -86,7 +86,7 @@ ifdf_direct(stream, directive, positive) {
     c = skip_hwhite(stream);
     if ( c == '\n' )
         ungetc( c, stream );
-    else if ( c != -1 )
+    else
         error( "Unexpected tokens after #%s directive", directive );
 
     if ( pp_defined( node_str(name) ) != positive )
@@ -101,7 +101,7 @@ endi_direct(stream) {
     int c = skip_hwhite(stream);
     if ( c == '\n' )
         ungetc( c, stream );
-    else if ( c != -1 )
+    else
         error( "Unexpected tokens after #endif directive" );
 
     if (if_depth == 0)
@@ -121,6 +121,8 @@ pp_direct(stream, str) {
         ifdf_direct( stream, str, 0 );
     else if ( strcmp( str, "endif" ) == 0 )
         endi_direct( stream );
+    else if ( strcmp( str, "undef" ) == 0 )
+        unde_direct( stream );
     else
         error("Unknown preprocessor directive: %s", str);
 }

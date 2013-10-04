@@ -8,6 +8,7 @@ struct node* get_word();
 struct node* next();
 struct node* new_node();
 struct node* vnode_app();
+char* node_str();
 
 /* A macro definition is just a 'macd' node with operands: 
  * [0] unused, [1] name, [2] unused (reserved for params), [3] expansion
@@ -45,6 +46,18 @@ vec_grow(macro)
     *macro_vec.end++ = macro;
 }
 
+static
+struct node*
+get_macro(name)
+    char* name;
+{
+    struct node **i = macro_vec.start, **e = macro_vec.end;
+    for (; i != e; ++i )
+        if ( strcmp( node_str( (*i)->ops[1] ), name ) == 0 )
+            return *i;
+    return 0;
+}
+
 /* Handle a #define directive. */
 defn_direct(stream) {
     struct node* macd = new_node('macd', 4);
@@ -59,11 +72,39 @@ defn_direct(stream) {
 
     while (1) {
         ungetc( c = skip_hwhite(stream), stream );
-        if ( c == -1 || c == '\n' ) break;
+        if ( c == '\n' ) break;
         macd->ops[3] = vnode_app( macd->ops[3], next() );
     }
 
+    /* TODO:  We're allowed repeat definitions if they're identical. */
+    if ( get_macro( node_str( macd->ops[1] ) ) )
+        error("Duplicate definition of %s", node_str( macd->ops[1] ) );
+
     vec_grow(macd);
+}
+
+/* Handle an #undef directive */
+unde_direct(stream) {
+    struct node **i = macro_vec.start, **e = macro_vec.end;
+    struct node *tok; 
+    char* name;
+    int c = skip_hwhite(stream);
+
+    if ( !isidchar1(c) )
+        error("Expected identifier in #define directive");
+    tok = get_word( stream, c );
+    name = node_str(tok);
+
+    for (; i != e; ++i )
+        if ( strcmp( node_str( (*i)->ops[1] ), name ) == 0 ) {
+            /* Remove defn from the macro_vec */
+            free_node(*i);  *i = 0;
+            memmove( i, i+1, (e-i-1) * sizeof(struct node*) );
+            --macro_vec.end;
+            break;
+        }
+
+    free_node(tok);
 }
 
 do_expand(macd)
@@ -78,18 +119,6 @@ do_expand(macd)
      * and _Pragma( cpp-restore, name ).  */
     for ( n = mace->arity; n; --n ) 
         unget_token( add_ref( mace->ops[n-1] ) );
-}
-
-static
-struct node*
-get_macro(name)
-    char* name;
-{
-    struct node **i = macro_vec.start, **e = macro_vec.end;
-    for (; i != e; ++i )
-        if ( strcmp( node_str( (*i)->ops[1] ), name ) == 0 )
-            return *i;
-    return 0;
 }
 
 /* Implements the defined() preprocessor function. */
