@@ -71,17 +71,39 @@ do_expand(macd)
 {
     struct node* mace = macd->ops[3];
     int n;
+    /* By pushing the tokens back in this way, we ensure that we rescan 
+     * the expanded token sequence.   TODO The rescan is not standard-
+     * compliant, because we don't hide the current macro name, which we
+     * should.  Perhaps we'll do with by pusing a _Pragma( cpp-hide, name )
+     * and _Pragma( cpp-restore, name ).  */
     for ( n = mace->arity; n; --n ) 
         unget_token( add_ref( mace->ops[n-1] ) );
 }
 
-expand(name) {
+static
+struct node*
+get_macro(name)
+    char* name;
+{
     struct node **i = macro_vec.start, **e = macro_vec.end;
     for (; i != e; ++i )
-        if ( strcmp( node_str( (*i)->ops[1] ), name ) == 0 ) {
-            do_expand(*i);
-            return 1;
-        }
+        if ( strcmp( node_str( (*i)->ops[1] ), name ) == 0 )
+            return *i;
+    return 0;
+}
+
+/* Implements the defined() preprocessor function. */
+pp_defined(name)
+    char* name;
+{
+    return get_macro(name) ? 1 : 0;
+}
+
+expand(name)
+    char* name;
+{
+    struct node *macro = get_macro(name);
+    if (macro) { do_expand(macro); return 1; }
     return 0;
 }
 

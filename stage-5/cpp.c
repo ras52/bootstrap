@@ -40,12 +40,87 @@ prgm_direct(stream) {
     return node;
 }
 
+/* How deep are we with #if{,def,ndef} directive. */
+static
+int if_depth = 0;
+
+struct node* start_ppdir();
+char* node_str();
+
+/* Go into relaxed parsing mode, and skip to the corresponding #endif */
+skip_if(stream) {
+    int start_depth = if_depth;
+    ++if_depth;
+    do {
+        struct node* tok;
+        char* str;
+        int c;
+    
+        do c = next_skip(); 
+        while ( c != -1 && c != '\n#' );
+        if ( c == -1 ) error("End of file while looking for #endif");
+    
+        tok = start_ppdir(stream);
+        str = node_str(tok);
+        
+        if ( strcmp( str, "ifdef" ) == 0 || strcmp( str, "ifndef" ) == 0 
+             || strcmp( str, "if" ) == 0 )
+            ++if_depth;
+        else if ( strcmp( str, "endif" ) == 0 )
+            --if_depth;
+        free_node(tok);
+
+    } while ( if_depth != start_depth );
+}
+
+struct node* get_word();
+
+ifdf_direct(stream, directive, positive) {
+    struct node* name;
+
+    int c = skip_hwhite(stream);
+    if ( !isidchar1(c) )
+        error( "Expected identifier in #%s directive", directive );
+
+    name = get_word( stream, c );
+    c = skip_hwhite(stream);
+    if ( c == '\n' )
+        ungetc( c, stream );
+    else if ( c != -1 )
+        error( "Unexpected tokens after #%s directive", directive );
+
+    if ( pp_defined( node_str(name) ) != positive )
+        skip_if(stream);
+    else
+        ++if_depth;
+
+    free_node(name);
+}
+
+endi_direct(stream) {
+    int c = skip_hwhite(stream);
+    if ( c == '\n' )
+        ungetc( c, stream );
+    else if ( c != -1 )
+        error( "Unexpected tokens after #endif directive" );
+
+    if (if_depth == 0)
+        error( "Unexpected #endif directive" );
+    --if_depth;
+}
+
 /* Hook for handling preprocessor directives other than #line and #pragma */
 pp_direct(stream, str) {
     if ( strcmp( str, "include" ) == 0 )
         incl_direct( stream );
     else if ( strcmp( str, "define" ) == 0 )
         defn_direct( stream );
+    else if ( strcmp( str, "ifdef" ) == 0 )
+        ifdf_direct( stream, str, 1 );
+    else if ( strcmp( str, "ifndef" ) == 0 )
+        ifdf_direct( stream, str, 0 );
+    else if ( strcmp( str, "endif" ) == 0 )
+        endi_direct( stream );
     else
         error("Unknown preprocessor directive: %s", str);
 }
@@ -215,6 +290,9 @@ incl_direct(stream) {
  * handled -- by which we mean we've been able to pop the include stack --
  * or 0 if it really is EOF. */
 handle_eof() {
+    if ( if_depth )
+        error("End of file while looking for #endif");
+
     if ( incl_stksz ) {
         close_scan();
 

@@ -77,10 +77,21 @@ skip_ccomm(stream) {
 /* Skip over whitespace other than '\n' (for the preprocessor) */
 skip_hwhite(stream) {
     auto int c;
-    do c = fgetc(stream);
-    while ( c != '\n' && isspace(c) ); 
-    if ( c == -1 )
-        error("End of file during preprocessor directive");
+    while (1) {
+        do c = fgetc(stream);
+        while ( c != '\n' && isspace(c) ); 
+        if ( c == -1 )
+            error("End of file during preprocessor directive");
+        else if (c == '/') {
+            auto c2 = fgetc(stream);
+            if ( c2 != '*' ) {
+                ungetc(c2, stream);
+                return c;
+            }
+            skip_ccomm(stream);
+        }
+        else return c;
+    }
     return c;
 }
 
@@ -159,21 +170,15 @@ pp_slurp(stream) {
     return c;
 }
 
-/* We've just read a #.  Read the rest of the directive. */
 struct node*
 start_ppdir(stream) {
     extern struct node* get_word();
-    extern struct node* prgm_direct();
-    extern char* node_str();
-
-    auto struct node *tok, *ret = 0;
-    auto char* str;
     auto int c = skip_hwhite(stream);
 
     /* The null directive -- just a '#' by itself on the line */
     if ( c == '\n' ) { 
         ungetc(c, stream); 
-        return ret; 
+        return 0; 
     }
    
     /* In principle this matches the non-directive syntax of C99 / C++1x,
@@ -182,9 +187,24 @@ start_ppdir(stream) {
     if ( !isidchar1(c) ) 
         error("Malformed preprocessor directive");
 
-    tok = get_word(stream, c);
-    str = node_str(tok);
+    return get_word(stream, c);
+}
 
+/* We've just read a #.  Read the rest of the directive. */
+static
+struct node*
+pp_dir(stream) {
+    extern struct node* prgm_direct();
+    extern char* node_str();
+
+    auto struct node *tok = start_ppdir(stream), *ret = 0;
+    auto char* str;
+    auto int c;
+
+    if ( !tok )
+        return 0;
+
+    str = node_str(tok);
     if ( strcmp( str, "line" ) == 0 )
         line_direct(stream);
     else if ( strcmp( str, "pragma" ) == 0 )
@@ -205,6 +225,7 @@ start_ppdir(stream) {
 
 /* Skips over whitespace, including comments, and returns the next character
  * without ungetting it. */
+static
 skip_white(stream) {
     auto c, line_start = 0;
     /* Are we at the start of the file? */
@@ -390,8 +411,9 @@ is_op(op) {
 /* Contains the token most recently read by next() */
 static struct node* token;
 
-/* Read the next lexical element as a syntax tree node */
-next() {
+/* Read the next lexical element without preprocessing */
+static
+raw_next() {
     /* Oh! for headers */
     extern struct node* chk_keyword();
     extern struct node* get_number();
@@ -400,39 +422,60 @@ next() {
     extern struct node* pb_pop();
 
     auto c;
+    auto struct FILE* stream = input_strm;
+
     if ( token = pb_pop() )
-        ;
-    else do {
-        auto struct FILE* stream = input_strm;
-        c = skip_white(stream);
+        return node_code( token );
+
+    c = skip_white(stream);
+    
+    if ( c == -1 || c == '\n#' ) {
+        token = 0;
+        return c;
+    }
+    else if ( isidchar1(c) )
+        token = chk_keyword( get_word(stream, c) );
+    else if ( isdigit(c) )
+        token = get_number(stream, c, 0);
+    else if ( c == '.' ) {
+        /* A . could be the start of a ppnumber, or a '.' operator  */
+        auto c2 = fgetc(stream);
+        if ( isdigit(c2) )
+            token = get_number(stream, c, c2);
+        else {
+            ungetc(c2, stream);
+            token = new_node( c, 0 );
+        }
+    }
+    else if ( c == '\'' || c == '"' )
+        token = do_get_qlit(stream, c);
+    else 
+        token = get_multiop(stream, c);
+
+    return node_code( token );
+}
+
+next_skip() {
+    auto c = raw_next();
+    free_node( token );
+    return c;
+}
+
+
+/* Read the next lexical element, handling preprocessing directives */
+next() {
+    auto c;
+    do {
+        c = raw_next();
         if ( c == -1 ) {
-            token = 0;
             /* In the preprocessor, there might be another file to handle. */
             if ( handle_eof() ) c = '\n#';
         }
         else if ( c == '\n#' ) {
-            /* If start_ppdir() returns a token, then we return that.
+            /* If pp_dir() returns a token, then we return that.
              * This happens with #pragma in the preprocessor. */
-            if ( token = start_ppdir(stream) ) c = 0;
+            if ( token = pp_dir(input_strm) ) c = 0;
         }
-        else if ( isidchar1(c) )
-            token = chk_keyword( get_word(stream, c) );
-        else if ( isdigit(c) )
-            token = get_number(stream, c, 0);
-        else if ( c == '.' ) {
-            /* A . could be the start of a ppnumber, or a '.' operator  */
-            auto c2 = fgetc(stream);
-            if ( isdigit(c2) )
-                token = get_number(stream, c, c2);
-            else {
-                ungetc(c2, stream);
-                token = new_node( c, 0 );
-            }
-        }        
-        else if ( c == '\'' || c == '"' )
-            token = do_get_qlit(stream, c);
-        else 
-            token = get_multiop(stream, c);
     } while ( c == '\n#' );
     return token;
 }
