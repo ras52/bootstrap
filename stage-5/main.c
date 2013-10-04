@@ -33,9 +33,12 @@ main(argc, argv)
     int argc;
     char **argv;
 {
+    extern char* strdup();
+    extern struct FILE* fopen();
+
     auto char *filename = 0, *outname = 0;
     auto int l, i = 0, has_s = 0, freeout = 0;
-    auto struct file* file;
+    auto struct FILE* file;
 
     while ( ++i < argc ) {
         if ( strcmp( argv[i], "-S" ) == 0 ) 

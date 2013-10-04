@@ -350,7 +350,7 @@ init_int:
 	#
 	#    ext-decl ::= name ( '[' ']' | '(' ')' )?
 	#
-	#    extern-stmt ::= 'extern' ext-decl ( ',' ext-decl )* ';'
+	#    extern-stmt ::= 'extern' skip-type ext-decl ( ',' ext-decl )* ';'
 	#
 	#  Current token is 'extern'
 .local extern_decl
@@ -358,9 +358,18 @@ extern_decl:
 	PUSH	%ebp
 	MOVL	%esp, %ebp
 	SUBL	$16, %esp		# temporary buffer
-
-.L20:
 	CALL	next
+
+	#  Ignore any type specifiers
+	CALL	skip_type
+.L20:
+	#  Skip any pointer declarators
+	MOVL	token, %eax
+	CMPL	'*', %eax
+	JNE	.L20a
+	CALL	next
+	JMP	.L20
+.L20a:
 	CMPL	'id', %eax
 	JNE	_error
 
@@ -412,7 +421,10 @@ extern_decl:
 
 	#  Any more declarations?
 	CMPL	',', %eax
-	JE	.L20
+	JNE	.L23a
+	CALL	next
+	JMP	.L20
+.L23a:
 	CALL	semicolon
 
 	LEAVE

@@ -44,7 +44,7 @@ static frame_size = 0;
 /* Initialise a table */
 static
 init_tab( tab, entry_size ) {
-    auto sz = 1 * entry_size;
+    auto sz = 32 * entry_size;
     auto p = malloc(sz);
     tab[0] = tab[1] = p;
     tab[2] = p + sz;
@@ -63,7 +63,7 @@ fini_tab( tab ) {
 /* Check whether the symbol table is full, and if so double its capacity. 
  * Copy NAME into the entry, increment the table's end pointer by
  * ENTRY_SIZE, and return the entry pointer.   */
-static
+static *
 grow_tab( tab, entry_size, name ) {
     auto sz = tab[1] - tab[0];
     auto p = tab[0];
@@ -80,7 +80,7 @@ grow_tab( tab, entry_size, name ) {
 
 /* Lookup NAME in TAB and return a pointer to the table entry, 
  * or NULL if not found. */
-static
+static *
 lookup_tab( tab, entry_size, name ) {
     auto e = tab[1];
     while (e > tab[0]) {
@@ -270,6 +270,7 @@ end_scope() {
  * Also set *OFF_PTR to the symbol table offset of the symbol, or
  * 0 if it is not defined (as 0 is not a valid offset because 
  * 0(%ebp) is the calling frame's base pointer.) */
+struct sym_entry*
 lookup_sym( name, off_ptr ) {
     auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
     if (e) {

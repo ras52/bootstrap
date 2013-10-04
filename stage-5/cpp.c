@@ -48,6 +48,7 @@ pp_direct(stream, str) {
         error("Unknown preprocessor directive: %s", str);
 }
 
+struct node* next();
 
 static
 preprocess(output) {
@@ -90,6 +91,7 @@ cli_error(fmt)
     exit(1);
 }
 
+static
 usage() {
     cli_error("Usage: cpp [-o filename.i] filename.c\n");
 }
@@ -129,7 +131,7 @@ main(argc, argv)
     init_scan( filename );
 
     if (outname) {
-        auto f = fopen( outname, "w" );
+        struct FILE* f = fopen( outname, "w" );
         if (!f) cli_error( "cpp: unable to open file '%s'\n", outname );
         preprocess(f);
         fclose(f);
@@ -145,16 +147,21 @@ main(argc, argv)
     return 0;
 }
 
+struct scanner {
+    char* filename;
+    int line;
+    struct FILE* stream;
+};
 
 static int incl_stksz = 0;
 static struct scanner* incl_stack[256];
 
 static
 incl_direct(stream) {
-    auto int c = skip_hwhite(stream);
+    int c = skip_hwhite(stream);
     if ( c == '"' ) {
-        auto struct token* tok = get_qlit(stream, c, 0);
-        auto char* file = extract_str(tok);
+        struct node* tok = get_qlit(stream, c, 0);
+        char* file = extract_str(tok);
     
         /* The C standard allows this to be as low as 15 [C99 5.2.4.1].
          * It would be easy to allow an arbitrary include depth, but it's
@@ -163,8 +170,10 @@ incl_direct(stream) {
         if ( incl_stksz == 255 )
             error( "Exceeded #include stack size" );
 
-        struct scanner* scanner = store_scan();
+        struct scanner* scanner = malloc( sizeof(struct scanner) );
         incl_stack[ incl_stksz++ ] = scanner;
+
+        store_scan( &scanner->filename, &scanner->line, &scanner->stream );
         init_scan(file);
 
         free(file);
@@ -176,8 +185,11 @@ incl_direct(stream) {
 
 handle_eof() {
     if ( incl_stksz ) {
+        close_scan();
+
         struct scanner* scanner = incl_stack[ --incl_stksz ];
-        restorescan( scanner );
+        restorescan( scanner->filename, scanner->line, scanner->stream );
+        free( scanner );
         return 1;
     } 
     else return 0;

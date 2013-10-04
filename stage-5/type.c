@@ -4,6 +4,7 @@
  * All rights reserved.
  */
 
+static
 req_lvalue(node) {
     auto type = node[0], dummy;
 
@@ -114,15 +115,41 @@ can_deref(type) {
 
 is_integral(type) {
     /* At present, all dclt types are integral.  
-     * Floats and struct may change that. */
+     * Floats and enums may change that. */
     return type[0] == 'dclt';
 }
 
 static 
 is_arith(type) {
     /* At present, all dclt types are arithmetic.  
-     * Structs may change that. */
+     * Enums may change that. */
     return type[0] == 'dclt';
+}
+
+chk_assign(node) {
+    extern compat_flag;
+    req_lvalue( node[3] );
+
+    if ( node[0] == '=' ) {
+        auto type1 = node[3][2], type2 = node[4][2];
+        if ( is_arith(type1) && is_arith(type2) )
+            ;
+        else if ( is_pointer(type1) && is_pointer(type2) ) {
+            if ( type1[3][0] == 'stru' && type2[3][0] == 'stru' &&
+                 strcmp( node_str( type1[3][3] ), 
+                         node_str( type2[3][3] ) ) == 0 )
+                ;
+            else if ( !compat_flag && 
+                      type_size( type1[3] ) != type_size( type2[3] ) )
+                error("Cannot assign from an incompatible pointer");
+        }
+        else if ( compat_flag && type1 == s_int )
+            /* Allow assignment to implicit int with --compat */ ;
+        else
+            error("Cannot assign from an incompatible type");
+    }
+
+    node[2] = add_ref( node[3][2] );
 }
 
 chk_subscr(node) {

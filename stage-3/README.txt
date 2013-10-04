@@ -86,7 +86,7 @@ stage 2).  The following instructions are also added:
 Support for the following AT&T aliases for Intel mnemonics has also
 been added:
 
-  CBTW, CLTD, CWTL, MOVZBL, MOBSBL
+  CBTW, CLTD, CWTL, MOVZBL, MOVSBL
 
 There is also very limited support for instructions with a SIB bytes:
 just enough to allow %esp to be dereferenced %esp in an r/m32, e.g. in 

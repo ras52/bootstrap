@@ -57,7 +57,7 @@ rc_realloc(ptr, sz) {
     if ( old_ptr->ref_count > 1 )
         abort();
 
-    new_ptr = realloc( old_ptr, sizeof(struct rc_node) + sz );
+    new_ptr = (struct rc_node*) realloc( old_ptr, sizeof(struct rc_node) + sz );
     new_ptr->ref_count = 1;
     new_ptr->capacity = sz;
     return new_ptr + 1;
@@ -125,6 +125,7 @@ free_node(node)
  * increment the arity of the node.  More friendly interfaces are provided
  * by vnode_app() and node_lchar(). */
 static
+struct node*
 grow_node(node, size) 
     struct node* node;
 {

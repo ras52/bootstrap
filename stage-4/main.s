@@ -271,7 +271,9 @@ int_decl:
 	#
 	#    func-params ::= name ( ',' name )*
 	#
-	#    func-decl   ::= ( 'static' )? name '(' func-params? ')' block
+	#    func-head   ::= ( 'static' )? name '(' func-params? ')'
+	#
+	#    func-decl   ::= func-head param-decls block
 	#
 	#  Process a function declaration.  Current token is '('.
 .local func_decl

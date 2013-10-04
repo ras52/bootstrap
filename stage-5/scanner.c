@@ -129,6 +129,9 @@ parse_chr(str)
 
 /* Handle a #pragma directive */
 prgm_direct(stream) {
+    extern char* node_str();
+    extern struct node* get_word();
+
     auto struct node* tok;
     auto char* str;
     auto int c = skip_hwhite(stream);

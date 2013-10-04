@@ -18,7 +18,13 @@ New features in stage 5 cc:
   - sizeof operator
   - type casts
 
+
+  Usage: cc -S [--compat] [-o filename.s] filename.c
+
+  Usage: cpp [-o filename.i] filename.c
+
+
 TODO:
   - Errors on duplicate declarations at global scope
   - Tentative definitions
-  - Unions, bit fields (probably not in this stage?)
+  - Unions, bit fields (probably not in this stage?), floats

@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-static input_strm;
+static struct FILE* input_strm;
 static int line;
 static char* filename;
 
@@ -86,6 +86,8 @@ skip_hwhite(stream) {
 
 /* Read a number in a preprocessor directive. */
 pp_dir_num(stream) {
+    extern struct node* get_ppnum();
+
     auto struct node* tok;
     auto char* nptr;
     auto int c = skip_hwhite(stream), n;
@@ -135,7 +137,7 @@ line_direct(stream) {
 
     c = skip_hwhite(stream);
     if ( c == '"' ) {
-        auto struct token* tok = get_qlit(stream, c, 0);
+        auto struct node* tok = get_qlit(stream, c, 0);
         /* Don't free(filename) until after this, or we have problems reporting
          * a problem with the string, e.g. if it contains invalid escapes. */
         auto char* new_name = extract_str(tok);
@@ -159,6 +161,10 @@ pp_slurp(stream) {
 
 /* We've just read a #.  Read the rest of the directive. */
 start_ppdir(stream) {
+    extern struct node* get_word();
+    extern struct node* prgm_direct();
+    extern char* node_str();
+
     auto struct node *tok, *ret = 0;
     auto char* str;
     auto int c = skip_hwhite(stream);
@@ -392,7 +398,7 @@ next() {
         pb_token = 0;
     }
     else do {
-        auto stream = input_strm;
+        auto struct FILE* stream = input_strm;
         c = skip_white(stream);
         if ( c == -1 ) {
             token = 0;
@@ -433,6 +439,9 @@ unget_token(t) {
 }
 
 init_scan(in_filename) {
+    extern char* strdup();
+    extern struct FILE* fopen();
+
     filename = strdup( in_filename );
     input_strm = fopen( filename, "r" );
     line = 0;
@@ -443,24 +452,25 @@ close_scan() {
     free( filename );
 }
 
-store_scan() {
-    /* struct scanner { char* filename; int line; FILE* stream }; */
-    auto int* data = malloc(12);
-    data[0] = filename;
-    data[1] = line;
-    data[2] = input_strm;
-    return data;
+store_scan(file_ptr, line_ptr, stream_ptr )
+    char**        file_ptr;
+    int*          line_ptr;
+    struct FILE** stream_ptr;
+{
+    *file_ptr   = filename;
+    *line_ptr   = line;
+    *stream_ptr = input_strm;
 }
 
 /* 11 character limit on external identifiers in stage-3 as & ld */
-restorescan(data) 
-    int* data;
+restorescan(new_file, new_line, new_strm)
+    char*        new_file;
+    int          new_line;
+    struct FILE* new_strm;
 {
-    close_scan();
-    filename = data[0];
-    line = data[1];
-    input_strm = data[2];
-    free(data);
+    filename   = new_file;
+    line       = new_line;
+    input_strm = new_strm;
 }
 
 /* Skip over a piece of syntax, deallocating its node */

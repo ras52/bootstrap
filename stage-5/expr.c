@@ -364,10 +364,9 @@ assign_expr() {
 
     auto p = cond_expr(), t = peek_token();
     if ( is_assop(t) ) {
-        req_lvalue(p);
         p = do_binop( p );
         p[4] = assign_expr();
-        p[2] = add_ref( p[3][2] );
+        chk_assign(p);
     }
 
     return p;

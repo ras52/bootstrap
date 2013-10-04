@@ -36,10 +36,10 @@ Stage 4 -- cc, crt0.o & libc.o
   language is a typeless subset of C similar to B.  We also build
   a startup file (crt0.o) and the start of a simple C library.
 
-Stage 5 -- cc
+Stage 5 -- cc & cpp
 
   The compiler is rewritten in its source language, and a type system
-  added.
+  added.  We use it to implement a basic version of the C preprocessor.
 
 
 The code in this project is copyright (C) Richard Smith, 2009-13.
