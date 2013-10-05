@@ -27,4 +27,7 @@ New features in stage 5 cc:
 TODO:
   - Errors on duplicate declarations at global scope
   - Tentative definitions
+  - Typedefs
   - Unions, bit fields (probably not in this stage?), floats
+  - #if, #elif, #else
+  - Macros with arguments

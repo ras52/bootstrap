@@ -140,12 +140,13 @@ prgm_direct(stream) {
      * this is a bit silly. */
     if ( !isidchar1(c) ) {
         warning("Unfamiliar form of #pragma directive");
-        /* A bare #pragma is a bit silly too */
+        /* A bare #pragma is a bit silly too, but the grammar allows it. */
         if ( c == '\n' ) ungetc(c, stream);  
-        else pp_slurp(stream);
+        else pp_slurp(stream, 0);
         return 0;
     }
-   
+  
+    /* Get the pragma namespace */ 
     tok = get_word(stream, c);
     str = node_str(tok);
 
@@ -153,7 +154,7 @@ prgm_direct(stream) {
      * Compiler). */
     if ( strcmp( str, "RBC" ) != 0 ) {
         /* An unknown pragma: silently ignore it. */
-        pp_slurp(stream);
+        pp_slurp(stream, 0);
         free_node(tok);
         return 0;
     }
@@ -172,13 +173,14 @@ prgm_direct(stream) {
         if ( n < 4 || n > 5 )
             error("Compatibility with stage %d not supported", n);
         compat_flag = ( n == 4 );
-        free_node(tok);
     }
     else {
         warning("Unhandled #pragma RBC %s", str);
-        pp_slurp(stream);
-        free_node(tok);
+        pp_slurp(stream, 0);
     }
+
+    end_ppdir(stream, "pragma RBC");
+    free_node(tok);
 
     /* The return is a null node*, and indicates that we have handled
      * (or ignored) the #pragma, and not to include it in the output

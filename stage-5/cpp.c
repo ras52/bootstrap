@@ -24,19 +24,7 @@ do_get_qlit(stream, c) {
 /* Pass through #pragma directive to the compiler proper */
 prgm_direct(stream) {
     struct node* node = new_node('prgm', 0);
-    int i = 0;
-    while (1) {
-        int c = fgetc(stream);
-        if ( c == -1 )
-            error("End of file during preprocessor directive");
-        else if ( c == '\n' ) {
-            ungetc(c, stream);
-            break;
-        }
-        else node_lchar(&node, &i, c);
-    }
-    /* Null terminate */
-    node_lchar( &node, &i, 0 );
+    pp_slurp(stream, &node);
     return node;
 }
 
@@ -83,11 +71,7 @@ ifdf_direct(stream, directive, positive) {
         error( "Expected identifier in #%s directive", directive );
 
     name = get_word( stream, c );
-    c = skip_hwhite(stream);
-    if ( c == '\n' )
-        ungetc( c, stream );
-    else
-        error( "Unexpected tokens after #%s directive", directive );
+    end_ppdir( stream, directive );
 
     if ( pp_defined( node_str(name) ) != positive )
         skip_if(stream);
@@ -98,11 +82,7 @@ ifdf_direct(stream, directive, positive) {
 }
 
 endi_direct(stream) {
-    int c = skip_hwhite(stream);
-    if ( c == '\n' )
-        ungetc( c, stream );
-    else
-        error( "Unexpected tokens after #endif directive" );
+    end_ppdir( stream, "endif" );
 
     if (if_depth == 0)
         error( "Unexpected #endif directive" );

@@ -7,7 +7,7 @@
 /* This disables the errors on incompatibilities with stage-4. 
  * This is safe because this file is never processed with the stage-4
  * compiler (and, indeed, wouldn't compile if were). */
-#pragma RBC compatibility 5
+#pragma RBC compatibility 5 
 
 extern stderr;
 

@@ -52,7 +52,9 @@ int_error(fmt)
 }
 
 
-/* A version of fgetc() that increments LINE if a '\n' is found */
+/* A version of fgetc() that increments LINE if a '\n' is found.  
+ * We cannot call this universally unless we write a corresponding ungetc()
+ * that decrements LINE.  */
 static
 fgetcl(stream) {
     auto int c = fgetc(stream);
@@ -78,6 +80,7 @@ skip_ccomm(stream) {
 skip_hwhite(stream) {
     auto int c;
     while (1) {
+        /* This must be fgetc() not fgetcl(), because we unget a '\n' */
         do c = fgetc(stream);
         while ( c != '\n' && isspace(c) ); 
         if ( c == -1 )
@@ -89,6 +92,13 @@ skip_hwhite(stream) {
                 return c;
             }
             skip_ccomm(stream);
+        }
+        else if (c == '\\') {
+            auto c2 = fgetcl(stream);
+            if ( c2 != '\n' ) {
+                ungetc(c2, stream);
+                return c;
+            }
         }
         else return c;
     }
@@ -159,17 +169,28 @@ line_direct(stream) {
         ungetc(c, stream);
 }
 
-/* Ignore anything to the next new line */
-pp_slurp(stream) {
-    auto int c;
-    do c = fgetc(stream);
-    while ( c != -1 && c != '\n' ); 
-    if ( c == -1 )
-        error("End of file during preprocessor directive");
-    ungetc(c, stream);
+/* Slurp anything to the next new line into *node_ptr (if not NULL),  */
+pp_slurp(stream, node_ptr) {
+    auto int i = 0, c;
+    while (1) {
+        c = fgetc(stream);
+        if ( c == -1 )
+            error("End of file during preprocessor directive");
+        else if ( c == '\n' ) {
+            ungetc(c, stream);
+            break;
+        }
+        else if ( node_ptr )
+            node_lchar( node_ptr, &i, c );
+    }
+    if ( node_ptr )
+        /* Null terminate */
+        node_lchar( node_ptr, &i, 0 );
     return c;
 }
 
+/* We've read a '#' at the start of a line, get the next token which will
+ * the directive name (e.g. 'include'), which we return. */
 struct node*
 start_ppdir(stream) {
     extern struct node* get_word();
@@ -183,11 +204,27 @@ start_ppdir(stream) {
    
     /* In principle this matches the non-directive syntax of C99 / C++1x,
      * but that's for use as extensions only, and we unilaterally decide
-     * that all extensions will begin with an identifier (like 'include'). */
+     * that all our extensions will begin with an identifier (like 'include'). 
+     * This is a valid implementation choice. */
     if ( !isidchar1(c) ) 
         error("Malformed preprocessor directive");
 
     return get_word(stream, c);
+}
+
+/* We've read all the expected content on the pp directive.  We now
+ * expect just whitespace to the line end, and give an error if that's 
+ * not the case. */
+end_ppdir(stream, directive) {
+    auto int c = skip_hwhite(stream);
+    if ( c == '\n' )
+        /* Need to unget it so that skip_white will get it again.  This is
+         * necessary so that skip_white knows whether a # is part of a 
+         * preprocessing directive, and also because skip_hwhite got it 
+         * without bumping the line number. */
+        ungetc( c, stream );
+    else
+        error( "Unexpected tokens after #%s directive", directive );
 }
 
 /* We've just read a #.  Read the rest of the directive. */
@@ -235,10 +272,8 @@ skip_white(stream) {
         do c = fgetcl(stream);
         while ( c != '\n' && isspace(c) ); 
 
-        if (c == '\n') {
+        if (c == '\n')
             line_start = 1;
-            continue;
-        } 
         else if (line_start && c == '#')
             /* We use this to transfer control back to the tokeniser */
             return '\n#';
@@ -250,9 +285,14 @@ skip_white(stream) {
             }
             skip_ccomm(stream);
         }
+        else if (c == '\\') {
+            auto c2 = fgetcl(stream);
+            if ( c2 != '\n' ) {
+                ungetc(c2, stream);
+                return c;
+            }
+        }
         else return c;
-
-        line_start = 0;
     }
 }
 

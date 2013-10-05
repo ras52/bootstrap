@@ -71,6 +71,8 @@ defn_direct(stream) {
     macd->ops[3] = new_node('mace', 0);
 
     while (1) {
+        /* We need to explicitly call skip_hwhite() here because next()
+         * will call skip_white(), and we musn't allow it to skip a '\n'. */
         ungetc( c = skip_hwhite(stream), stream );
         if ( c == '\n' ) break;
         macd->ops[3] = vnode_app( macd->ops[3], next() );
