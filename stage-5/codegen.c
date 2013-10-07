@@ -35,7 +35,11 @@ leaf_code(stream, node, need_lval) {
     if ( node[0] == 'num' || node[0] == 'chr' || node[0] == 'str' ) {
         if (node[0] == 'num') load_num(stream, node[3]);
         else if (node[0] == 'chr') load_chr(stream, &node[3]);
-        else if (node[0] == 'str') load_str(stream, &node[3], new_clabel());
+        else if (node[0] == 'str') {
+            auto lc = new_clabel();
+            defn_str(stream, &node[3], lc);
+            load_str(stream, lc);
+        }
     }
 
     else if ( node[0] == 'id' ) {
@@ -547,24 +551,53 @@ int_decl(stream, name, init ) {
 /* Global-scope array declaration */
 static
 array_decl(stream, decl) {
-    auto init = decl[5], sz = type_size( decl[2] );
+    auto init = decl[5];
+    auto lcvec = 0;
+    auto sz = type_size( decl[2] );
+
+    /* If the array initialiser contains strings, we have to first emit the 
+     * strings and generate .LC numbers for them, which we store in lcvec. */
+    if (init) {
+        auto i = 0;
+        while ( i < init[1] ) {
+            auto ival = init[ 3 + i++ ];
+            auto t = ival[0];
+            if (t == 'str') {
+                if (!lcvec) {
+                    lcvec = malloc(4 * init[1]);  /* 4 == sizeof(int) */
+                    memset( lcvec, 0, 4*init[1] );
+                }
+                lcvec[i] = new_clabel();
+                defn_str(stream, &ival[3], lcvec[i]);
+            }
+        }
+    }
+
     data_decl(stream, &decl[4][3]);
 
     if (init) {
         auto i = 0;
         while ( i < init[1] ) {
             auto ival = init[ 3 + i++ ];
-            if (ival[0] == 'num')
+            auto t = ival[0];
+            if (t == 'num')
                 int_decl_n(stream, ival[3]);
-            else
+            else if (t == 'id')
                 int_decl_s(stream, &ival[3]);
+            else if (t == 'str')
+                int_decl_lc(stream, lcvec[i]);
+            else
+                int_error("Unknown element in global-scope array: %Mc", t);
         }
 
         if ( 4 * init[1] < sz )
             zero_direct( stream, sz - 4*init[1] );
     }
+    else 
+        zero_direct( stream, sz );
 
     extern_decl( decl );
+    free(lcvec);
 }
 
 static

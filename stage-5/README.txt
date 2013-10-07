@@ -21,7 +21,7 @@ New features in stage 5 cc:
 
   Usage: cc -S [--compat] [-o filename.s] filename.c
 
-  Usage: cpp [-o filename.i] filename.c
+  Usage: cpp [-I include-dir] [-o filename.i] filename.c
 
 
 TODO:

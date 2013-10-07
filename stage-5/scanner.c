@@ -193,16 +193,18 @@ pp_direct(stream, str) {
     error("Unknown preprocessor directive: %s", str);
 }
 
-do_get_qlit(stream, c) {
+do_get_qlit(stream, c1, c2) {
     auto int l;
-    auto tok = get_qlit(stream, c, &l);
+    auto tok = get_qlit(stream, c1, c2, &l);
 
     /* Character literals have type int in C. */
-    if (c == '\'') 
+    if (c1 == '\'') 
         tok[2] = add_ref( implct_int() );
     /* String literals have type char[N] */
-    else 
+    else if (c1 == '\"')
         tok[2] = chr_array_t(l);
+    else
+        int_error("Unknown type of quoted string: %c...%c", c1, c2);
     return tok;
 }
 

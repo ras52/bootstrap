@@ -87,6 +87,7 @@ skip_hwhite(stream) {
             error("End of file during preprocessor directive");
         else if (c == '/') {
             auto c2 = fgetc(stream);
+            /* TODO: Allow C++-style comments */
             if ( c2 != '*' ) {
                 ungetc(c2, stream);
                 return c;
@@ -129,11 +130,13 @@ extract_str(node) {
     auto char* src = node_str(node);
     auto int len = strlen(src);
     auto char* dest = malloc(len + 1);
-    auto int i = 1, j = 0, c;
+    auto int i = 0, j = 0, c;
+    auto q = rchar( src, i++ );
+    if ( q == '<' ) q = '>';
 
     while (1) {
         auto c = rchar( src, i++ );
-        if ( c == '\"' ) break;
+        if ( c == q ) break;
         else if ( c == '\\' ) {
             c = rchar( src, i++ );
             if ( c == 'n' ) c = '\n';
@@ -158,7 +161,7 @@ line_direct(stream) {
 
     c = skip_hwhite(stream);
     if ( c == '"' ) {
-        auto struct node* tok = get_qlit(stream, c, 0);
+        auto struct node* tok = get_qlit(stream, c, c, 0);
         /* Don't free(filename) until after this, or we have problems reporting
          * a problem with the string, e.g. if it contains invalid escapes. */
         auto char* new_name = extract_str(tok);
@@ -172,6 +175,8 @@ line_direct(stream) {
 /* Slurp anything to the next new line into *node_ptr (if not NULL),  */
 pp_slurp(stream, node_ptr) {
     auto int i = 0, c;
+    /* TODO:  Rewrite this to use skip_hspace, to allow for line continuations
+     * and comments. */
     while (1) {
         c = fgetc(stream);
         if ( c == -1 )
@@ -279,6 +284,7 @@ skip_white(stream) {
             return '\n#';
         else if (c == '/') {
             auto c2 = fgetc(stream);
+            /* TODO: Allow C++-style comments */
             if ( c2 != '*' ) {
                 ungetc(c2, stream);
                 return c;
@@ -361,31 +367,45 @@ get_ppnum(stream, c, c2) {
 
 /* Read a string or character literal into VALUE, beginning with quote mark, 
  * Q, and return the appropriate token type ('str' or 'chr'). */
-get_qlit(stream, q, len_ptr) 
+get_qlit(stream, q1, q2, len_ptr) 
     int* len_ptr;
 {
+    extern struct node* new_node();
+
     auto i = 0, l = 0, c;
     /* struct node { int type; int dummy; char str[]; } */
-    auto node = new_node( q == '"' ? 'str' : 'chr', 0 );
+    auto code;
+    auto struct node* node;
+    auto char* errname;
+    if      ( q1 == '"'  ) { code = 'str'; errname = "string literal";     }
+    else if ( q1 == '\'' ) { code = 'chr'; errname = "character constant"; }
+    else if ( q1 == '<'  ) { code = 'hdr'; errname = "header name";        }
+    else int_error("Unknown type of quoted string %c...%c", q1, q2);
+    node = new_node( code, 0 );
 
-    node_lchar( &node, &i, q );
+    node_lchar( &node, &i, q1 );
     
-    while ( (c = fgetc(stream)) != -1 && c != q ) {
-        node_lchar( &node, &i, c );
-        /* TODO: The handling of escapes is not conformant.  Also, share
-         * code with parse_chr(), above. */
+    while ( (c = fgetc(stream)) != -1 && c != q2 ) {
         if ( c == '\\' ) {
+            /* This is undefined behaviour in a header name, so we're free
+             * to parse escapes, as for string literals. 
+             * Pass off to the assembler.  TODO: The handling of escapes is 
+             * not conformant.  Also, share code with parse_chr(), above. */
+            node_lchar( &node, &i, c );
             if ( (c = fgetc(stream)) == -1 ) break;
             node_lchar( &node, &i, c );
         }
+        else if ( c == '\n' )
+            error("Line feeds are not permitted in a %s", errname);
+        else 
+            node_lchar( &node, &i, c );
         ++l;
     }
 
     if ( c == -1 )
-        error("Unexpected EOF during %s literal",
-              q == '"' ? "string" : "character");
+        error("Unexpected EOF during %s", errname);
 
-    node_lchar( &node, &i, q );
+    node_lchar( &node, &i, q2 );
     node_lchar( &node, &i, 0 );
 
     if (len_ptr)
@@ -488,7 +508,7 @@ raw_next() {
         }
     }
     else if ( c == '\'' || c == '"' )
-        token = do_get_qlit(stream, c);
+        token = do_get_qlit(stream, c, c);
     else 
         token = get_multiop(stream, c);
 
@@ -527,13 +547,53 @@ unget_token(t)
     token = t;
 }
 
-init_scan(in_filename) {
+static
+do_open( in_filename, search_path ) 
+    char* in_filename;
+    char** search_path;
+{
     extern char* strdup();
     extern struct FILE* fopen();
 
-    filename = strdup( in_filename );
-    input_strm = fopen( filename, "r" );
-    line = 0;
+    auto int baselen = strlen( in_filename );
+    while ( *search_path ) {
+        /* Build the trial filename */
+        auto int pathlen = strlen( *search_path );
+        /* The 2 extra characters are for '/' and '\0'. */
+        auto char* f = malloc( baselen + pathlen + 2 );
+        auto struct FILE* file;
+        strcpy( f, *search_path );
+        lchar( f, pathlen, '/' );
+        strcpy( f+pathlen+1, in_filename );
+        if ( file = fopen( f, "r" ) ) {
+            input_strm = file;
+            if ( strcmp( *search_path, "." ) == 0 ) {
+                /* It just looks more elegant to write "foo.h" instead of 
+                 * "./foo.h" for files in the local directory.  */
+                filename = strdup( in_filename );
+                free(f);
+            }
+            else
+                filename = f;
+            line = 0;
+            return;
+        }
+        free(f);
+        /* This is ++search_path, but because sizeof(*search_path) > 1, we
+         * cannot do that (and expect it to work) in the stage-4 cc. */
+        search_path = &search_path[1];
+    }
+    error("Unable to load file \"%s\"", in_filename);
+}
+
+init_scan(in_filename) {
+    auto char* null_search[2] = { ".", 0 };
+    do_open( in_filename, null_search );
+    next();
+}
+
+open_scan(in_filename, search_path) {
+    do_open( in_filename, search_path );
 }
 
 close_scan() {

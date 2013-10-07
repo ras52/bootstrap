@@ -181,7 +181,7 @@ init_array( type, req_const ) {
     init = take_node(0);
     init[0] = '{}';
     while (1) {
-        auto elt = req_const ? constant() : assign_expr();
+        auto elt = req_const ? const_expr() : assign_expr();
         if (!elts--) 
             error("Too many array initialisers");
         init = vnode_app( init, elt );
@@ -517,7 +517,7 @@ declaration( fn, strct ) {
             else if ( type && type[0] == '()' )
                 error("Function declarations cannot have initialiser lists");
             else
-                decl[5] = fn ? assign_expr() : constant();
+                decl[5] = fn ? assign_expr() : const_expr();
         }
 
         decls = vnode_app( decls, decl );
@@ -643,15 +643,6 @@ param_list() {
             break;
     }
     return p;
-}
-
-static
-constant() {
-    auto t = peek_token();
-    if ( t == 'num' || t == 'chr' || t == 'id' | t == 'str' )
-        return take_node(0);
-    else
-        error("Unexpected token '%Mc' while parsing expression", t);
 }
 
 /* Scan through FN_DECL for an undeclared parameter matching PDECL, and 

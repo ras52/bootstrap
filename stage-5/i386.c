@@ -47,10 +47,12 @@ load_chr(stream, chr) {
     fprintf(stream, "\tMOVL\t$%s, %%eax\n", chr);
 }
 
-load_str(stream, str, clabel) {
-    fprintf(stream, 
-            ".data\n.LC%d:\n\t.string %s\n.text\n\tMOVL\t$.LC%d, %%eax\n",
-            clabel, str, clabel);
+defn_str(stream, str, clabel) {
+    fprintf(stream, ".data\n.LC%d:\n\t.string %s\n.text\n", clabel, str);
+}
+
+load_str(stream, clabel) {
+    fprintf(stream, "\tMOVL\t$.LC%d, %%eax\n", clabel);
 }
 
 load_local(stream, offset, need_addr) {
@@ -309,15 +311,19 @@ data_decl(stream, name) {
 }
 
 int_decl_n(stream, num) {
-    fprintf(stream, "\t.int %d\n", num);
+    fprintf(stream, "\t.int\t%d\n", num);
 }
 
 int_decl_s(stream, str) {
-    fprintf(stream, "\t.int %s\n", str);
+    fprintf(stream, "\t.int\t%s\n", str);
+}
+
+int_decl_lc(stream, clabel) {
+    fprintf(stream, "\t.int\t.LC%d\n", clabel);
 }
 
 zero_direct(stream, n) {
-    fprintf(stream, "\t.zero %d\n", n);
+    fprintf(stream, "\t.zero\t%d\n", n);
 }
 
 promote(stream, is_unsgn, oldsz, newsz) {

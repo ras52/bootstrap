@@ -4,37 +4,49 @@
  * All rights reserved.
  */
 
-/*  constant    ::= int-const | char-const      TODO:  float, enum  
- *  primry-expr ::= identifier | constant | string-lit | '(' expression ')' */
-static
-primry_expr() {
-    auto n, t = peek_token();
-    if ( t == 'num' || t == 'str' ) 
-        n = take_node(0);
+/*  constant    ::= int-const | char-const      TODO:  float, enum  */
+/*  const-expr  ::= identifier | constant | string-lit */
+const_expr() {
+    /* TODO:  This isn't really accurate.  A const-expr isn't just a
+     * primary-expr without paretheses, but it'll do for the moment, 
+     * and it nicely avoids code duplication. */
+    auto t = peek_token();
+
+    if ( t == 'num' || t == 'str' )
+        return take_node(0);
 
     else if ( t == 'id' ) {
-        n = take_node(0);
+        auto n = take_node(0);
         /* If the identifier is undeclared, the type will be null. 
          * This happens when calling undeclared functions. */
         n[2] = lookup_type( &n[3] ); 
         if ( n[2] ) add_ref( n[2] );
+        return n;
     }
 
     else if ( t == 'chr' ) {
-        n = take_node(0);
+        auto n = take_node(0);
         /* Convert it into a integer literal: in C, char lits have type int. */
         n[0] = 'num';
         n[3] = parse_chr( &n[3] );
-    }
-    else if ( t == '(' ) {
-        skip_node('(');
-        n = expr(); 
-        skip_node(')');
+        return n;
     }
     else
         error("Unexpected token '%Mc' while parsing expression", t);
-    
-    return n;
+}
+
+/*  primry-expr ::= identifier | constant | string-lit | '(' expression ')' */
+static
+primry_expr() {
+    if ( peek_token() == '(' ) {
+        auto n;
+        skip_node('(');
+        n = expr(); 
+        skip_node(')');
+        return n;
+    }
+    else
+        return const_expr();
 }
 
 /*  arg-list ::= ( expr ( ',' expr )* )? */

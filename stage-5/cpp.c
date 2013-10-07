@@ -17,8 +17,8 @@ get_number(stream, c1, c2)
     return get_ppnum(stream, c1, c2);
 }
 
-do_get_qlit(stream, c) {
-    return get_qlit(stream, c, 0);
+do_get_qlit(stream, c1, c2) {
+    return get_qlit(stream, c1, c2, 0);
 }
 
 /* Pass through #pragma directive to the compiler proper */
@@ -174,7 +174,7 @@ cli_error(fmt)
 
 static
 usage() {
-    cli_error("Usage: cpp [-o filename.i] filename.c\n");
+    cli_error("Usage: cpp [-I include-dir] [-o filename.i] filename.c\n");
 }
 
 main(argc, argv) 
@@ -184,32 +184,41 @@ main(argc, argv)
     char *filename = 0, *outname = 0;
     int i = 0;
 
+    init_path();
+
     while ( ++i < argc ) {
-        if ( strcmp( argv[i], "-o" ) == 0 ) {
-            if ( ++i == argc ) usage();
+        char *arg = argv[i];
+
+        if ( strcmp( arg, "-o" ) == 0 ) {
+            if ( ++i == argc ) usage(); arg = argv[i];
             if ( outname ) cli_error(
                 "cpp: multiple output files specified: '%s' and '%s'\n",
-                outname, argv[i]);
-            outname = argv[i];
+                outname, arg);
+            outname = arg;
         }
 
-        else if ( strcmp( argv[i], "--help" ) == 0 ) 
+        else if ( strcmp( arg, "--help" ) == 0 ) 
             usage();
 
-        else if ( argv[i][0] == '-' )
-            cli_error("cpp: unknown option: %s\n", argv[i]);
+        else if ( strcmp( arg, "-I" ) == 0 ) {
+            if ( ++i == argc ) usage(); arg = argv[i];
+            push_inc( argv[i] );
+        }
+
+        else if ( arg[0] == '-' )
+            cli_error("cpp: unknown option: %s\n", arg);
 
         else {
             if ( filename ) cli_error(
                 "cpp: multiple input files specified: '%s' and '%s'\n",
-                filename, argv[i] );
-            filename = argv[i];
+                filename, arg );
+            filename = arg;
         }
     }
 
     if ( !filename )
         cli_error("cpp: no input file specified\n");
-    init_scan( filename );  next();
+    init_scan( filename );
 
     if (outname) {
         struct FILE* f = fopen( outname, "w" );
@@ -238,14 +247,39 @@ struct scanner {
 static int incl_stksz = 0;
 static struct scanner* incl_stack[256];
 
+/* Search path for include files */
+static char** inc_path;
+static inc_len, inc_cap;
+
+static
+init_path() {
+    inc_cap = 2;
+    inc_path = (char**) malloc( inc_cap * sizeof(char*) );
+    inc_path[0] = ".";
+    inc_path[1] = 0;
+    inc_len = 2;
+}
+
+static
+push_inc(inc)
+    char* inc;
+{
+    if ( inc_len == inc_cap ) {
+        inc_cap *= 2;
+        inc_path = (char**) realloc( inc_path, inc_cap * sizeof(char*) );
+    }
+    inc_path[ inc_len-1 ] = inc;
+    inc_path[ inc_len++ ] = 0;
+}
+
 /* Handle a #include directive. */
 static
 incl_direct(stream) {
     int c = skip_hwhite(stream);
-    /* TODO:  We should handle #include <foo> and later the #include pp-toks 
-     * form of C90 (and later) that processes its args */
-    if ( c == '"' ) {
-        struct node* tok = get_qlit(stream, c, 0);
+    /* TODO:  We should handle the #include pp-toks form of C90 (and later) 
+     * that processes its args */
+    if ( c == '"' || c == '<' ) {
+        struct node* tok = get_qlit(stream, c, c == '<' ? '>' : c, 0);
         char* file = extract_str(tok);
     
         /* The C standard allows this to be as low as 15 [C99 5.2.4.1].
@@ -259,7 +293,9 @@ incl_direct(stream) {
         incl_stack[ incl_stksz++ ] = scanner;
 
         store_scan( &scanner->filename, &scanner->line, &scanner->stream );
-        init_scan(file);
+        /* We ignore the first element of inc_path if it's a <header>.
+         * That's because it is ".". */
+        open_scan(file, inc_path + (c == '<') );
 
         free(file);
         free_node(tok);
