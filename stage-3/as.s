@@ -3529,8 +3529,8 @@ _start:
 
 	#  Default to the .text section
 	MOVL	$0, -132(%ebp)
-	MOVL	$0, -136(%ebp)	# size of .text
-	MOVL	$0, -140(%ebp)	# size of .data 
+	MOVL	$0, -136(%ebp)	# size of .data
+	MOVL	$0, -140(%ebp)	# size of .text
 	MOVL	$-1, -144(%ebp)	# set fds to -1
 	MOVL	$-1, -148(%ebp)
 
@@ -3637,13 +3637,13 @@ _start:
 
 	#  Change back to the .text section
 	PUSH	%ebp
-	MOVL	$0x000002FF, %edx	# Op info for .text
+	MOVL	$0x000002FF, %edx	# Op info for .text directive
 	PUSH	%edx
 	CALL	sect_direct
 	POP	%edx
 	POP	%ecx
 
-	#  Pad to a 4-byte boundary
+	#  Pad to a 4-byte boundary to ensure that .data is align
 	LEA	-112(%ebp), %eax
 	PUSH	%eax			# ofile
 	MOVL	$4, %ecx
@@ -3697,6 +3697,7 @@ _start:
 
 	#  Add .text and .data sizes together
 	POP	%eax			# pop .text + padding
+	MOVL	%eax, -140(%ebp)	# and store it (prev val had no pad)
 	ADDL	%eax, -108(%ebp)	# add .data + padding
 
 	#  Pad to a 4-byte boundary
@@ -3719,7 +3720,8 @@ _start:
 	POP	%ecx
 
 	#  Loop over the relocation table looking for .LC relocations
-	#  and change them to reference a new .data symbol.
+	#  and change them to reference a new .data symbol.  We do this
+	#  because the .LC symbols dont make it into the symbol table.
 	XORL	%esi, %esi		# slot for .data section symbol
 	MOVL	-120(%ebp), %edi
 .L44:
@@ -3784,6 +3786,13 @@ _start:
 	#  Move the .LC symbol value into the relocation addend 
 	MOVL	$0x1A4, %eax		# size of ELF headers
 	ADDL	(%edi), %eax		# rel->offset
+
+	#  Are we in writing a relocation in the data section?
+	MOVL	8(%edi), %ecx
+	TESTL	%ecx, %ecx
+	JZ	.L47a
+	ADDL	-140(%ebp), %eax	# size of .text
+.L47a:
 	PUSH	%eax
 	PUSH	12(%ebx)		# .LC symbol value
 	CALL	writedwat
