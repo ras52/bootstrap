@@ -99,7 +99,9 @@ freopen( filename, mode, stream ) {
     fd = open( filename, fmode, 0644 );
     if ( fd == -1 ) return 0;
 
-    if ( fd != stream[0] ) {
+    if ( stream[0] == -1 )
+        stream[0] = fd;
+    else if ( fd != stream[0] ) {
         if ( dup2(fd, stream[0]) == -1 ) {
             /* This is nice to have, but not a requirement */
             stream[0] = fd;
