@@ -76,7 +76,29 @@ skip_ccomm(stream) {
         error("End of file during comment");
 }
 
-/* Skip over whitespace other than '\n' (for the preprocessor) */
+/* Skips over a C++-style comment (the opening // is already read). */
+skip_cxcomm(stream) {
+    auto int c;
+
+    while (1) {
+        do c = fgetc(stream);
+        while ( c != '\n' && c != '\\' && c != -1 );
+        if ( c == '\\' ) {
+            c = fgetcl(stream);
+            if ( c == -1 ) break;
+        }
+        else {
+            ungetc(c, stream);
+            break;
+        }
+    } 
+
+    if ( c == -1 )
+        error("End of file during comment");
+}
+
+/* Skip over whitespace other than '\n' (for the preprocessor), and return
+ * the next character without ungetting it. */
 skip_hwhite(stream) {
     auto int c;
     while (1) {
@@ -87,12 +109,14 @@ skip_hwhite(stream) {
             error("End of file during preprocessor directive");
         else if (c == '/') {
             auto c2 = fgetc(stream);
-            /* TODO: Allow C++-style comments */
-            if ( c2 != '*' ) {
+            if ( c2 == '*' ) 
+                skip_ccomm(stream);
+            else if ( c2 == '/' )
+                skip_cxcomm(stream);
+            else {
                 ungetc(c2, stream);
                 return c;
             }
-            skip_ccomm(stream);
         }
         else if (c == '\\') {
             auto c2 = fgetcl(stream);
@@ -170,28 +194,6 @@ line_direct(stream) {
     }
     else if ( c == '\n' )
         ungetc(c, stream);
-}
-
-/* Slurp anything to the next new line into *node_ptr (if not NULL),  */
-pp_slurp(stream, node_ptr) {
-    auto int i = 0, c;
-    /* TODO:  Rewrite this to use skip_hspace, to allow for line continuations
-     * and comments. */
-    while (1) {
-        c = fgetc(stream);
-        if ( c == -1 )
-            error("End of file during preprocessor directive");
-        else if ( c == '\n' ) {
-            ungetc(c, stream);
-            break;
-        }
-        else if ( node_ptr )
-            node_lchar( node_ptr, &i, c );
-    }
-    if ( node_ptr )
-        /* Null terminate */
-        node_lchar( node_ptr, &i, 0 );
-    return c;
 }
 
 /* We've read a '#' at the start of a line, get the next token which will
@@ -284,12 +286,14 @@ skip_white(stream) {
             return '\n#';
         else if (c == '/') {
             auto c2 = fgetc(stream);
-            /* TODO: Allow C++-style comments */
-            if ( c2 != '*' ) {
+            if ( c2 == '*' ) 
+                skip_ccomm(stream);
+            else if ( c2 == '/' )
+                skip_cxcomm(stream);
+            else {
                 ungetc(c2, stream);
                 return c;
             }
-            skip_ccomm(stream);
         }
         else if (c == '\\') {
             auto c2 = fgetcl(stream);
@@ -387,19 +391,26 @@ get_qlit(stream, q1, q2, len_ptr)
     
     while ( (c = fgetc(stream)) != -1 && c != q2 ) {
         if ( c == '\\' ) {
-            /* This is undefined behaviour in a header name, so we're free
-             * to parse escapes, as for string literals. 
-             * Pass off to the assembler.  TODO: The handling of escapes is 
-             * not conformant.  Also, share code with parse_chr(), above. */
-            node_lchar( &node, &i, c );
-            if ( (c = fgetc(stream)) == -1 ) break;
-            node_lchar( &node, &i, c );
+            auto int c2 = fgetc(stream);
+            /* Line continuations are permitted inside string literals, etc.,
+             * as they are handled in phase-2, before tokenisation. */
+            if (c2 != '\n') {
+                /* This is undefined behaviour in a header name, so we're free
+                 * to parse escapes, as for string literals. 
+                 * Pass off to the assembler.  TODO: The handling of escapes is 
+                 * not conformant.  Also, share code with parse_chr(), above. */
+                node_lchar( &node, &i, c );
+                if ( (c = c2) == -1 ) break;
+                node_lchar( &node, &i, c );
+                ++l;
+            }
         }
         else if ( c == '\n' )
             error("Line feeds are not permitted in a %s", errname);
-        else 
+        else {
             node_lchar( &node, &i, c );
-        ++l;
+            ++l;
+        }
     }
 
     if ( c == -1 )
@@ -471,7 +482,9 @@ is_op(op) {
 /* Contains the token most recently read by next() */
 static struct node* token;
 
-/* Read the next lexical element without preprocessing */
+/* Read the next lexical element into TOKEN without preprocessing, and
+ * return the code of TOKEN, -1 for EOF, or '\n#' for a # starting a 
+ * preprocessor directive. */
 static
 raw_next() {
     /* Oh! for headers */
@@ -538,6 +551,28 @@ next() {
         }
     } while ( c == '\n#' );
     return token;
+}
+
+/* Slurp all tokens until the next new line into *node_ptr (if not NULL), 
+ * and return the next character (which will necessarily be '\n'). */
+pp_slurp(stream, node_ptr)
+    struct node** node_ptr;
+{
+    extern struct node *vnode_app();
+    auto int i = 0, c;
+    while (1) {
+        c = skip_hwhite(stream);
+        ungetc(c, stream);
+        if ( c == '\n' )
+            break;
+       
+        c = raw_next();
+        if ( node_ptr ) 
+            *node_ptr = vnode_app( *node_ptr, token );
+        else
+            free_node( token );
+    }
+    return c;
 }
 
 unget_token(t) 
@@ -637,7 +672,8 @@ skip_node(type) {
 /* Take ownership of the current node, and call next() */
 take_node(arity) {
     auto node = token;
-    set_arity( node, arity );
+    if (arity != -1)
+        set_arity( node, arity );
     next();
     return node;
 }

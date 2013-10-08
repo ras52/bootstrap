@@ -4,6 +4,14 @@
  * All rights reserved.
  */
 
+/* If only we had a preprocessor to avoid these duplications ... :-) */
+struct node {
+    int code;           /* character code for the node, e.g. '+' or 'if'. */
+    int arity;          /* the number of nodes in the ops[] array. */
+    struct node* type;  /* Always NULL in the preprocessor. */
+    struct node* ops[4];
+};
+
 /* The preprocessor does not know about keywords. */
 chk_keyword(node) 
     struct node* node;
@@ -137,6 +145,28 @@ set_line( line_ptr, file_ptr, output )
 }
 
 static
+print_node(output, node) 
+    struct node* node;
+{
+    int c = node_code(node);
+
+    if ( c == 'id' )
+        fputs( node_str(node), output );
+    else if ( c == 'ppno' || c == 'str' || c == 'chr' )
+        fputs( node_str(node), output );
+    else if ( c == 'prgm' ) {
+        int i;
+        fputs( "#pragma", output );
+        for ( i = 0; i < node->arity; ++i ) {
+            fputc(' ', output);
+            print_node( output, node->ops[i] );
+        }
+    }
+    else
+        fprintf( output, "%Mc", c );
+}
+
+static
 preprocess(output) {
     int c;
     int out_line = 1;
@@ -147,17 +177,12 @@ preprocess(output) {
         /* Call set_line() before take_node() or we bump the line too soon. */
         set_line( &out_line, &out_file, output );
 
-        node = take_node(0);
-        if ( c == 'id' ) {
-            if ( ! expand( node_str(node), output ) )
-                fputs( node_str(node), output );
-        }
-        else if ( c == 'ppno' || c == 'str' || c == 'chr' )
-            fputs( node_str(node), output );
-        else if ( c == 'prgm' )
-            fprintf( output, "#pragma %s", node_str(node) );
+        node = take_node(-1);
+        if ( c == 'id' && expand( node_str(node), output ) )
+            /* It's a macro that has been expanded and pushed back on to
+             * the parser stack: we do that to ensure proper re-scanning. */ ;
         else
-            fprintf( output, "%Mc", c );
+            print_node(output, node);
         free_node( node );
     }
     fputc('\n', output); /* file needs to end with '\n' */

@@ -144,6 +144,7 @@ grow_node(node, size)
 
 /* Append node CHILD to node VEC, growing the vector if necessary, 
  * and returning the (possibly reallocated) vector. */
+struct node *
 vnode_app( vec, child )
     struct node *vec, *child;
 {
