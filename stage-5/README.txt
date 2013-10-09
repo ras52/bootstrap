@@ -29,5 +29,5 @@ TODO:
   - Tentative definitions
   - Typedefs
   - Unions, bit fields (probably not in this stage?), floats
-  - #if, #elif, #else
+  - #if, #elif
   - Macros with arguments

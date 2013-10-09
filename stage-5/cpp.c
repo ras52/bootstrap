@@ -38,15 +38,35 @@ prgm_direct(stream) {
 
 /* How deep are we with #if{,def,ndef} directive. */
 static
-int if_depth = 0;
+struct if_group {
+    int is_else;
+    struct if_group* next;
+} *if_stack = 0;
+
+static
+if_push(is_else) {
+    struct if_group* g = (struct if_group*) malloc( sizeof(struct if_group) );
+    g->is_else = is_else;
+    g->next = if_stack;
+    if_stack = g;
+}
+
+static
+if_pop() {
+    struct if_group* g = if_stack;
+    if (!g) int_error("Popping from empty if-group stack");
+    if_stack = g->next;
+    free(g);
+}
 
 struct node* start_ppdir();
 char* node_str();
 
 /* Go into relaxed parsing mode, and skip to the corresponding #endif */
+static
 skip_if(stream) {
-    int start_depth = if_depth;
-    ++if_depth;
+    struct if_group* start = if_stack->next;
+
     do {
         struct node* tok;
         char* str;
@@ -61,12 +81,19 @@ skip_if(stream) {
         
         if ( strcmp( str, "ifdef" ) == 0 || strcmp( str, "ifndef" ) == 0 
              || strcmp( str, "if" ) == 0 )
-            ++if_depth;
+            if_push(0);
         else if ( strcmp( str, "endif" ) == 0 )
-            --if_depth;
+            if_pop();
+        else if ( strcmp( str, "else" ) == 0 && if_stack->next == start ) {
+            if ( if_stack->is_else )
+                error("An #if group cannot have more than one #else");
+            if_stack->is_else = 1;
+            free_node(tok);
+            break;   
+        }
         free_node(tok);
 
-    } while ( if_depth != start_depth );
+    } while ( if_stack != start );
 }
 
 struct node* get_word();
@@ -81,10 +108,12 @@ ifdf_direct(stream, directive, positive) {
     name = get_word( stream, c );
     end_ppdir( stream, directive );
 
-    if ( pp_defined( node_str(name) ) != positive )
+    if ( pp_defined( node_str(name) ) != positive ) {
+        if_push(0);
         skip_if(stream);
+    }
     else
-        ++if_depth;
+        if_push(0);
 
     free_node(name);
 }
@@ -92,9 +121,21 @@ ifdf_direct(stream, directive, positive) {
 endi_direct(stream) {
     end_ppdir( stream, "endif" );
 
-    if (if_depth == 0)
+    if ( !if_stack )
         error( "Unexpected #endif directive" );
-    --if_depth;
+    if_pop();
+}
+
+else_direct(stream) {
+    end_ppdir( stream, "endif" );
+
+    if ( !if_stack )
+        error( "Unexpected #else directive" );
+    if ( if_stack->is_else )
+        error("An #if group cannot have more than one #else");
+
+    if_stack->is_else = 1;
+    skip_if(stream);
 }
 
 /* Hook for handling preprocessor directives other than #line and #pragma */
@@ -107,6 +148,8 @@ pp_direct(stream, str) {
         ifdf_direct( stream, str, 1 );
     else if ( strcmp( str, "ifndef" ) == 0 )
         ifdf_direct( stream, str, 0 );
+    else if ( strcmp( str, "else" ) == 0 )
+        else_direct( stream );
     else if ( strcmp( str, "endif" ) == 0 )
         endi_direct( stream );
     else if ( strcmp( str, "undef" ) == 0 )
@@ -267,6 +310,7 @@ struct scanner {
     char* filename;
     int line;
     struct FILE* stream;
+    struct if_group* if_at_entry;
 };
 
 static int incl_stksz = 0;
@@ -318,6 +362,8 @@ incl_direct(stream) {
         incl_stack[ incl_stksz++ ] = scanner;
 
         store_scan( &scanner->filename, &scanner->line, &scanner->stream );
+        scanner->if_at_entry = if_stack;
+
         /* We ignore the first element of inc_path if it's a <header>.
          * That's because it is ".". */
         open_scan(file, inc_path + (c == '<') );
@@ -333,17 +379,19 @@ incl_direct(stream) {
  * handled -- by which we mean we've been able to pop the include stack --
  * or 0 if it really is EOF. */
 handle_eof() {
-    if ( if_depth )
-        error("End of file while looking for #endif");
 
     if ( incl_stksz ) {
         close_scan();
 
         struct scanner* scanner = incl_stack[ --incl_stksz ];
         restorescan( scanner->filename, scanner->line, scanner->stream );
+        if ( scanner->if_at_entry != if_stack )
+            error("End of file while looking for #endif");
         free( scanner );
         return 1;
     } 
+    else if ( if_stack )
+        error("End of file while looking for #endif");
     else return 0;
 }
 
