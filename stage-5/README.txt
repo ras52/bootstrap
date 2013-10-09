@@ -28,6 +28,7 @@ TODO:
   - Errors on duplicate declarations at global scope
   - Tentative definitions
   - Typedefs
+  - Prototypes
   - Unions, bit fields (probably not in this stage?), floats
   - #if, #elif
   - Macros with arguments

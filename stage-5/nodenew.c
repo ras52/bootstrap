@@ -184,12 +184,12 @@ set_arity(node, arity)
 
 /* Allocate a string node and set its payload to STR */
 struct node*
-new_strnode(str)
+new_strnode(code, str)
     char* str;
 {
     int sz = strlen(str) + 1;
     struct node* node = grow_node( 0, 0, sz );
-    node->code = 'str';
+    node->code = code;
     node->arity = 0;
     node->type = 0;
     strcpy( node_str(node), str, sz );
@@ -242,7 +242,7 @@ node_streq(node, str)
     struct node* node;
     char* str;
 {
-    return node->code == 'str' && strcmp( node_str(node), str ) == 0;
+    return node->code == 'id' && strcmp( node_str(node), str ) == 0;
 }
 
 

@@ -54,7 +54,7 @@ get_macro(name)
 {
     struct node **i = macro_vec.start, **e = macro_vec.end;
     for (; i != e; ++i )
-        if ( strcmp( node_str( (*i)->ops[0] ), name ) == 0 )
+        if ( node_streq( (*i)->ops[0], name ) )
             return *i;
     return 0;
 }
@@ -101,7 +101,7 @@ unde_direct(stream) {
     name = node_str(tok);
 
     for (; i != e; ++i )
-        if ( strcmp( node_str( (*i)->ops[0] ), name ) == 0 ) {
+        if ( node_streq( (*i)->ops[0], name ) ) {
             /* Remove defn from the macro_vec */
             free_node(*i);  *i = 0;
             memmove( i, i+1, (e-i-1) * sizeof(struct node*) );
@@ -124,8 +124,8 @@ mk_unmask(node, strnode)
     node->code = 'prgm';
     node->arity = 3;
     node->type = 0;
-    node->ops[0] = new_strnode("RBC");
-    node->ops[1] = new_strnode("cpp_unmask");
+    node->ops[0] = new_strnode('id', "RBC");
+    node->ops[1] = new_strnode('id', "cpp_unmask");
     node->ops[2] = add_ref(strnode);
     node->ops[3] = 0;
 }
