@@ -47,8 +47,12 @@ rc_done() {
 /* Wrapper around realloc to work with pointers returned by rc_alloc. */
 static
 rc_realloc(ptr, sz) {
-    struct rc_node* old_ptr = ptr - sizeof(struct rc_node);
-    struct rc_node* new_ptr;
+    struct rc_node *old_ptr, *new_ptr;
+
+    if ( !ptr )
+        return rc_alloc(sz);
+    
+    old_ptr = (struct rc_node*)( (unsigned char*)ptr - sizeof(struct rc_node) );
 
     /* We cannot currently handle reallocating if there are multiple copies.  
      * What should it do?  If the address changes, we need to update all
@@ -120,22 +124,25 @@ free_node(node)
     }
 }
 
-/* If SIZE is equal to the capacity (in bytes) of NODE, then reallocate 
- * it with twice capacity, and return the new node.  It does not
- * increment the arity of the node.  More friendly interfaces are provided
- * by vnode_app() and node_lchar(). */
+/* Expand, if necessary, the storage of NODE.  SIZE is the current size
+ * (in bytes) of the node, and EXTRA is the additional space required.
+ * If SIZE + EXTRA is greater than the capacity (in bytes) of NODE, then
+ * reallocate it with twice (or, if necessary, more) capacity, and return 
+ * the new node.  It does not increment the arity of the node.  More 
+ * friendly interfaces are provided by vnode_app() and node_lchar(). */
 static
 struct node*
-grow_node(node, size) 
+grow_node(node, size, extra) 
     struct node* node;
 {
-    struct rc_node* rc = (unsigned char*)node - sizeof(struct rc_node);
+    struct rc_node* rc 
+        = node ? (unsigned char*)node - sizeof(struct rc_node) : 0;
 
     /* This is the size of the node before the ops[] payload. */
     int overhead = sizeof(struct node) - sizeof(struct node *[4]);
 
-    if ( size + overhead == rc->capacity ) {
-        size *= 2;
+    if ( !rc || size + extra + overhead > rc->capacity ) {
+        size += (extra <= size ? size : extra);
         return rc_realloc( node, size + overhead );
     }
 
@@ -148,7 +155,8 @@ struct node *
 vnode_app( vec, child )
     struct node *vec, *child;
 {
-    vec = grow_node( vec, vec->arity * sizeof(struct node*) );
+    vec = grow_node( vec, vec->arity * sizeof(struct node*), 
+                     sizeof(struct node*) );
     vec->ops[ vec->arity++ ] = child;
     return vec;
 }
@@ -174,6 +182,21 @@ set_arity(node, arity)
     node->arity = arity;
 }
 
+/* Allocate a string node and set its payload to STR */
+struct node*
+new_strnode(str)
+    char* str;
+{
+    int sz = strlen(str) + 1;
+    struct node* node = grow_node( 0, 0, sz );
+    node->code = 'str';
+    node->arity = 0;
+    node->type = 0;
+    strcpy( node_str(node), str, sz );
+    return node;
+}
+
+
 /* Append character CHR to the payload of the node *NODE_PTR which is treated 
  * as a string with current length *LEN_PTR.  The value of *LEN_PTR is 
  * incremented.  The node may be reallocated. */
@@ -181,7 +204,7 @@ node_lchar( node_ptr, len_ptr, chr )
     struct node** node_ptr;
     int *len_ptr;
 {
-    struct node* node = grow_node( *node_ptr, *len_ptr );
+    struct node* node = grow_node( *node_ptr, *len_ptr, 1 );
     char* buf = node_str(node);
     buf[ (*len_ptr)++ ] = chr;
     *node_ptr = node;
@@ -214,3 +237,12 @@ pb_push(token)
     p->node = token;
     pb_stack = p;
 }
+
+node_streq(node, str)
+    struct node* node;
+    char* str;
+{
+    return node->code == 'str' && strcmp( node_str(node), str ) == 0;
+}
+
+

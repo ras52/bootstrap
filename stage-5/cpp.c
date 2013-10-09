@@ -228,18 +228,27 @@ preprocess(output) {
          * will call next() immediately, which will cause any immediately
          * following preprocessor directive to be processesed, and if that
          * is an #undef removing and expansion of the current token, that 
-         * will break things. */
+         * will break things.  Oh, and calling next() after set_line() is
+         * also necessary to get the right line numbers in the file. */
         struct node* node = get_node();
 
-        if ( c == 'id' && expand( node_str(node), output ) )
+        if ( c == 'id' && can_expand( node_str(node) ) ) {
             /* It's a macro that has been expanded and pushed back on to
-             * the parser stack: we do that to ensure proper re-scanning. */ ;
+             * the parser stack: we do that to ensure proper re-scanning. */
+            do_expand( node_str(node) );
+        }
+        else if ( c == 'prgm' && cpp_pragma(node) ) {
+            /* It's a pragma that's been handled entirely in a preprocessor
+             * and should not be included in the output. */
+            free_node( node );
+            next();
+        }
         else {
             set_line( &out_line, &out_file, output );
             print_node(output, node);
+            free_node( node );
+            next();
         }
-        free_node( node );
-        next();
     }
     fputc('\n', output); /* file needs to end with '\n' */
 }
@@ -407,3 +416,17 @@ handle_eof() {
     else return 0;
 }
 
+/* Certain pragmas are handled entirely in the preprocessor. */
+cpp_pragma(node) 
+    struct node* node;
+{
+    if ( node->arity != 3 ) return 0;
+    if ( !node_streq( node->ops[0], "RBC" ) ) return 0;
+
+    if ( node_streq( node->ops[1], "cpp_unmask" ) ) {
+        cpp_unmask( node_str( node->ops[2] ) );
+        return 1;
+    }
+
+    return 0;
+}

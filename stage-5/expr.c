@@ -153,7 +153,12 @@ unary_expr() {
          || t == '++' || t == '--' ) {
         auto p = take_node(1);
         req_token();
-        p[3] = unary_expr();
+
+        /* The grammar says says the argument is sometimes a unary-expr,
+         * and sometimes a cast-expr.  In practice we can universally parse 
+         * it as a cast-expr.  If someone writes ++(type)(expr) then the
+         * lvalue check will catch the error. */
+        p[3] = cast_expr();
 
         if (t == '+' || t == '-' || t == '~')
             p[2] = add_ref( prom_type( p[3][2] ) );

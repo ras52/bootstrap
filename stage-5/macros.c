@@ -10,10 +10,11 @@ struct node* new_node();
 struct node* vnode_app();
 char* node_str();
 
-/* A macro definition is just a 'macd' node with operands: 
- * [0] unused, [1] name, [2] unused (reserved for params), [3] expansion
- * and expansion is a 'mace' vnode all of whose operands are tokens
- * in the expansion.  The node struct is documented in nodenew.c.
+/* A macro definition is just a 'macd' node with 3 operands: 
+ * [0] name, [1] unused (reserved for params), [2] expansion;
+ * slot [3] is (ab)used for an is-masked flag.  The expansion op
+ * is a 'mace' vnode all of whose operands are tokens in the expansion.  
+ * The node struct is documented in nodenew.c.
  * If only we had a preprocessor to avoid these duplications ... :-) */
 struct node {
     int code;           /* character code for the node, e.g. '+' or 'if'. */
@@ -53,34 +54,36 @@ get_macro(name)
 {
     struct node **i = macro_vec.start, **e = macro_vec.end;
     for (; i != e; ++i )
-        if ( strcmp( node_str( (*i)->ops[1] ), name ) == 0 )
+        if ( strcmp( node_str( (*i)->ops[0] ), name ) == 0 )
             return *i;
     return 0;
 }
 
 /* Handle a #define directive. */
 defn_direct(stream) {
-    struct node* macd = new_node('macd', 4);
+    struct node* macd = new_node('macd', 3);
 
     int c = skip_hwhite(stream);
 
     if ( !isidchar1(c) )
         error("Expected identifier in #define directive");
 
-    macd->ops[1] = get_word( stream, c );
-    macd->ops[3] = new_node('mace', 0);
+    macd->ops[0] = get_word( stream, c );
+    macd->ops[2] = new_node('mace', 0);
+
+    /* TODO:  Require whitespace before the exapansion list */
 
     while (1) {
         /* We need to explicitly call skip_hwhite() here because next()
          * will call skip_white(), and we musn't allow it to skip a '\n'. */
         ungetc( c = skip_hwhite(stream), stream );
         if ( c == '\n' ) break;
-        macd->ops[3] = vnode_app( macd->ops[3], next() );
+        macd->ops[2] = vnode_app( macd->ops[2], next() );
     }
 
     /* TODO:  We're allowed repeat definitions if they're identical. */
-    if ( get_macro( node_str( macd->ops[1] ) ) )
-        error("Duplicate definition of %s", node_str( macd->ops[1] ) );
+    if ( get_macro( node_str( macd->ops[0] ) ) )
+        error("Duplicate definition of %s", node_str( macd->ops[0] ) );
 
     vec_grow(macd);
 }
@@ -98,7 +101,7 @@ unde_direct(stream) {
     name = node_str(tok);
 
     for (; i != e; ++i )
-        if ( strcmp( node_str( (*i)->ops[1] ), name ) == 0 ) {
+        if ( strcmp( node_str( (*i)->ops[0] ), name ) == 0 ) {
             /* Remove defn from the macro_vec */
             free_node(*i);  *i = 0;
             memmove( i, i+1, (e-i-1) * sizeof(struct node*) );
@@ -109,16 +112,43 @@ unde_direct(stream) {
     free_node(tok);
 }
 
-do_expand(macd)
-    struct node* macd;
+struct node* new_strnode();
+struct node* add_ref();
+
+static
+mk_unmask(node, strnode)
+    struct node *node, *strnode;
 {
-    struct node* mace = macd->ops[3];
+    /* We overwrite the head node on the stack (which will be the macro being
+     * expanded) with a _Pragma("RBC cpp_unmask $name") node. */
+    node->code = 'prgm';
+    node->arity = 3;
+    node->type = 0;
+    node->ops[0] = new_strnode("RBC");
+    node->ops[1] = new_strnode("cpp_unmask");
+    node->ops[2] = add_ref(strnode);
+    node->ops[3] = 0;
+}
+
+do_expand(name)
+    char* name;
+{
     int n;
+    struct node *macd = get_macro(name), *mace;
+
+    /* Mask the macro, and push a _Pragma("RBC cpp_unmask $name") node.
+     * This implements the standard behaviour that macros cannot recursively
+     * reference themselves.  This is used in #defined errno errno.
+     * The [3] slot is abused to store an is-masked flag.  As arity is 3,
+     * it is never freed. */
+    if ( !macd || macd->ops[3] ) 
+        int_error("Attempt to expand undefined macro: %s", name);
+    macd->ops[3] = (struct node*) 1;
+    mk_unmask( get_node(), macd->ops[0] ); 
+
     /* By pushing the tokens back in this way, we ensure that we rescan 
-     * the expanded token sequence.   TODO The rescan is not standard-
-     * compliant, because we don't hide the current macro name, which we
-     * should.  Perhaps we'll do with by pusing a _Pragma( cpp-hide, name )
-     * and _Pragma( cpp-restore, name ).  */
+     * the expanded token sequence. */
+    mace = macd->ops[2];
     for ( n = mace->arity; n; --n ) 
         unget_token( add_ref( mace->ops[n-1] ) );
 }
@@ -130,12 +160,21 @@ pp_defined(name)
     return get_macro(name) ? 1 : 0;
 }
 
-expand(name)
+can_expand(name)
     char* name;
 {
     struct node *macro = get_macro(name);
-    if (macro) { do_expand(macro); return 1; }
-    return 0;
+    /* Slot [3] is used as an is-masked flag. */
+    return macro && !macro->ops[3];
+}
+
+cpp_unmask(name) 
+    char* name;
+{
+    struct node *macro = get_macro(name);
+    if ( !macro )
+        error("Unable to unmask non-existent macro '%s'", name);
+    macro->ops[3] = 0;
 }
 
 fini_macros() {
