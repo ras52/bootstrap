@@ -158,8 +158,7 @@ pp_direct(stream, str) {
         error("Unknown preprocessor directive: %s", str);
 }
 
-struct node* next();
-struct node* take_node();
+struct node* get_node();
 
 static
 set_line( line_ptr, file_ptr, output )
@@ -220,13 +219,20 @@ preprocess(output) {
         /* Call set_line() before take_node() or we bump the line too soon. */
         set_line( &out_line, &out_file, output );
 
-        node = take_node(-1);
+        /* We cannot call take_node() because (i) we don't want to set the
+         * arity which, for a 'prgm' node, is unknown; and (ii) because it
+         * will call next() immediately, which will cause any immediately
+         * following preprocessor directive to be processesed, and if that
+         * is an #undef removing and expansion of the current token, that 
+         * will break things. */
+        node = get_node();
         if ( c == 'id' && expand( node_str(node), output ) )
             /* It's a macro that has been expanded and pushed back on to
              * the parser stack: we do that to ensure proper re-scanning. */ ;
         else
             print_node(output, node);
         free_node( node );
+        next();
     }
     fputc('\n', output); /* file needs to end with '\n' */
 }
@@ -379,7 +385,6 @@ incl_direct(stream) {
  * handled -- by which we mean we've been able to pop the include stack --
  * or 0 if it really is EOF. */
 handle_eof() {
-
     if ( incl_stksz ) {
         close_scan();
 

@@ -672,10 +672,13 @@ skip_node(type) {
 /* Take ownership of the current node, and call next() */
 take_node(arity) {
     auto node = token;
-    if (arity != -1)
-        set_arity( node, arity );
+    set_arity( node, arity );
     next();
     return node;
+}
+
+get_node() {
+    return token;
 }
 
 /* Require P to be non-null, and give an 'unexpected EOF' error if it is not.
