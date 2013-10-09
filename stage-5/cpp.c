@@ -172,14 +172,22 @@ set_line( line_ptr, file_ptr, output )
      * offsets, or changes in filename, we emit an explicit #line.  */
     int in_line = get_line();
     char* in_file = getfilename();
-    if ( !*file_ptr || strcmp( *file_ptr, in_file ) != 0 )
+
+    if ( !*file_ptr || strcmp( *file_ptr, in_file ) != 0 ) {
+        /* Only at the very start of the input stream is *file_ptr null.
+         * This test suppresses a blank line at the very start of the 
+         * preprocessor output. */
+        if (*file_ptr) fputc('\n', output);
         /* TODO:  Properly escape the filename. */
-        fprintf( output, "\n#line %d \"%s\"\n", *line_ptr = in_line,
+        fprintf( output, "#line %d \"%s\"\n", *line_ptr = in_line,
                  *file_ptr = in_file );
-    if ( *line_ptr > in_line || *line_ptr < in_line - 4 ) 
+    }
+    else if ( *line_ptr > in_line || *line_ptr < in_line - 4 ) 
         fprintf( output, "\n#line %d\n", *line_ptr = in_line );
+
     else if ( *line_ptr == in_line ) 
         fputc(' ', output);
+
     else while ( *line_ptr < in_line ) { 
         fputc('\n', output); 
         ++*line_ptr;
@@ -215,22 +223,21 @@ preprocess(output) {
     char* out_file = 0;
 
     while ( c = peek_token() ) {
-        struct node* node;
-        /* Call set_line() before take_node() or we bump the line too soon. */
-        set_line( &out_line, &out_file, output );
-
         /* We cannot call take_node() because (i) we don't want to set the
          * arity which, for a 'prgm' node, is unknown; and (ii) because it
          * will call next() immediately, which will cause any immediately
          * following preprocessor directive to be processesed, and if that
          * is an #undef removing and expansion of the current token, that 
          * will break things. */
-        node = get_node();
+        struct node* node = get_node();
+
         if ( c == 'id' && expand( node_str(node), output ) )
             /* It's a macro that has been expanded and pushed back on to
              * the parser stack: we do that to ensure proper re-scanning. */ ;
-        else
+        else {
+            set_line( &out_line, &out_file, output );
             print_node(output, node);
+        }
         free_node( node );
         next();
     }
