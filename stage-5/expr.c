@@ -17,6 +17,9 @@ const_expr() {
 
     else if ( t == 'id' ) {
         auto n = take_node(0);
+        if ( is_typedef( &n[3] ) )
+            error("Invalid use of typedef name: %s", &n[3]);
+
         /* If the identifier is undeclared, the type will be null. 
          * This happens when calling undeclared functions. */
         n[2] = lookup_type( &n[3] ); 
@@ -203,7 +206,7 @@ cast_expr() {
 
         /* We don't yet know that we have a cast expression.  It might be 
          * the opening '(' of a primary-expr.    */
-        if ( !is_dclspec( peek_token() ) ) {
+        if ( !is_dclspec() ) {
             /* We can't just call skip_token('('); expr(); skip_token(')');
              * beacuse that doesn't cope with (*x)++ where we need the 
              * call stack to handle the postfix operator on the way back 

@@ -289,10 +289,17 @@ declarator(dclt) {
 }
 
 /* Test whether the current token is a decl spec. */
-is_dclspec(t) {
+is_dclspec() {
+    auto t = peek_token();
+    /* An identifier might a typedef-name, which is a decl-spec. */
+    if ( t == 'id' ) {
+        auto id = get_node();
+        return is_typedef( &id[3] );
+    }
+
     return t == 'stat' || t == 'exte' || t == 'auto' || t == 'regi' ||
-        t == 'char' || t == 'int' || t == 'shor' || t == 'long' ||
-        t == 'sign' || t == 'unsi' || t == 'stru';
+         t == 'char' || t == 'int' || t == 'shor' || t == 'long' ||
+         t == 'sign' || t == 'unsi' || t == 'stru';
 }
 
 static
@@ -348,8 +355,9 @@ struct_spec() {
  *  Errors are given for invalid combinations.
  * 
  *  decl-specs   ::= ( storage-spec | type-spec | struct-spec )*
- *  storage-spec ::= 'extern' | 'static' | 'auto' | 'register'
+ *  storage-spec ::= 'extern' | 'static' | 'auto' | 'register' | 'typedef'
  *  type-spec    ::= 'int' | 'char' | 'long' | 'short' | 'signed' | 'unsigned'
+ *                      | typedef-name
  */
 static
 decl_specs() {
@@ -360,7 +368,7 @@ decl_specs() {
      *   dcls[4] = a type node:       { 'stru' or 'dclt' }
      *   dcls[5...] = the declarators
      *
-     * For a basic type, the dclt node, which is created on demand by 
+     * For a basic type, the 'dclt' node, which is created on demand by 
      * set_dclt(), has ops:
      *   dclt[3] = base of the type   { char, int }    --- always present
      *   dclt[4] = length modifier    { long, short }
@@ -369,7 +377,8 @@ decl_specs() {
     while (1) {
         auto t = peek_token();
 
-        if ( t == 'stat' || t == 'exte' || t == 'auto' || t == 'regi' ) {
+        if ( t == 'stat' || t == 'exte' || t == 'auto' || t == 'regi' || 
+             t == 'type') {
             if ( decls[3] )
                 error("Multiple storage class specifiers found");
 
@@ -390,6 +399,20 @@ decl_specs() {
             set_dclt(decls, 4);
         else if ( t == 'sign' || t == 'unsi' )
             set_dclt(decls, 5);
+
+        /* Typedefs are a bit tricky, because a typedef-name only interpretted
+         * as a type-spec if there isn't already a type-spec. */
+        else if ( t == 'id' && !decls[4] ) {
+            auto id = take_node(0);
+            if ( is_typedef( &id[3] ) ) {
+                decls[4] = add_ref( lookup_type( &id[3] ) );
+                free_node(id);
+            }
+            else {
+                unget_token(id);
+                break;
+            }
+        }
 
         else break;
     }
@@ -431,7 +454,7 @@ decl_specs() {
 static
 declaration( fn, strct ) {
     auto decls = decl_specs();
- 
+
     if ( strct && decls[3] )
         error("Declartion specifiers are not allowed on struct members");
 
@@ -457,14 +480,22 @@ declaration( fn, strct ) {
          * so we can check it when taking the address of an identifier. */
         if ( decls[3] )
             decl[3] = add_ref( decls[3] );
-        
+
+
         /* Automatic declarations need space reserving in the frame. 
          * A variable has automatic storage duration if (i) it is declared
          * with 'auto' or 'register', or (ii) if it declared at function scope
          * with no storage specifier and is not a function. */
         if ( decls[3] && ( decls[3][0] == 'auto' || decls[3][0] == 'regi' ) ||
              fn && !decls[3] && decl[2][0] != '()' ) {
-            /* TODO:  This is valid: auto x[] = { 1, 2, 3 }; */
+
+            /* "The declaration of an identifier for a function that has block
+             * scope shall have no explicit storage-class specifier other than
+             * extern."  [C99 6.7.1/5] */
+            if ( decl[2][0] == '()' )
+                error("Invalid storage specifier on function declaration");
+
+             /* TODO:  This is valid: auto x[] = { 1, 2, 3 }; */
             if (decl[2] && decl[2][0] == '[]' && !decl[2][4])
                 error("Automatic array of unknown size");
 
@@ -472,8 +503,15 @@ declaration( fn, strct ) {
             decl_var(decl);
         }
 
+        /* Typedefs are put in the symbol table too, as they're in the 
+         * ordinary identifier namespace. */
+        else if ( decls[3] && decls[3][0] == 'type' ) {
+            chk_dup_sym( name, 0 );
+            decl_type(decl);
+        }
+
         /* External declarations still need storing in the symbol table */
-        else if (!strct) {
+        else if ( !strct ) {
             /* TODO:  Check for duplicate definitions at file scope. 
              * This is complicated by tentative definitions. */
             if (fn) chk_dup_sym( name, 1 );
@@ -482,17 +520,21 @@ declaration( fn, strct ) {
 
         /* Struct members need storing in the symbol table for the struct */ 
         else {
-            if (decl[2][0] == '()')
+            if ( decl[2][0] == '()' )
                 error("Function declarations not permitted as struct members");
 
             decl_mem( &strct[3][3], decl );
         }
 
-        /* Handle function definitions */
-        if ( is_dclspec( peek_token() ) || peek_token() == '{' ) {
+        /* Handle function definitions: is_dclpsec() matches a K&R parameter
+         * declaration, and '{' is the start of a function body. */
+        if ( is_dclspec() || peek_token() == '{' ) {
             if (fn) 
                 error("Nested functions are not allowed: missing semicolon?");
-            else if ( decl[2] && decl[2][0] == '()' ) {
+            else if ( decl[2][0] == '()' ) {
+                if ( decl[3] && decl[3][0] == 'type' )
+                    error("Function definition not allowed here");
+
                 /* The standard doesn't allow things like:  int i, f() { }  
                  * From a grammar point of view, this is an arbitrary 
                  * restriction, but sensible from a sanity p.o.v. */
@@ -505,6 +547,13 @@ declaration( fn, strct ) {
             else
                 error("Non-function declaration with function body");
         }
+        else if ( decl[2][0] == '()' && decl[3] && decl[3][0] == 'stat' )
+            /* "The declaration of an identifier for a function that has block
+             * scope shall have no explicit storage-class specifier other than
+             * extern."  [C99 6.7.1/5]  Static is clearly allowed on 
+             * a function definition, though. */
+            error("Invalid storage specifier on function declaration");
+        
 
         /* Handle initialisers */
         if ( peek_token() == '=' ) {
@@ -562,7 +611,7 @@ label_stmt( fn, loop, swtch ) {
 /*  stmt-or-decl ::= stmt | ( 'auto' | 'extern' ) decl-list */
 static
 stmt_or_dcl( fn, loop, swtch ) {
-    if ( is_dclspec( peek_token() ) ) 
+    if ( is_dclspec() ) 
         return declaration( fn, 0 );
     else
         return stmt( fn, loop, swtch );

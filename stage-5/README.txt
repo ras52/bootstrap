@@ -17,6 +17,8 @@ New features in stage 5 cc:
   - member access with the -> and . operators
   - sizeof operator
   - type casts
+  - C++-style comments
+  - typedefs
 
 
   Usage: cc -S [--compat] [-o filename.s] filename.c
@@ -27,7 +29,6 @@ New features in stage 5 cc:
 TODO:
   - Errors on duplicate declarations at global scope
   - Tentative definitions
-  - Typedefs
   - Prototypes
   - Unions, bit fields (probably not in this stage?), floats
   - #if, #elif

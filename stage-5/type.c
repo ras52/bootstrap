@@ -6,7 +6,7 @@
 
 static
 req_lvalue(node) {
-    auto type = node[0], dummy;
+    auto type = node[0];
 
     if ( type == 'num' || type == 'chr' || type == 'str' )
         error("Literal used as an lvalue");
@@ -14,7 +14,7 @@ req_lvalue(node) {
     /* This will need reworking as the C standard considers arrays to 
      * be lvalues -- i.e. our concept of an lvalue is at odd's with std C's */
     else if ( type == 'id' ) {
-        if ( !lookup_sym( &node[3], &dummy ) )
+        if ( !lookup_sym( &node[3], 0 ) )
             error("Non-lvalue identifier '%s' where lvalue is required",
                   &node[3]);
     }
@@ -90,8 +90,8 @@ type_size(type) {
             return 4;
     }
 
-    else if ( t == 'id' )
-        return type_size( lookup_type( &type[3] ) );
+    /*else if ( t == 'id' )
+        return type_size( lookup_type( &type[3] ) );*/
 
     else if ( t == 'stru' )
         return struct_size( &type[3][3] );
@@ -126,6 +126,56 @@ is_arith(type) {
     return type[0] == 'dclt';
 }
 
+static
+elt_cmp(elt1, elt2) {
+    return !elt1 && !elt2 || elt1 && elt2 && elt1[0] == elt2[0];
+}
+
+/* Test whether types are compatible */
+static
+are_compat(type1, type2) {
+    /* "Two types have compatible type if their types are the same. 
+     * Additional rules for determining whether two types are compatible
+     * are described in 6.5.2 for type specifiers, in 6.5.3 for type 
+     * qualifiers, and in 6.5.4 for declarators."  [C90 6.1.2.6; 
+     * same wording in C99 6.2.7, except clause numbers.] 
+     *
+     * At the moment we ignore the additional rules. */
+
+    if ( type1[0] == 'dclt' && type2[0] == 'dclt' )
+        return elt_cmp( type1[3], type2[3] )
+            && elt_cmp( type1[4], type2[4] )
+            && elt_cmp( type1[5], type2[5] );
+
+    else if ( type1[0] == 'stru' && type2[0] == 'stru' )
+        /* TODO: Check rules on compatible structs.  We require them
+         * to have the same tag name here. */
+        return strcmp( node_str( type1[3] ), node_str( type2[3] ) ) == 0;
+
+    else if ( type1[0] == '*' && type2[0] == '*' )
+        /* "For two pointer types to be compatible, both shall be identically
+         * qualified and both shall be pointers to compatible types." 
+         * [C90 6.5.4.1]  Note we don't support type qualifiers yet. */
+        return are_compat( type1[3], type2[3] );
+
+    else if ( type1[0] == '[]' && type2[0] == '[]' )
+        /* "For two array types to be compatible, both shall have compatible
+         * element types, and if both size specifiers are present, they shall
+         * have the same value."  [C90 6.5.4.2] */
+        return are_compat( type1[3], type2[3] )
+            && ( !type1[4] || !type2[4] 
+                 || type1[4] == 'num' && type2[4] == 'num' 
+                 && type1[4][3] == type1[4][3] );
+
+    else if ( type1[0] == '()' && type2[0] == '()' )
+        /* "For for function types to be compatible, both shall specify
+         * compatible return types." [C90 6.5.4.3]   Further constraints
+         * apply to parameters which are not implemented yet. */
+        return are_compat( type1[3], type2[3] );
+
+    else return 0;
+}
+
 chk_assign(node) {
     extern compat_flag;
     req_lvalue( node[3] );
@@ -135,12 +185,9 @@ chk_assign(node) {
         if ( is_arith(type1) && is_arith(type2) )
             ;
         else if ( is_pointer(type1) && is_pointer(type2) ) {
-            if ( type1[3][0] == 'stru' && type2[3][0] == 'stru' &&
-                 strcmp( node_str( type1[3][3] ), 
-                         node_str( type2[3][3] ) ) == 0 )
+            if ( compat_flag && type1[3][0] != 'stru' && type2[3][0] != 'stru' )
                 ;
-            else if ( !compat_flag && 
-                      type_size( type1[3] ) != type_size( type2[3] ) )
+            else if ( !are_compat(type1[3], type2[3]) )
                 error("Cannot assign from an incompatible pointer");
         }
         else if ( compat_flag && type1 == s_int )

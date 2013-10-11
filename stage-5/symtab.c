@@ -8,7 +8,8 @@
 static symtab[3] = { 0, 0, 0 };  /* start, end, end_store */
 /*  struct sym_entry {
  *      char* sym;              [0]
- *      int   unused, unused2;  [1,2]
+ *      int   unused;           [1]
+ *      int   is_typedef;       [2]
  *      int   frame_off;        [3]     -- 0 is used for undefined symbols
  *      int   scope_id;         [4]     -- (not used in structs, below)
  *      node* decl;             [5]
@@ -145,9 +146,10 @@ get_label( name ) {
 
 /* Define a symbol, possibly implicitly by calling a function */
 static
-save_sym( tab, decl, frame_off ) {
+save_sym( tab, decl, frame_off, is_typedef ) {
     auto name = &decl[4][3];
     auto e = grow_tab( tab, 24, name );   /* sizeof(sym_entry) */
+    e[2] = is_typedef;
     e[3] = frame_off;
     e[4] = scope_id;
     e[5] = add_ref(decl);
@@ -178,7 +180,7 @@ decl_mem( struct_name, decl ) {
 
     /* TODO:  We need to pack members a bit better than this.
      * { char a, b, c; }  has size 4, not 12. */
-    save_sym( &e[5], decl, e[1] );
+    save_sym( &e[5], decl, e[1], 0 );
     e[1] += promote_sz( type_size( decl[2] ) );
 }
 
@@ -215,14 +217,16 @@ promote_sz(size) {
 }
 
 /* Remove all the struct sym_entry from TAB beyond TABNEWEND, and set
- * that to the new table end.  Return the size of the removed variables. */
+ * that to the new table end.  Return the size of the removed automatic
+ * variables. */
 static
 rm_sym_ents( tab, tabnewend ) {
     auto e = tabnewend, sz = 0;
     while ( e < tab[1] ) {
         /* The only symbols in this scope with an offset in e[3] 
-         * will be automatic variables. */
-        if (e[3]) sz += promote_sz( type_size( e[5][2] ) );
+         * will be automatic variables or typedefs. */
+        if ( e[3] && !e[2] )
+            sz += promote_sz( type_size( e[5][2] ) );
         free( e[0]);
         free_node( e[5] );
         e += 24;    /* sizeof(sym_entry) */
@@ -270,22 +274,23 @@ end_scope() {
  * Also set *OFF_PTR to the symbol table offset of the symbol, or
  * 0 if it is not defined (as 0 is not a valid offset because 
  * 0(%ebp) is the calling frame's base pointer.) */
-struct sym_entry*
 lookup_sym( name, off_ptr ) {
     auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
     if (e) {
-        *off_ptr = e[3];
+        if (e[2]) int_error("Object declaration is a typedef");
+        if (off_ptr) *off_ptr = e[3];
         return is_lv_decl(e[5][2]);
     }
 
     /* Symbol not found -- default to rvalues e.g. functions */
-    *off_ptr = 0;
+    if (off_ptr) *off_ptr = 0;
     return 0;
 }
 
 /* Check whether a symbol NAME has been declared */
 is_declared( name ) {
     auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
+    if (e && e[2]) int_error("Object declaration is a typedef");
     return e ? 1 : 0;
 }
 
@@ -305,7 +310,13 @@ struct_size( name ) {
 /* Lookup the storage type for a name */
 lookup_strg( name ) {
     auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
+    if (e && e[2]) int_error("Object declaration is a typedef");
     return e ? e[5][3] : 0;
+}
+
+is_typedef( name ) {
+    auto e = lookup_tab( symtab, 24, name );    /* sizeof(sym_entry) */
+    return e && e[2];
 }
 
 /* Check whether another symbol called NAME exists in the current scope,
@@ -318,7 +329,7 @@ chk_dup_sym( name, has_linkage ) {
          * check for compatibility before allowing it.  Otherwise, we issue
          * an error. */
         if ( !(has_linkage && e[3] == 0) )
-            error("Multiple definitions of '%s' within the same block", name);
+            error("Multiple definitions of '%s' at the same scope", name);
     }
 }
 
@@ -341,14 +352,18 @@ decl_var(decl) {
     cur_offset += promote_sz(sz);
     if ( decl[4][0] != 'id' )
         int_error("Expected identifier in auto declarator");
-    save_sym( symtab, decl, -cur_offset );
+    save_sym( symtab, decl, -cur_offset, 0 );
     if (cur_offset > frame_size)
         frame_size = cur_offset;
     return sz;
 }
 
+decl_type(decl) {
+    save_sym( symtab, decl, 0, 1 );
+}
+
 extern_decl(decl) {
-    save_sym( symtab, decl, 0 );
+    save_sym( symtab, decl, 0, 0 );
 }
 
 start_fn(decl) {
@@ -362,7 +377,7 @@ start_fn(decl) {
         if (n[0] != 'decl')
             int_error("Unexpected token found as function param");
         sz = type_size(n[2]);
-        save_sym( symtab, n, off );
+        save_sym( symtab, n, off, 0 );
         off += promote_sz(sz);
     }
 }
