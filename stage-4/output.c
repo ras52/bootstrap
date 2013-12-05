@@ -117,7 +117,7 @@ freopen( filename, mode, stream ) {
 }
 
 /* A function to get a FILE* interface to a simple string. */
-_fopenstr( str ) {
+__fopenstr( str ) {
     auto stream = malloc(32); /* sizeof(struct FILE) */
     stream[0] = -1;  /* an invalid file descriptor */
     stream[1] = strlen(str);
@@ -156,9 +156,9 @@ fopen( filename, mode ) {
     return stream;
 }
 
-/* Implementation detail _fputsn() -- TODO declare this static */
+/* Implementation detail __fputsn() -- TODO declare this static */
 static
-_fputsn( ptr, len, stream ) {
+__fputsn( ptr, len, stream ) {
     auto written = 0;
 
     while ( len ) {
@@ -202,12 +202,12 @@ _fputsn( ptr, len, stream ) {
 
 /* The C library fwrite() */
 fwrite( buf, size, nmem, stream ) {
-  return _fputsn( buf, size * nmem, stream ) / size; 
+  return __fputsn( buf, size * nmem, stream ) / size; 
 }
 
 /* The C library fputs() */
 fputs( s, stream ) {
-    return _fputsn( s, strlen(s), stream );
+    return __fputsn( s, strlen(s), stream );
 }
 
 /* The B library putstr() -- unlike C's puts, it doesn't add a '\n' */
@@ -222,7 +222,7 @@ puts( s ) {
 
 /* The C library fputc() */
 fputc( c, stream ) {
-    return _fputsn( &c, 1, stream ) == 1 ? c : -1;
+    return __fputsn( &c, 1, stream ) == 1 ? c : -1;
 }
 
 /* The C library putc() */
@@ -257,7 +257,7 @@ vfprintf( stream, fmt, ap ) {
             if (c == 'c') {
                 ap += 4;
                 n = strnlen(ap, 4);
-                if ( _fputsn(ap, n, stream) != n )
+                if ( __fputsn(ap, n, stream) != n )
                     return -1; 
                 written += n;
             }

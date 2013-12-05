@@ -19,9 +19,9 @@ static __file0[8] = { 0,    128,    __buf0, __buf0, __buf0, 0,   0,    0    };
  * lvalue versions of them, and arrays are only rvalues. */
 stdin  = __file0;
 
-/* Implementation detail _fgetsn() */
+/* Implementation detail __fgetsn() */
 static
-_fgetsn( ptr, len, stream ) {
+__fgetsn( ptr, len, stream ) {
     auto nread = 0;
 
     while ( len ) {
@@ -62,13 +62,13 @@ _fgetsn( ptr, len, stream ) {
 
 /* The C library fread() */
 fread( buf, size, nmem, stream ) {
-    return _fgetsn( buf, size * nmem, stream ) / size; 
+    return __fgetsn( buf, size * nmem, stream ) / size; 
 }
 
 /* The C library fgetc() */
 fgetc( stream ) {
     auto c = 0;
-    if ( _fgetsn( &c, 1, stream ) == 1 ) return c;
+    if ( __fgetsn( &c, 1, stream ) == 1 ) return c;
     else return -1; /* EOF */
 }
 
