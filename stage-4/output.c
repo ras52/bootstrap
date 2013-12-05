@@ -116,15 +116,28 @@ freopen( filename, mode, stream ) {
     return stream;
 }
 
+/* A function to get a FILE* interface to a simple string. */
+_fopenstr( str ) {
+    auto stream = malloc(32); /* sizeof(struct FILE) */
+    stream[0] = -1;  /* an invalid file descriptor */
+    stream[1] = strlen(str);
+    stream[2] = stream[3] = str;
+    stream[4] = str + stream[1];
+    stream[5] = 0;   /* O_RDONLY */
+    stream[6] = 0;   /* _IOFBF */
+    stream[7] = 0;   /* do not free() the buffer on close */
+    return stream;
+}
+
 /* The C library fopen() */
 fopen( filename, mode ) {
     auto stream = malloc(32); /* sizeof(struct FILE) */
-    stream[0] = -1; /* an invalid file descriptor */
-    stream[1] = 128;
+    stream[0] = -1;  /* an invalid file descriptor */
+    stream[1] = 128; /* buffer size */
     stream[2] = stream[3] = stream[4] = malloc( stream[1] );
-    stream[5] = 0; /* O_RDONLY */
-    stream[6] = 0; /* _IOFBF */
-    stream[7] = 1;
+    stream[5] = 0;   /* O_RDONLY */
+    stream[6] = 0;   /* _IOFBF */
+    stream[7] = 1;   /* free() the buffer on close */
 
     if ( freopen( filename, mode, stream ) == 0 ) {
         /* It failed, so clean up. */
