@@ -31,8 +31,6 @@ rc_alloc(sz) {
 /* Unconditionally unallocate PTR which is memory allocated by rc_alloc. */
 static
 rc_free(ptr) {
-    /* Somewhat counter-intuitive, but the caller has already decremented
-     * the ref_count.  */
     --rc_count;
     free( ptr - sizeof(struct rc_node) );
 }

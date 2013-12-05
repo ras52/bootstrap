@@ -71,7 +71,7 @@ defn_direct(stream) {
     macd->ops[0] = get_word( stream, c );
     macd->ops[2] = new_node('mace', 0);
 
-    /* TODO:  Require whitespace before the exapansion list */
+    /* TODO:  Require whitespace before the expansion list */
 
     while (1) {
         /* We need to explicitly call skip_hwhite() here because next()
@@ -181,4 +181,29 @@ fini_macros() {
     struct node **i = macro_vec.start, **e = macro_vec.end;
     for (; i != e; ++i )
         free_node(*i);
+}
+
+/* Parse a -D command-line option */
+parse_d_opt(arg) 
+    char* arg;
+{
+    struct node *macd = new_node('macd', 3), *t;
+    int i = 0, c;
+
+    macd->ops[0] = new_node('id', 0);
+
+    /* Read up to the end of the argument or the first '=' to get the name */
+    while ( ( c = rchar(arg++, 0) ) && c != '=' )
+        node_lchar( &macd->ops[0], &i, c );
+    node_lchar( &macd->ops[0], &i, 0 );
+
+    /* POSIX says: If no = value is given, a value of 1 shall be used. */
+    if (!c) arg = "1";
+    scan_str(arg);
+
+    macd->ops[2] = new_node('mace', 0);
+    while ( t = next() )
+        macd->ops[2] = vnode_app( macd->ops[2], t );
+    
+    vec_grow(macd);
 }

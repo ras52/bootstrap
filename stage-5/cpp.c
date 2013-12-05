@@ -291,8 +291,13 @@ main(argc, argv)
             usage();
 
         else if ( strcmp( arg, "-I" ) == 0 ) {
-            if ( ++i == argc ) usage(); arg = argv[i];
+            if ( ++i == argc ) usage();
             push_inc( argv[i] );
+        }
+
+        else if ( strcmp( arg, "-D" ) == 0 ) {
+            if ( ++i == argc ) usage();
+            parse_d_opt( argv[i] );
         }
 
         else if ( arg[0] == '-' )

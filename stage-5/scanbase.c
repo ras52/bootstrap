@@ -621,6 +621,13 @@ do_open( in_filename, search_path )
     error("Unable to load file \"%s\"", in_filename);
 }
 
+scan_str(str) {
+    extern struct FILE* _fopenstr();
+    input_strm = _fopenstr(str);
+    filename = "<command-line>";
+    line = 0;
+}
+
 init_scan(in_filename) {
     auto char* null_search[2] = { ".", 0 };
     do_open( in_filename, null_search );

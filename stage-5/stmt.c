@@ -236,6 +236,11 @@ postfx_decl(decl, phead) {
         }
 
         else if (t == '(') {
+            /* A function declarator shall not specify a return type that is 
+             * a function type or an array type. */
+            if ( *phead && ( (*phead)[0] == '()' || (*phead)[0] == '[]' ) )
+                error( "Invalid return type on function" );
+
             skip_node('(');
             postfix = param_list();
             skip_node(')');
@@ -480,7 +485,6 @@ declaration( fn, strct ) {
          * so we can check it when taking the address of an identifier. */
         if ( decls[3] )
             decl[3] = add_ref( decls[3] );
-
 
         /* Automatic declarations need space reserving in the frame. 
          * A variable has automatic storage duration if (i) it is declared
