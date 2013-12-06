@@ -13,9 +13,10 @@ CMP   = /usr/bin/cmp
 
 all:	cc cpp
 
-INIT = as ld cc0 libc.o crt0.o
+INIT  = as ld libc.o crt0.o
+XINIT = cc0
 
-init:	$(INIT)
+init:	$(INIT) $(XINIT)
 
 # cc0 is the compiler symlinked from stage 4.
 # cc1 is this stage's compiler (written in the cc0 language) compiled with cc0.
@@ -23,9 +24,9 @@ init:	$(INIT)
 #       by itself (by cc1), and is therefore smaller.
 # cc2 is a test compiler produced by cc; it should be binary identical to cc.
 
-$(INIT):
+$(INIT) $(XINIT):
 	$(MAKE) -C ../stage-4
-	set -e; for x in as ld libc.o crt0.o; do $(LN_S) ../stage-4/$$x; done
+	set -e; for x in $(INIT); do $(LN_S) ../stage-4/$$x; done
 	$(LN_S) ../stage-4/cc cc0
 
 # Suppress the default rules
@@ -76,7 +77,7 @@ cpp:	ld libc.o crt0.o $(CPP_OBJS)
 .INTERMEDIATE:  $(CC0_OBJS:%.o=%0.o) $(CC1_OBJS:%.o=%1.o) cc1
 
 clean:
-	$(RM) -f $(INIT)
+	$(RM) -f $(INIT) $(XINIT)
 	$(RM) -f $(CC0_OBJS:%.o=%0.s) $(CC0_OBJS:%.o=%0.o) cc1
 	$(RM) -f $(CC1_OBJS:%.o=%1.s) $(CC1_OBJS:%.o=%1.o) cc
 	$(RM) -f $(CPP_OBJS:%.o=%.s) $(CPP_OBJS) cpp

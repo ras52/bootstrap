@@ -264,7 +264,9 @@ cli_error(fmt)
 
 static
 usage() {
-    cli_error("Usage: cpp [-I include-dir] [-o filename.i] filename.c\n");
+    cli_error(
+"Usage: cpp [-I include-dir] [-D name[=val]] [-o filename.i] filename.c\n"
+    );
 }
 
 main(argc, argv) 
