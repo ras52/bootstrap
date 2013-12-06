@@ -37,6 +37,11 @@ __fgetsn( ptr, len, stream ) {
             nread += chunk;
         }
 
+        /* If stream[0] is -1, it means the stream is not backed by a file:
+         * what's in the buffer is all there is. */
+        else if ( stream[0] == -1 )
+            return nread;
+
         /* Otherwise, if we require more than our buffer holds, read it
 	 * directly into the supplied memory region. */
         else if ( len >= stream[1] - 1 ) {
