@@ -241,3 +241,101 @@ getpid:
 	RET
 
 
+####	#  Function:	int execve(char* filename, char* argv[], char* envp[]);
+	#
+.globl execve
+execve:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	16(%ebp), %edx
+	MOVL	12(%ebp), %ecx
+	MOVL	8(%ebp), %ebx
+	MOVL	$11, %eax		# 11 == __NR_execve
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L9
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+.L9:
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+####	#  Function:	int fork();
+	#
+.globl fork
+fork:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	MOVL	$2, %eax		# 2 == __NR_fork
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L10
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+.L10:
+	POP	%ebp
+	RET
+
+
+####	#  Function:	int waitpid(int pid, int* status, int options);
+	#
+.globl waitpd
+waitpid:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	16(%ebp), %edx
+	MOVL	12(%ebp), %ecx
+	MOVL	8(%ebp), %ebx
+	MOVL	$7, %eax		# 7 == __NR_waitpid
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L11
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+.L11:
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+####	#  Function:	int unlink(char* filename);
+	#
+.globl unlink
+unlink:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
+
+	MOVL	8(%ebp), %ebx
+	MOVL	$10, %eax		# 10 == __NR_unlink
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L12
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+.L12:
+	POP	%ebx
+	POP	%ebp
+	RET
+
+
+
