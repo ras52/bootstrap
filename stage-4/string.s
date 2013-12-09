@@ -75,6 +75,43 @@ strcmp:
 	RET
 
 
+####	#  Function:	int strncmp(char const* a, char const* b, size_t n);
+strncmp:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%esi
+	PUSH	%edi
+
+	MOVL	16(%ebp), %ecx
+
+	#  Note the order is chosen so we set CF correctly.
+	MOVL	12(%ebp), %edi
+	MOVL	8(%ebp), %esi
+.L1a:
+	LODSB			# Loads (%esi) to %al
+	SCASB			# Compares (%edi) to %al
+	JNE	.L2a
+	CMPB	$0, %al
+	JE	.L1b
+	DECL	%ecx
+	JNZ	.L1a
+.L1b:
+	#  They're equal
+	XORL	%eax, %eax
+	JMP	.L3a
+.L2a:
+	#  SCAS internally does SUBL (%edi), %al, so if (%edi) > %al
+	#  (or b > a), the carry flag will be set.  SBB %eax, %eax 
+	#  is a useful trick for setting %eax to -1 if CF.
+	SBBL	%eax, %eax
+	ORB	$1, %al
+.L3a:
+	POP	%edi
+	POP	%esi
+	POP	%ebp
+	RET
+
+
 ####	#  Function:	int strchr(char const* a, int c);
 	#
 strchr:
