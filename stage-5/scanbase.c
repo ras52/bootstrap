@@ -630,6 +630,7 @@ scan_str(str) {
 
 init_scan(in_filename) {
     auto char* null_search[2] = { ".", 0 };
+    filename = "<command-line>";
     do_open( in_filename, null_search );
     next();
 }

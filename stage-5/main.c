@@ -16,17 +16,8 @@ compile(output) {
     }
 }
 
-static
-cli_error(fmt) 
-    char *fmt;
-{
-    extern stderr;
-    vfprintf(stderr, fmt, &fmt);
-    exit(1);
-}
-
 usage() {
-    cli_error("Usage: cc -S [--compat] [-o filename.s] filename.c\n");
+    cli_error("Usage: ccx [--compat] [-o filename.s] filename.c\n");
 }
 
 main(argc, argv) 
@@ -37,14 +28,11 @@ main(argc, argv)
     extern struct FILE* fopen();
 
     auto char *filename = 0, *outname = 0;
-    auto int l, i = 0, has_s = 0, freeout = 0;
+    auto int l, i = 0, freeout = 0;
     auto struct FILE* file;
 
     while ( ++i < argc ) {
-        if ( strcmp( argv[i], "-S" ) == 0 ) 
-            ++has_s;
-
-        else if ( strcmp( argv[i], "-o" ) == 0 ) {
+        if ( strcmp( argv[i], "-o" ) == 0 ) {
             if ( ++i == argc ) usage();
             if ( outname ) cli_error(
                 "cc: multiple output files specified: '%s' and '%s'\n",
@@ -68,9 +56,6 @@ main(argc, argv)
             filename = argv[i];
         }
     }
-
-    if ( !has_s )
-        cli_error("cc: the -S option is mandatory\n");
 
     if ( !filename )
         cli_error("cc: no input file specified\n");

@@ -6,7 +6,7 @@ implementation, with the result that it is both more efficient and
 supports a wider range of language constructs, most notably, a type 
 system.
 
-New features in stage 5 cc:
+New features in stage 5 compiler:
   - for loops
   - comma operator
   - goto and labelled statements
@@ -20,11 +20,11 @@ New features in stage 5 cc:
   - C++-style comments
   - typedefs
 
+The compiler proper is named ccx, and this is supplemented with a 
+preprocessor (cpp) and compiler driver (cc).
 
-  Usage: cc -S [--compat] [-o filename.s] filename.c
-
-  Usage: cpp [-I include-dir] [-o filename.i] filename.c
-
+  Usage: cpp [-I include-dir] [-D name[=val]] [-o filename.i] filename.c
+  Usage: ccx [--compat] [-o filename.s] filename.i
 
 TODO:
   - Errors on duplicate declarations at global scope

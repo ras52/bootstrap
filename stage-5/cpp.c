@@ -254,15 +254,6 @@ preprocess(output) {
 }
 
 static
-cli_error(fmt) 
-    char *fmt;
-{
-    extern stderr;
-    vfprintf(stderr, fmt, &fmt);
-    exit(1);
-}
-
-static
 usage() {
     cli_error(
 "Usage: cpp [-I include-dir] [-D name[=val]] [-o filename.i] filename.c\n"
@@ -282,9 +273,10 @@ main(argc, argv)
         char *arg = argv[i];
 
         if ( strcmp( arg, "-o" ) == 0 ) {
-            if ( ++i == argc ) usage(); arg = argv[i];
+            if ( ++i == argc ) cli_error("The -o option takes an argument");
+            arg = argv[i];
             if ( outname ) cli_error(
-                "cpp: multiple output files specified: '%s' and '%s'\n",
+                "Multiple output files specified: '%s' and '%s'\n",
                 outname, arg);
             outname = arg;
         }
@@ -293,12 +285,12 @@ main(argc, argv)
             usage();
 
         else if ( strcmp( arg, "-I" ) == 0 ) {
-            if ( ++i == argc ) usage();
+            if ( ++i == argc ) cli_error("The -I option takes an argument");
             push_inc( argv[i] );
         }
 
         else if ( strcmp( arg, "-D" ) == 0 ) {
-            if ( ++i == argc ) usage();
+            if ( ++i == argc ) cli_error("The -D option takes an argument");
             parse_d_opt( argv[i] );
         }
 
