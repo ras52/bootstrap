@@ -22,7 +22,7 @@ char* opt_arg(argv, argc, argnptr, argname)
     if ( strncmp( arg, argname, arglen ) == 0 ) {
         if ( rchar( arg, arglen ) == 0 ) {
             if ( ++*argnptr == argc )
-                cli_error("The %s option takes an argument", argname);
+                cli_error("The %s option takes an argument\n", argname);
             arg = argv[*argnptr];
             ++*argnptr;
             return arg;
