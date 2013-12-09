@@ -25,9 +25,9 @@ parse_args(argc, argv)
     int argc;
     char **argv;
 {
-    int i = 0;
+    int i = 1;
 
-    while ( ++i < argc ) {
+    while ( i < argc ) {
         char *arg = argv[i], *arg2;
 
         if ( arg2 = opt_arg( argv, argc, &i, "-I" ) ) {
@@ -42,20 +42,20 @@ parse_args(argc, argv)
 
         else if ( strcmp( arg, "-E" ) == 0 ) {
             if ( last_stage != 4 )
-                cli_error("At most one of -E, -S and -c may be used");
-            last_stage = 1;
+                cli_error("At most one of -E, -S and -c may be used\n");
+            last_stage = 1; ++i;
         }
 
         else if ( strcmp( arg, "-S" ) == 0 ) {
             if ( last_stage != 4 )
-                cli_error("At most one of -E, -S and -c may be used");
-            last_stage = 2;
+                cli_error("At most one of -E, -S and -c may be used\n");
+            last_stage = 2; ++i;
         }
 
         else if ( strcmp( arg, "-c" ) == 0 ) {
             if ( last_stage != 4 )
-                cli_error("At most one of -E, -S and -c may be used");
-            last_stage = 3;
+                cli_error("At most one of -E, -S and -c may be used\n");
+            last_stage = 3; ++i;
         }
 
         else if ( arg2 = opt_arg( argv, argc, &i, "-o" ) ) {
@@ -65,14 +65,31 @@ parse_args(argc, argv)
             o_name = arg2;
         }
 
-        else if ( strcmp( arg, "--compat" ) == 0 )
-            pvec_push( cc_args, arg );
+        else if ( strcmp( arg, "--compat" ) == 0 ) {
+            pvec_push( cc_args, arg ); ++i;
+        }
 
-        else if ( strcmp( arg, "--nostdlib" ) == 0 )
-            nostdlib = 1;
+        else if ( strcmp( arg, "--nostdlib" ) == 0 ) {
+            nostdlib = 1; ++i;
+        }
 
         else if ( strcmp( arg, "--help" ) == 0 )
             usage();
+
+        /* These options override the default backend programs */
+        else if ( arg2 = opt_arg( argv, argc, &i, "--with-cpp" ) )
+            pp_args->start[0] = arg2;
+        else if ( arg2 = opt_arg( argv, argc, &i, "--with-ccx" ) )
+            cc_args->start[0] = arg2;
+        else if ( arg2 = opt_arg( argv, argc, &i, "--with-as" ) )
+            as_args->start[0] = arg2;
+        else if ( arg2 = opt_arg( argv, argc, &i, "--with-ld" ) )
+            ld_args->start[0] = arg2;
+
+        else if ( arg[0] == '-' )
+            cli_error("Unknown option: %s\n", arg);
+
+        else ++i;
    }
 }
 

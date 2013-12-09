@@ -92,23 +92,22 @@ clean:
 	$(RM) -f cc2
 
 check:	check-ccx check-cpp check-cc
+	$(RM) -f cc2 ccx2
 
 ccx2:	cc $(CCX1_OBJS:%.o=%2.o)
 	cc -o ccx2 $(CCX1_OBJS:%.o=%2.o)
 
-cc2:	cc $(CC_OBJS:%.o=%.c)
-	cc -o cc2 $(CC_OBJS:%.o=%.c)
+cc2:	cc ccx2 $(CC_OBJS:%.o=%.c)
+	cc -o cc2 --with-ccx=ccx2 $(CC_OBJS:%.o=%.c)
 
 check-ccx:	ccx2 ccx
 	$(CMP) ccx2 ccx
-	$(RM) -f $(CCX1_OBJS:%.o=%2.s) $(CCX1_OBJS:%.o=%2.o) ccx2
 
 # TODO: put some tests here
 check-cpp:	cpp
 
 check-cc:	cc2 cc
 	$(CMP) cc2 cc
-	$(RM) -f cc2
 
 world:
 	$(MAKE) clean
