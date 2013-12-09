@@ -14,9 +14,12 @@ static int last_stage = 4;  /* -E = 1, -S = -2, -c = -3 */
 static char* o_name = 0;    /* The -o option, if any is given. */
 static int nostdlib = 0;    /* --nostdlib */
 
+static
 usage() {
     cli_error("Usage: cc {-E | -S | -c} [-o output] [options] files...\n");
 }
+
+extern char* opt_arg();
 
 parse_args(argc, argv)
     int argc;
@@ -25,18 +28,16 @@ parse_args(argc, argv)
     int i = 0;
 
     while ( ++i < argc ) {
-        char *arg = argv[i];
+        char *arg = argv[i], *arg2;
 
-        if ( strcmp( arg, "-I" ) == 0 ) {
-            pvec_push( pp_args, arg );
-            if ( ++i == argc ) cli_error("The -I option takes an argument");
-            pvec_push( pp_args, argv[i] );
+        if ( arg2 = opt_arg( argv, argc, &i, "-I" ) ) {
+            pvec_push( pp_args, "-I" );
+            pvec_push( pp_args, arg2 );
         }
 
-        else if ( strcmp( arg, "-D" ) == 0 ) {
-            pvec_push( pp_args, arg );
-            if ( ++i == argc ) cli_error("The -D option takes an argument");
-            pvec_push( pp_args, argv[i] );
+        else if ( arg2 = opt_arg( argv, argc, &i, "-D" ) ) {
+            pvec_push( pp_args, "-D" );
+            pvec_push( pp_args, arg2 );
         }
 
         else if ( strcmp( arg, "-E" ) == 0 ) {
@@ -57,12 +58,11 @@ parse_args(argc, argv)
             last_stage = 3;
         }
 
-        else if ( strcmp( arg, "-o" ) == 0 ) {
-            if ( ++i == argc ) cli_error("The -o option takes an argument");
+        else if ( arg2 = opt_arg( argv, argc, &i, "-o" ) ) {
             if ( o_name ) cli_error(
                 "Multiple output files specified: '%s' and '%s'\n",
-                o_name, argv[i] );
-            o_name = argv[i];
+                o_name, arg2 );
+            o_name = arg2;
         }
 
         else if ( strcmp( arg, "--compat" ) == 0 )
