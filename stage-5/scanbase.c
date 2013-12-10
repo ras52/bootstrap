@@ -628,10 +628,11 @@ scan_str(str) {
     line = 0;
 }
 
-init_scan(in_filename) {
+init_scan(in_filename, search_path) {
+    extern char* strdup();
     auto char* null_search[2] = { ".", 0 };
-    filename = "<command-line>";
-    do_open( in_filename, null_search );
+    filename = strdup("<command-line>");
+    do_open( in_filename, search_path ? search_path : null_search );
     next();
 }
 

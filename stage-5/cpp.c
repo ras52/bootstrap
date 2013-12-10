@@ -4,6 +4,18 @@
  * All rights reserved.
  */
 
+struct pvector {
+    char **start, **end, **end_store;
+};
+/* Search path for include files */
+static struct pvector* incl_path;
+
+/* Vector of scanner objects */
+static struct pvector* incl_vec;
+
+/* Vector of files to include in series */
+static struct pvector* incl_files;
+
 /* If only we had a preprocessor to avoid these duplications ... :-) */
 struct node {
     int code;           /* character code for the node, e.g. '+' or 'if'. */
@@ -264,35 +276,41 @@ main(argc, argv)
     int argc;
     char **argv;
 {
-    char *filename = 0, *outname = 0;
-    int i = 0;
+    extern struct pvector* pvec_new();
+    extern char* opt_arg();
+    extern struct FILE *stdout, *fopen();
+    struct FILE *f = stdout;
+    char *filename = 0, *outname = 0, **t;
+    int i = 1;
 
-    init_path();
+    incl_path = pvec_new();
+    incl_vec = pvec_new();
+    incl_files = pvec_new();
 
-    while ( ++i < argc ) {
-        char *arg = argv[i];
+    /* The default include path for "" files only. */
+    pvec_push( incl_path, "." );
 
-        if ( strcmp( arg, "-o" ) == 0 ) {
-            if ( ++i == argc ) cli_error("The -o option takes an argument");
-            arg = argv[i];
+    while ( i < argc ) {
+        char *arg = argv[i], *arg2;
+
+        if ( arg2 = opt_arg( argv, argc, &i, "-o" ) ) {
             if ( outname ) cli_error(
                 "Multiple output files specified: '%s' and '%s'\n",
-                outname, arg);
-            outname = arg;
+                outname, arg2 );
+            outname = arg2;
         }
 
         else if ( strcmp( arg, "--help" ) == 0 ) 
             usage();
 
-        else if ( strcmp( arg, "-I" ) == 0 ) {
-            if ( ++i == argc ) cli_error("The -I option takes an argument");
-            push_inc( argv[i] );
-        }
+        else if ( arg2 = opt_arg( argv, argc, &i, "-I" ) )
+            pvec_push( incl_path, arg2 );
 
-        else if ( strcmp( arg, "-D" ) == 0 ) {
-            if ( ++i == argc ) cli_error("The -D option takes an argument");
-            parse_d_opt( argv[i] );
-        }
+        else if ( arg2 = opt_arg( argv, argc, &i, "-D" ) )
+            parse_d_opt( arg2 );
+
+        else if ( arg2 = opt_arg( argv, argc, &i, "-include" ) )
+            pvec_push( incl_files );
 
         else if ( arg[0] == '-' )
             cli_error("cpp: unknown option: %s\n", arg);
@@ -302,25 +320,28 @@ main(argc, argv)
                 "cpp: multiple input files specified: '%s' and '%s'\n",
                 filename, arg );
             filename = arg;
+            ++i;
         }
     }
 
     if ( !filename )
         cli_error("cpp: no input file specified\n");
-    init_scan( filename );
+    else /* Add the input filename last so that -include options are first */
+        pvec_push( incl_files, filename );
 
     if (outname) {
-        struct FILE* f = fopen( outname, "w" );
+        f = fopen( outname, "w" );
         if (!f) cli_error( "cpp: unable to open file '%s'\n", outname );
-        preprocess(f);
-        fclose(f);
-    }
-    else {
-        extern stdout;
-        preprocess( stdout );
     }
 
-    close_scan();
+    for ( t = incl_files->start; t != incl_files->end; ++t ) {
+        init_scan(*t, 0);
+        preprocess(f);
+        close_scan();
+    }
+
+    if (outname)
+        fclose(f);
 
     fini_macros();
     rc_done();
@@ -334,33 +355,7 @@ struct scanner {
     struct if_group* if_at_entry;
 };
 
-static int incl_stksz = 0;
-static struct scanner* incl_stack[256];
 
-/* Search path for include files */
-static char** inc_path;
-static inc_len, inc_cap;
-
-static
-init_path() {
-    inc_cap = 2;
-    inc_path = (char**) malloc( inc_cap * sizeof(char*) );
-    inc_path[0] = ".";
-    inc_path[1] = 0;
-    inc_len = 2;
-}
-
-static
-push_inc(inc)
-    char* inc;
-{
-    if ( inc_len == inc_cap ) {
-        inc_cap *= 2;
-        inc_path = (char**) realloc( inc_path, inc_cap * sizeof(char*) );
-    }
-    inc_path[ inc_len-1 ] = inc;
-    inc_path[ inc_len++ ] = 0;
-}
 
 /* Handle a #include directive. */
 static
@@ -372,22 +367,15 @@ incl_direct(stream) {
         struct node* tok = get_qlit(stream, c, c == '<' ? '>' : c, 0);
         char* file = extract_str(tok);
     
-        /* The C standard allows this to be as low as 15 [C99 5.2.4.1].
-         * It would be easy to allow an arbitrary include depth, but it's
-         * probably wise to prevent infinite #include recursion, and this 
-         * is a simple way of doing it.  */
-        if ( incl_stksz == 255 )
-            error( "Exceeded #include stack size" );
-
         struct scanner* scanner = malloc( sizeof(struct scanner) );
-        incl_stack[ incl_stksz++ ] = scanner;
+        pvec_push( incl_vec, scanner );
 
         store_scan( &scanner->filename, &scanner->line, &scanner->stream );
         scanner->if_at_entry = if_stack;
 
-        /* We ignore the first element of inc_path if it's a <header>.
+        /* We ignore the first element of incl_path if it's a <header>.
          * That's because it is ".". */
-        open_scan(file, inc_path + (c == '<') );
+        open_scan(file, incl_path->start + (c == '<') );
 
         free(file);
         free_node(tok);
@@ -400,10 +388,10 @@ incl_direct(stream) {
  * handled -- by which we mean we've been able to pop the include stack --
  * or 0 if it really is EOF. */
 handle_eof() {
-    if ( incl_stksz ) {
+    if ( incl_vec->end != incl_vec->start ) {
         close_scan();
 
-        struct scanner* scanner = incl_stack[ --incl_stksz ];
+        struct scanner* scanner = (struct scanner*) pvec_pop( incl_vec );
         restorescan( scanner->filename, scanner->line, scanner->stream );
         if ( scanner->if_at_entry != if_stack )
             error("End of file while looking for #endif");

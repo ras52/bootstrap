@@ -69,7 +69,8 @@ ccx1:	ld libc.o crt0.o $(CCX0_OBJS:%.o=%0.o)
 ccx:	ld libc.o crt0.o $(CCX1_OBJS:%.o=%1.o)
 	ld -o $@ crt0.o $(CCX1_OBJS:%.o=%1.o) libc.o
 
-CPP_OBJS = scanbase.o cpp.o nodenew.o macros.o cli.o
+# These files need to compile without preprocessing
+CPP_OBJS = scanbase.o cpp.o nodenew.o macros.o pvector.o cli.o
 
 cpp:	ld libc.o crt0.o $(CPP_OBJS)
 	ld -o $@ crt0.o $(CPP_OBJS) libc.o
@@ -91,7 +92,9 @@ clean:
 	$(RM) -f $(CC_OBJS:%.o=%.i) $(CC_OBJS:%.o=%2.s) $(CC_OBJS:%.o=%2.s) cc
 	$(RM) -f cc2
 
-check:	check-ccx check-cpp check-cc
+check:	ccx2 cc2
+	$(CMP) ccx2 ccx
+	$(CMP) cc2 cc
 	$(RM) -f cc2 ccx2
 
 ccx2:	cc $(CCX1_OBJS:%.o=%2.o)
@@ -99,15 +102,6 @@ ccx2:	cc $(CCX1_OBJS:%.o=%2.o)
 
 cc2:	cc ccx2 $(CC_OBJS:%.o=%.c)
 	cc -o cc2 --with-ccx=ccx2 $(CC_OBJS:%.o=%.c)
-
-check-ccx:	ccx2 ccx
-	$(CMP) ccx2 ccx
-
-# TODO: put some tests here
-check-cpp:	cpp
-
-check-cc:	cc2 cc
-	$(CMP) cc2 cc
 
 world:
 	$(MAKE) clean

@@ -28,7 +28,7 @@ char* opt_arg(argv, argc, argnptr, argname)
             return arg;
         }
         /* Short arguments (e.g. -X) do not have an '=' before their values. */
-        else if ( rchar( argname, 1 ) != '-' ) {
+        else if ( arglen == 2 ) {
             arg += arglen;
             ++*argnptr;
             return arg;

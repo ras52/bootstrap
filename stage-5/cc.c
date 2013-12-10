@@ -98,7 +98,6 @@ invoke(args)
     struct pvector* args;
 {
     int pid, status;
-    pvec_push( args, 0 );
     if ( ( pid = fork() ) == 0 )
         execve( args->start[0], args->start, 0 );
     else if ( pid == -1 ) {
@@ -106,7 +105,6 @@ invoke(args)
         fprintf(stderr, "cc: Unable to invoke %s", args->start[0]);
         exit(1);
     }
-    pvec_pop( args );
 
     waitpid( pid, &status, 0 );
     
@@ -279,6 +277,12 @@ main(argc, argv)
     cc_args = pvec_new(); pvec_push( cc_args, "ccx" ); 
     as_args = pvec_new(); pvec_push( as_args, "as" ); 
     ld_args = pvec_new(); pvec_push( ld_args, "ld" ); 
+
+    /* The purpose of rbc_init.h is so that neither this compiler driver, 
+     * nor the preprocessor, need to be updated when the compiler is updated 
+     * to include new functionality. */
+    pvec_push( pp_args, "-Iinclude" );
+    pvec_push( pp_args, "-include=include/rbc_init.h" );
 
     parse_args( argc, argv );
     res = preprocess(argc, argv);

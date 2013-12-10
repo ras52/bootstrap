@@ -62,7 +62,7 @@ main(argc, argv)
 
     init_stypes();
     init_symtab();
-    init_scan(filename); 
+    init_scan(filename, 0); 
 
     if (!outname) {
         /* We allow .c or .i filenames: .i is used for preprocessed source. */
