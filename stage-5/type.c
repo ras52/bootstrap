@@ -61,6 +61,7 @@ implct_int() {
 }
 
 size_t_type() {
+    /* The size_t type is also defined in <bits/size_t.h>. */
     return s_uint;
 }
 

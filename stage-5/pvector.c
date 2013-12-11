@@ -42,6 +42,7 @@ pvec_push(v, elt)
     *v->end++ = elt;
 
     if (v->end == v->end_store) {
+        /* We need to reallocate now to push the null terminator */
         int cap = v->end - v->start;
         v->start = (char**) realloc( v->start, sizeof(char*) * 2*cap );
         v->end = v->start + cap;

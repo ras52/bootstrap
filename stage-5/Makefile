@@ -50,7 +50,7 @@ $(INIT) $(XINIT):
 	ccx --compat -o $@ $<
 
 %.i:	%.c cpp
-	cpp -o $@ $<
+	cpp -Iinclude -o $@ $<
 
 %.s:	%.c ccx
 	ccx -o $@ $<

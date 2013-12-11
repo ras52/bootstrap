@@ -287,7 +287,7 @@ main(argc, argv)
     incl_vec = pvec_new();
     incl_files = pvec_new();
 
-    /* The default include path for "" files only. */
+    /* The default include path for #include "foo.h" files only. */
     pvec_push( incl_path, "." );
 
     while ( i < argc ) {
@@ -310,7 +310,7 @@ main(argc, argv)
             parse_d_opt( arg2 );
 
         else if ( arg2 = opt_arg( argv, argc, &i, "-include" ) )
-            pvec_push( incl_files );
+            pvec_push( incl_files, arg2 );
 
         else if ( arg[0] == '-' )
             cli_error("cpp: unknown option: %s\n", arg);
