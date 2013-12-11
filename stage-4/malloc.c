@@ -110,12 +110,3 @@ realloc( ptr, size ) {
         return p;
     }
 }
-
-/* The C library strdup() */
-strdup( str ) {
-    auto l = strlen(str);
-    auto str2 = malloc(l + 1);
-    strcpy( str2, str );
-    lchar( str2, l, 0 );
-    return str2;
-}
