@@ -1,6 +1,6 @@
 /* node.c  --  low-level code for manipulating AST nodes
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -130,8 +130,32 @@ node_code(node) {
     return node[0];
 }
 
+node_arity(node) {
+    return node[1];
+}
+
+node_type(node) {
+    return node[2];
+}
+
+node_op(node, n) {
+    return node[3+n];
+}
+
+set_code(node, code) {
+    node[0] = code;
+}
+
 set_arity(node, arity) {
     node[1] = arity;
+}
+
+set_type(node, type) {
+    node[2] = type;
+}
+
+set_op(node, n, op) {
+    node[3+n] = op;
 }
 
 /* Append character CHR to the payload of the node *NODE_PTR which is treated 
@@ -152,6 +176,10 @@ node_lchar( node_ptr, len_ptr, chr )
  * This is a struct pb_slot { struct node* token; struct pb_slot* next } *; */
 static pb_stack = 0;
 
+pb_empty() {
+    return !pb_stack;
+}
+
 pb_pop() {
     auto ret = 0;
     if ( pb_stack ) {
@@ -169,3 +197,19 @@ pb_push(token) {
     pb_stack = p;
     pb_stack[0] = token;
 }
+
+/* Allocate a string node and set its payload to STR */
+struct node*
+new_strnode(code, str)
+    char* str;
+{
+    auto sz = strlen(str) + 1;
+    auto node = rc_alloc( 12 + sz );
+    set_code( node, code );
+    set_arity( node, 0 );
+    set_type( node, 0 );
+    strcpy( node_str(node), str, sz );
+    return node;
+}
+
+

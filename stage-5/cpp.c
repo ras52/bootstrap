@@ -1,6 +1,6 @@
 /* cpp.c  --  the C preprocessor
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -44,7 +44,7 @@ do_get_qlit(stream, c1, c2) {
 /* Pass through #pragma directive to the compiler proper */
 prgm_direct(stream) {
     struct node* node = new_node('prgm', 0);
-    pp_slurp(stream, &node);
+    pp_slurp(stream, &node, 0);
     return node;
 }
 
@@ -110,6 +110,7 @@ skip_if(stream) {
 
 struct node* get_word();
 
+static
 ifdf_direct(stream, directive, positive) {
     struct node* name;
 
@@ -130,6 +131,7 @@ ifdf_direct(stream, directive, positive) {
     free_node(name);
 }
 
+static
 endi_direct(stream) {
     end_ppdir( stream, "endif" );
 
@@ -138,6 +140,7 @@ endi_direct(stream) {
     if_pop();
 }
 
+static
 else_direct(stream) {
     end_ppdir( stream, "endif" );
 
@@ -150,12 +153,95 @@ else_direct(stream) {
     skip_if(stream);
 }
 
+static
+if_expand(node)
+    struct node *node;
+{
+    /* This is a bit tricky as we cannot remove the current token from
+     * the stack: instead, we must overwrite the current token to avoid 
+     * an infinite loop. */
+    if ( node->code == 'id' ) {
+        char *str = node_str(node);
+        if ( can_expand(str) ) {
+            do_expand(str);
+            return 1;
+        }
+
+        /* All other identifiers are replaced with 0. */
+        else {
+            set_code( node, 'num' );
+            set_type( node, add_ref( implct_int() ) );
+            set_op( node, 0, 0 );
+        }
+    }
+
+    else if ( node->code == 'ppno' ) {
+        /* We would overwrite the token in-place, but the mk_number() code 
+         * allow that; so create a temporary and manually copy over. */
+        struct node *num = mk_number(node);
+        set_code( node, 'num' );
+        set_type( node, add_ref( node_type(num) ) );
+        set_op( node, 0, node_op(num, 0) );
+        free_node(num);
+        return 1;
+    }
+            
+    return 0;
+}
+
+static
+if_direct(stream) {
+    extern struct node *expr(), *eval();
+    extern struct node *get_node();
+    struct node *e = new_node('mace', 0), *val;
+    int n;
+
+    /* Locate the full preprocessor line, and use if_expand() to expand
+     * macros, and convert pp-numbers to numbers. */
+    pp_slurp(stream, &e, if_expand);
+    if ( !e->arity )
+        error( "Expected constant expression" );
+
+    /* Set a _Pragma("RBC end_expr") node, and push back the expression.  
+     * This will cause the expression parser die if it gets that far, rather 
+     * than continuing into the next line of input. */
+    pp_end_expr();
+
+    for ( n = e->arity; n; --n )
+        unget_token( add_ref( e->ops[n-1] ) );
+
+    free_node(e);
+
+    /* Now reparse it as an expression. */
+    e = expr(1);
+    val = eval(e);
+    free_node(e);
+
+    /* Require the above _Pragma("RBC end_expr"); */
+    e = get_node();
+    if ( e->code != 'prgm' )
+        error("Trailing content on #if directive");
+    else if ( e->arity != 2 || !node_streq( e->ops[0], "RBC" )
+              || !node_streq( e->ops[1], "end_expr" ) )
+        int_error("Expected _Pragma(\"RBC end_expr\")");
+    free_node(e);
+
+    end_ppdir( stream, "if" );
+
+    if_push(0);
+    if (!node_ival(val)) 
+        skip_if(stream);
+    free_node(val);
+}
+
 /* Hook for handling preprocessor directives other than #line and #pragma */
 pp_direct(stream, str) {
     if ( strcmp( str, "include" ) == 0 )
         incl_direct( stream );
     else if ( strcmp( str, "define" ) == 0 )
         defn_direct( stream );
+    else if ( strcmp( str, "if" ) == 0 )
+        if_direct( stream );
     else if ( strcmp( str, "ifdef" ) == 0 )
         ifdf_direct( stream, str, 1 );
     else if ( strcmp( str, "ifndef" ) == 0 )
@@ -329,6 +415,8 @@ main(argc, argv)
     else /* Add the input filename last so that -include options are first */
         pvec_push( incl_files, filename );
 
+    init_stypes();
+
     if (outname) {
         f = fopen( outname, "w" );
         if (!f) cli_error( "cpp: unable to open file '%s'\n", outname );
@@ -344,6 +432,7 @@ main(argc, argv)
         fclose(f);
 
     fini_macros();
+    fini_stypes();
     rc_done();
     return 0;
 }
@@ -404,6 +493,7 @@ handle_eof() {
 }
 
 /* Certain pragmas are handled entirely in the preprocessor. */
+static
 cpp_pragma(node) 
     struct node* node;
 {

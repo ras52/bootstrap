@@ -1,6 +1,6 @@
 /* stmt.c  --  code to parse statements
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -9,7 +9,7 @@ static
 expr_stmt() {
     auto n = 0;
     if ( peek_token() != ';' ) {
-        n = expr();
+        n = expr(0);
         if ( !n || !n[2] )
             int_error( "Expression has no type" );
     }
@@ -22,7 +22,7 @@ static
 if_stmt( fn, loop, swtch ) {
     auto node = take_node(3); 
     skip_node('(');
-    node[3] = expr();
+    node[3] = expr(0);
     skip_node(')');
 
     node[4] = stmt( fn, loop, swtch );
@@ -43,7 +43,7 @@ do_stmt( fn, swtch ) {
 
     skip_node('whil');
     skip_node('(');
-    node[4] = expr();
+    node[4] = expr(0);
     skip_node(')');
     skip_node(';');
 
@@ -55,7 +55,7 @@ static
 while_stmt( fn, swtch ) {
     auto node = take_node(2);
     skip_node('(');
-    node[3] = expr();
+    node[3] = expr(0);
     skip_node(')');
 
     node[4] = stmt( fn, node, swtch );
@@ -68,11 +68,11 @@ for_stmt( fn, swtch ) {
     auto node = take_node(4);
 
     skip_node('(');
-    if ( peek_token() != ';' ) node[3] = expr();
+    if ( peek_token() != ';' ) node[3] = expr(0);
     skip_node(';');
-    if ( peek_token() != ';' ) node[4] = expr();
+    if ( peek_token() != ';' ) node[4] = expr(0);
     skip_node(';');
-    if ( peek_token() != ')' ) node[5] = expr();
+    if ( peek_token() != ')' ) node[5] = expr(0);
     skip_node(')');
 
     node[6] = stmt( fn, node, swtch );
@@ -84,7 +84,7 @@ static
 switch_stmt( fn, loop ) {
     auto node = take_node(3);
     skip_node('(');
-    node[3] = expr();
+    node[3] = expr(0);
     skip_node(')');
 
     /* The 3rd "operand" is the switch table which is built up as case and
@@ -119,6 +119,7 @@ case_stmt( fn, loop, swtch ) {
                node[0] == 'case' ? "" : "default " );
 
     if (node[0] == 'case') {
+        /* TODO expr(1) */
         if (peek_token() != 'num')
             error("Expected number as case label");
         node[3] = take_node(0);
@@ -140,7 +141,7 @@ static
 return_stmt() {
     auto node = take_node(1); 
     if ( peek_token() != ';' )
-        node[3] = expr();
+        node[3] = expr(0);
     skip_node(';');
     return node;
 }
@@ -181,7 +182,7 @@ init_array( type, req_const ) {
     init = take_node(0);
     init[0] = '{}';
     while (1) {
-        auto elt = req_const ? const_expr() : assign_expr();
+        auto elt = assign_expr( req_const );
         if (!elts--) 
             error("Too many array initialisers");
         init = vnode_app( init, elt );
@@ -570,7 +571,7 @@ declaration( fn, strct ) {
             else if ( type && type[0] == '()' )
                 error("Function declarations cannot have initialiser lists");
             else
-                decl[5] = fn ? assign_expr() : const_expr();
+                decl[5] = assign_expr(!fn);
         }
 
         decls = vnode_app( decls, decl );

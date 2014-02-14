@@ -1,6 +1,6 @@
 /* macros.c  --  support for preprocessor macros
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -69,17 +69,10 @@ defn_direct(stream) {
         error("Expected identifier in #define directive");
 
     macd->ops[0] = get_word( stream, c );
-    macd->ops[2] = new_node('mace', 0);
 
     /* TODO:  Require whitespace before the expansion list */
-
-    while (1) {
-        /* We need to explicitly call skip_hwhite() here because next()
-         * will call skip_white(), and we musn't allow it to skip a '\n'. */
-        ungetc( c = skip_hwhite(stream), stream );
-        if ( c == '\n' ) break;
-        macd->ops[2] = vnode_app( macd->ops[2], next() );
-    }
+    macd->ops[2] = new_node('mace', 0);
+    pp_slurp(stream, &macd->ops[2], 0);
 
     /* TODO:  We're allowed repeat definitions if they're identical. */
     if ( get_macro( node_str( macd->ops[0] ) ) )
@@ -138,7 +131,7 @@ do_expand(name)
 
     /* Mask the macro, and push a _Pragma("RBC cpp_unmask $name") node.
      * This implements the standard behaviour that macros cannot recursively
-     * reference themselves.  This is used in #defined errno errno.
+     * reference themselves.  This is used in #define errno errno.
      * The [3] slot is abused to store an is-masked flag.  As arity is 3,
      * it is never freed. */
     if ( !macd || macd->ops[3] ) 

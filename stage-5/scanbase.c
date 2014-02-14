@@ -1,6 +1,6 @@
 /* scanner.c  --  code for tokenising the C input stream
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -46,7 +46,7 @@ int_error(fmt)
     extern stderr;
     fputs("Internal error: ", stderr);
     vfprintf(stderr, fmt, &fmt);
-    fputc('\n', stderr);
+    fprintf(stderr, "\n  while processing %s:%d\n", filename, line);
     fflush(stderr);
     abort();
 }
@@ -256,14 +256,8 @@ pp_dir(stream) {
     else
         pp_direct(stream, str);
 
+    end_ppdir(stream, str);
     free_node(tok);
-
-    /* Eat all trailing space */
-    c = skip_hwhite(stream);
-    if ( c != '\n' )
-        error( "Unexpected content at end of #%s directive", str );
-    ungetc(c, stream);
-
     return ret;
 }
 
@@ -554,19 +548,33 @@ next() {
 }
 
 /* Slurp all tokens until the next new line into *node_ptr (if not NULL), 
- * and return the next character (which will necessarily be '\n'). */
-pp_slurp(stream, node_ptr)
+ * and return the next character (which will necessarily be '\n'). 
+ * The current token will have been freed. */
+pp_slurp(stream, node_ptr, try_expand)
     struct node** node_ptr;
+    int (*try_expand)();
 {
     extern struct node *vnode_app();
     auto int i = 0, c;
-    while (1) {
-        c = skip_hwhite(stream);
-        ungetc(c, stream);
-        if ( c == '\n' )
-            break;
+    while (1) { 
+        /* If there's anything on the push-back stack, we've already
+         * handled whitespace. */
+        if ( pb_empty() ) {
+            c = skip_hwhite(stream);
+            ungetc(c, stream);
+            if ( c == '\n' )
+                break;
+        }
        
-        c = raw_next();
+        raw_next();
+
+        /* If (*try_expand)() returns true, then it has handled the token,
+         * and probably pushed something onto the push-back stack. */
+        while ( try_expand && try_expand(token) ) 
+            ;
+
+        c = peek_token();
+
         if ( node_ptr ) 
             *node_ptr = vnode_app( *node_ptr, token );
         else
@@ -699,5 +707,101 @@ req_token() {
 
 peek_token() {
     return token ? node_code(token) : 0;
+}
+
+/* Convert a quoted character literal in STR (complete with single quotes,
+ * and escapes) into an integer, and return that.   This is in this file
+ * rather than scanner.c because the preprocessor needs to handle character
+ * constants in #if expressions. */
+parse_chr(str)
+    char *str;
+{
+    auto i = 0, val = 0, bytes = 0;
+
+    if ( rchar( str, i++ ) != '\'' )
+        int_error("Character literal doesn't begin with '");
+
+    while (1) {
+        auto c = rchar( str, i++ );
+        if ( c == '\'' ) break;
+        else if ( bytes == 4 ) 
+            error("Character literal overflows 32 bits");
+        else if ( c == '\\' ) {
+            c = rchar( str, i++ );
+            if ( c == 'n' ) c = '\n';
+            else if ( c == 't' ) c = '\t';
+            else if ( c == '0' ) c = '\0';
+        }
+        val += c << (bytes++ << 3);
+    }
+
+    if ( bytes == 0 )
+        error("Empty character literal");
+
+    return val;
+}
+
+mk_number(ppnode) 
+    struct node *ppnode;
+{
+    extern struct node *add_ref();
+    extern struct node *new_node();
+
+    /* struct node { int type; int dummy; node* type; int val; }; */
+    auto struct node *node = new_node('num', 0), *type;
+    auto char *nptr;
+    auto int c;
+
+    /* At present we only support integer constants.  Floats need 
+     * recognising and treating separately. */
+    extern errno;
+    errno = 0;
+    set_op( node, 0, strtoul( node_str(ppnode), &nptr, 0 ) );
+    if ( errno ) error("Overflow in integer constant");
+
+    /* We only use the implicit int type if we don't have a type suffix.
+     * Conceptually a suffix makes it no longer implicit.  And practically
+     * we don't want to alter the implicit int type. */
+    if ( !rchar(nptr, 0) )
+        type = add_ref( implct_int() );
+    else {
+        type = new_node('dclt', 3);
+        set_op( type, 0, new_node('int', 0) );
+    } 
+    set_type( node, type );
+
+    /* Process type suffixes */
+    while ( c = rchar(nptr, 0) ) {
+        if ( (c == 'u' || c == 'U') && !node_op( type, 2 ) )
+            set_op( type, 2, new_node('unsi', 0) );
+        else if ( (c == 'l' || c == 'L') && !node_op( type, 1 ) )
+            set_op( type, 1, new_node('long', 0) );
+        else break;
+        ++nptr;
+    }
+
+    /* TODO: Check for signed overflow.
+     * Also, hex constants without 'u' may still be unsigned. */
+
+    if (c) error("Unexpected character '%c' in number \"%s\"",
+                 c, node_str(ppnode) );
+
+    return node;
+}
+
+node_streq(node, str)
+    struct node* node;
+    char* str;
+{
+    return node_code(node) == 'id' && strcmp( node_str(node), str ) == 0;
+}
+
+pp_end_expr() {
+    extern struct node* new_node();
+    /* We need to overwrite the existing token, as it is still the last
+     * one on the stack (so that we didn't call next() and lose the '\n'.  */
+    token = new_node('prgm', 2);
+    set_op(token, 0, new_strnode('id', "RBC") );
+    set_op(token, 1, new_strnode('id', "end_expr") );
 }
 

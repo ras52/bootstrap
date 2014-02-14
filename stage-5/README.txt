@@ -31,5 +31,5 @@ TODO:
   - Tentative definitions
   - Prototypes
   - Unions, bit fields (probably not in this stage?), floats
-  - #if, #elif
+  - #elif
   - Macros with arguments

@@ -1,61 +1,64 @@
 /* expr.c  --  code to parse expressions
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
 /*  constant    ::= int-const | char-const      TODO:  float, enum  */
-/*  const-expr  ::= identifier | constant | string-lit */
-const_expr() {
-    /* TODO:  This isn't really accurate.  A const-expr isn't just a
-     * primary-expr without paretheses, but it'll do for the moment, 
-     * and it nicely avoids code duplication. */
+/*  primry-expr ::= identifier | constant | string-lit | '(' expression ')' */
+static
+primry_expr(req_const) {
+    extern struct node *expr();
     auto t = peek_token();
 
-    if ( t == 'num' || t == 'str' )
+    if ( t == '(' ) {
+        auto struct node *n;
+        skip_node('(');
+        n = expr(req_const); 
+        skip_node(')');
+        return n;
+    }
+    else if ( t == 'num' || t == 'str' )
         return take_node(0);
 
     else if ( t == 'id' ) {
-        auto n = take_node(0);
-        if ( is_typedef( &n[3] ) )
-            error("Invalid use of typedef name: %s", &n[3]);
+        auto struct node *n = take_node(0);
+        if ( is_typedef( node_str(n) ) )
+            error("Invalid use of typedef name: %s", node_str(n));
 
         /* If the identifier is undeclared, the type will be null. 
          * This happens when calling undeclared functions. */
-        n[2] = lookup_type( &n[3] ); 
-        if ( n[2] ) add_ref( n[2] );
+        set_type( n, lookup_type( node_str(n) ) ); 
+        if ( node_type(n) ) add_ref( node_type(n) );
         return n;
     }
 
     else if ( t == 'chr' ) {
-        auto n = take_node(0);
+        auto struct node *n = take_node(0);
         /* Convert it into a integer literal: in C, char lits have type int. */
-        n[0] = 'num';
-        n[3] = parse_chr( &n[3] );
+        set_code( n, 'num' );
+        set_op( n, 0, parse_chr( node_str(n) ) );
         return n;
     }
-    else
-        error("Unexpected token '%Mc' while parsing expression", t);
-}
 
-/*  primry-expr ::= identifier | constant | string-lit | '(' expression ')' */
-static
-primry_expr() {
-    if ( peek_token() == '(' ) {
-        auto n;
-        skip_node('(');
-        n = expr(); 
-        skip_node(')');
-        return n;
+    else {
+        /* Give a nicer error message if we hit _Pragma("RBC end_expr") */
+        if ( t == 'prgm' ) {
+            auto struct node *n = get_node();
+            if ( node_arity(n) == 2 && node_streq( node_op(n, 0), "RBC" ) 
+                 && node_streq( node_op(n, 1), "end_expr" ) )
+                error("Unexpected end of expression");
+        }
+
+        error("Unexpected token '%Mc' while parsing expression", t);
     }
-    else
-        return const_expr();
 }
 
 /*  arg-list ::= ( expr ( ',' expr )* )? */
 static
-arg_list(fn) {
-    auto p = new_node('()', 0);
+arg_list(req_const, fn) {
+    extern struct node *vnode_app();
+    auto struct node *p = new_node('()', 0);
     p = vnode_app( p, fn );
 
     if ( peek_token() == ')' ) 
@@ -63,7 +66,7 @@ arg_list(fn) {
 
     while (1) {
         req_token();
-        p = vnode_app( p, assign_expr() );
+        p = vnode_app( p, assign_expr( req_const ) );
 
         /* It would be easier to code for an optional ',' at the end, but
          * the standard doesn't allow for that. */
@@ -81,17 +84,21 @@ arg_list(fn) {
  * by calling next(). Return OP.  */
 static
 do_binop(lhs) {
-    auto node = take_node(2);
-    node[3] = lhs;
+    auto struct node *node = take_node(2);
+    set_op( node, 0, lhs );
     req_token();
     return node;
 }
 
-/*  postfx-seq  ::= '(' arg-list ')' | '[' expr ']' | '++' | '--'   TODO . ->
+/*  member-seq  ::= ( '->' | '.' ) identifier
+ *  postfx-seq  ::= '(' arg-list ')' | '[' expr ']' | '++' | '--' | member-seq
  *  postfx-expr ::= primry-expr postfix-seq* */
 static
-postfx_expr() {
-    auto p = primry_expr(), t;
+postfx_expr(req_const) {
+    extern struct node *do_binop();
+    extern struct node *arg_list();
+    auto struct node *p = primry_expr(req_const);
+    auto int t;
 
     while (1) {
         req_token();
@@ -99,11 +106,14 @@ postfx_expr() {
 
         /* The only valid use of an undeclared symbol is in a simple function 
          * call.   In that case, foo() is valid, but, say, (foo)() is not. */
-        if ( t != '(' && p[0] == 'id' && !is_declared(&p[3]) ) 
-            error("Undefined symbol '%s'", &p[3]);
+        if ( t != '(' && node_code(p) == 'id' && !is_declared( node_str(p) ) ) 
+            error( "Undefined symbol '%s'", node_str(p) );
 
 
         if ( t == '++' || t == '--' ) {
+            if ( req_const )
+                error("Increment not permitted in constant expression");
+
             /* Postfix ++ and -- are marked as binary operators.  This is 
              * what distinguishes them from the prefix versions which are 
              * marked as unary.  This is inspired by C++'s idea of
@@ -115,16 +125,19 @@ postfx_expr() {
     
         else if ( t == '[' ) {
             p = do_binop( p );
-            p[0] = '[]';
-            p[4] = expr();
+            set_code( p, '[]' );
+            set_op( p, 1, expr( req_const ) );
             skip_node(']');
 
             chk_subscr(p);
         }
     
         else if ( t == '(' ) {
+            if ( req_const )
+                error("Function call not permitted in constant expression");
+
             skip_node('(');
-            p = arg_list(p);
+            p = arg_list( req_const, p );
             skip_node(')');
 
             chk_call(p);
@@ -134,7 +147,7 @@ postfx_expr() {
             p = do_binop( p );
             if ( peek_token() != 'id' )
                 error("Expected identifier as member name");
-            p[4] = take_node(0);
+            set_op( p, 1, take_node(0) );
 
             chk_member(p);
         }
@@ -149,31 +162,34 @@ postfx_expr() {
  *  unary-expr ::= unary-op unary-expr | postfx-expr 
  *                   | 'sizeof' '(' type-name ')'                           */
 static
-unary_expr() {
+unary_expr( req_const ) {
     auto t = peek_token();
 
     if ( strnlen(&t, 4) == 1 && strchr("+-~!*&", t) 
          || t == '++' || t == '--' ) {
-        auto p = take_node(1);
+        auto struct node *p = take_node(1);
         req_token();
 
         /* The grammar says says the argument is sometimes a unary-expr,
          * and sometimes a cast-expr.  In practice we can universally parse 
          * it as a cast-expr.  If someone writes ++(type)(expr) then the
          * lvalue check will catch the error. */
-        p[3] = cast_expr();
+        set_op( p, 0, cast_expr( req_const ) );
 
         if (t == '+' || t == '-' || t == '~')
-            p[2] = add_ref( prom_type( p[3][2] ) );
+            set_type( p, add_ref( prom_type( node_type( node_op( p, 0 ) ) ) ) );
 
         else if (t == '!')
-            p[2] = add_ref( implct_int() );
+            set_type( p, add_ref( implct_int() ) );
 
         else if (t == '&')
             chk_addr(p);
 
-        else if (t == '++' || t == '--')
+        else if (t == '++' || t == '--') {
+            if ( req_const )
+                error("Increment not permitted in constant expression");
             chk_incdec(p);
+        }
 
         else if (t == '*')
             chk_deref(p);
@@ -181,28 +197,31 @@ unary_expr() {
     }
 
     else if ( t == 'size' ) {
-        /* We'll overwrite the node to the type size */
-        auto p = take_node(0), decl; 
+        extern struct node *type_name();
+        /* We'll overwrite the node with a literal containing the type size.
+         * Note that the 'num' node abuses op[0] to contain the integer 
+         * value; hence arity = 0. */
+        auto struct node *p = take_node(0), *decl; 
         skip_node('(');
         decl = type_name();
         skip_node(')');
 
-        p[0] = 'num';
-        p[2] = add_ref( size_t_type() );
-        p[3] = type_size( decl[2] );
+        set_code( p, 'num' );
+        set_type( p, add_ref( size_t_type() ) );
+        set_op( p, 0, type_size( node_type( decl ) ) );
 
         free_node(decl);
         return p;
     }
 
-    else return postfx_expr();
+    else return postfx_expr( req_const );
 }
 
 /* cast-expr ::= '(' type-name ')' cast-expr | unary-expr */
 static
-cast_expr() {
+cast_expr(req_const) {
     if ( peek_token() == '(' ) {
-        auto brack = take_node(0);
+        auto struct node *brack = take_node(0);
 
         /* We don't yet know that we have a cast expression.  It might be 
          * the opening '(' of a primary-expr.    */
@@ -212,35 +231,43 @@ cast_expr() {
              * call stack to handle the postfix operator on the way back 
              * down the call stack. */
             unget_token(brack);            
-            return unary_expr();
+            return unary_expr( req_const );
         }
         else {
-            auto type = type_name();
+            extern struct node *type_name();
+            auto struct node* type = type_name();
             skip_node(')');
 
             /* Use a unary-plus, as that's the identity op. */
-            brack[0] = '+';
-            brack[1] = 1;
-            brack[2] = add_ref( type[2] );
-            brack[3] = cast_expr();
+            set_code( brack, '+' );
+            set_arity( brack, 1 );
+            set_type( brack, add_ref( node_type( type ) ) );
+            set_op( brack, 0, cast_expr( req_const ) );
 
             free_node(type);
             return brack;
         }
     }
 
-    else return unary_expr();
+    else return unary_expr( req_const );
 }
 
 static
 test_level( t, ap ) {
-    while ( (ap += 4) && *ap ) 
-        if ( *ap == t )
+    /* In our implementation, va_copy is simple copy and was done by the 
+     * function call.  We can therefore safely use AP directly. 
+     * __va_arg() really returns a void*, but the va_arg macro would cast
+     * it to the multicharacter (i.e. int) pointer. */
+    extern int *__va_arg();
+    auto arg;
+    while ( arg = *__va_arg( &ap, 4 ) ) 
+        if ( arg == t )
             return 1;
     return 0;
 }
 
-/* node* bin_level( node* (*chain)(), void (*check)(node*), ... );
+/* node* bin_level( node* (*chain)(int req_const), int req_const, 
+ *                  void (*check)(node*), ... );
  *
  * Handle a standard left-to-right binary operator precedence level.  
  * Call CHAIN() to parse the operands, so CHAIN should be a pointer 
@@ -251,15 +278,17 @@ test_level( t, ap ) {
  * It is a variadic function, and the varargs are operator tokens in 
  * the predence level, followed by a 0 end marker. */
 static
-bin_level( chain, check ) 
+bin_level( chain, req_const, check ) 
     int (*chain)(), (*check)();
 {
-    auto p = chain();
+    extern struct node *do_binop();
+    auto struct node *p = chain( req_const );
+    auto ap; __va_start( &ap, &check, 4 );
 
     /* Left-to-right associatibity: a, b, c == (a, b), c */
-    while ( test_level( peek_token(), &check ) ) { 
+    while ( test_level( peek_token(), ap ) ) { 
         p = do_binop( p );
-        p[4] = chain();
+        set_op( p, 1, chain( req_const ) );
         check(p);
     }
 
@@ -267,93 +296,95 @@ bin_level( chain, check )
 }
 
 /* mult-op   ::= '*' | '/' | '%'
-   mult-expr ::= cast-expr ( mult-op cast-expr )* */
+ * mult-expr ::= cast-expr ( mult-op cast-expr )* */
 static
-mult_expr() {
+mult_expr(req_const) {
     extern chk_mult();
-    return bin_level( cast_expr, chk_mult, '*', '/', '%', 0 );
+    return bin_level( cast_expr, req_const, chk_mult, '*', '/', '%', 0 );
 }
 
 /* add-op   ::= '+' | '-'
-   add-expr ::= mult-expr ( add-op mult-expr )* */
+ * add-expr ::= mult-expr ( add-op mult-expr )* */
 static
-add_expr() {
+add_expr(req_const) {
     extern chk_add();
-    return bin_level( mult_expr, chk_add, '+', '-', 0 );
+    return bin_level( mult_expr, req_const, chk_add, '+', '-', 0 );
 }
 
 /* shift-op   ::= '<<' | '>>'
-   shift-expr ::= add-expr ( shift-op add-expr )* */
+ * shift-expr ::= add-expr ( shift-op add-expr )* */
 static
-shift_expr() {
+shift_expr(req_const) {
     extern chk_shift();
-    return bin_level( add_expr, chk_shift, '<<', '>>', 0 );
+    return bin_level( add_expr, req_const, chk_shift, '<<', '>>', 0 );
 }
 
 /* rel-op   ::= '<' | '>' | '<=' | '>='
-   rel-expr ::= shift-expr ( rel-op shift-expr )* */
+ * rel-expr ::= shift-expr ( rel-op shift-expr )* */
 static
-rel_expr() {
+rel_expr(req_const) {
     extern chk_cmp();
-    return bin_level( shift_expr, chk_cmp, '<', '<=', '>', '>=', 0 );
+    return bin_level( shift_expr, req_const, chk_cmp, '<', '<=', '>', '>=', 0 );
 }
 
 /* eq-op   ::= '==' | '!='
-   eq-expr ::= rel-expr ( eq-op rel-expr )* */
+ * eq-expr ::= rel-expr ( eq-op rel-expr )* */
 static
-eq_expr() {
+eq_expr(req_const) {
     extern chk_cmp();
-    return bin_level( rel_expr, chk_cmp, '==', '!=', 0 );
+    return bin_level( rel_expr, req_const, chk_cmp, '==', '!=', 0 );
 }
 
 /* bitand-expr ::= eq-expr ( '&' eq-expr )* */
 static
-bitand_expr() {
+bitand_expr(req_const) {
     extern chk_bitop();
-    return bin_level( eq_expr, chk_bitop, '&', 0 );
+    return bin_level( eq_expr, req_const, chk_bitop, '&', 0 );
 }
 
 /* bitxor-expr ::= bitand-expr ( '^' binand-expr )* */
 static
-bitxor_expr() {
+bitxor_expr(req_const) {
     extern chk_bitop();
-    return bin_level( bitand_expr, chk_bitop, '^', 0 );
+    return bin_level( bitand_expr, req_const, chk_bitop, '^', 0 );
 }
 
 /* bitor-expr ::= bitxor-expr ( '|' binand-expr )* */
 static
-bitor_expr() {
+bitor_expr(req_const) {
     extern chk_bitop();
-    return bin_level( bitxor_expr, chk_bitop, '|', 0 );
+    return bin_level( bitxor_expr, req_const, chk_bitop, '|', 0 );
 }
 
 /* logand-expr ::= bitor-expr ( '&&' binand-expr )* */
 static
-logand_expr() {
+logand_expr(req_const) {
     extern chk_int();
-    return bin_level( bitor_expr, chk_int, '&&', 0 );
+    return bin_level( bitor_expr, req_const, chk_int, '&&', 0 );
 }
 
 /* logor-expr ::= logand-expr ( '||' binand-expr )* */
 static
-logor_expr() {
+logor_expr(req_const) {
     extern chk_int();
-    return bin_level( logand_expr, chk_int, '||', 0 );
+    return bin_level( logand_expr, req_const, chk_int, '||', 0 );
 }
 
 /* cond-expr ::= logor-expr ( '?' expr ':' assign-expr )? */
 static
-cond_expr() {
-    auto p = logor_expr();
+cond_expr(req_const) {
+    extern struct node *do_binop();
+    auto struct node *p = logor_expr( req_const );
 
     if ( peek_token() == '?' ) {
         p = do_binop( p );
-        p[0] = '?:';  p[1] = 3;
-        p[4] = expr();
+        set_code( p, '?:' );
+        set_arity( p, 3 );
+        set_op( p, 1, expr( req_const ) );
         skip_node(':');
         req_token();
-        p[5] = assign_expr();
-        p[2] = add_ref( implct_int() );
+        set_op( p, 2, assign_expr( req_const ) );
+        set_type( p, add_ref( implct_int() ) );
     }
 
     return p;
@@ -368,7 +399,10 @@ is_assop(t) {
 /* assign-op   ::= '=' | '+=' | '-=' | '*=' | '/=' | '%=' 
  *                     | '&=' | '|=' | '^=' | '<<=' | '>>='
  * assign-expr ::= cond-expr ( assign-op assign-expr )?  */
-assign_expr() {
+assign_expr(req_const) {
+    extern struct node *cond_expr();
+    extern struct node *do_binop();
+
     /* The C grammar says the l.h.s. is actually a unary-expr, however
      * as in C a unary-expr is the lowest precedence expression that can
      * yield an lvalue, it is entirely equivalent to use a logor-expr as
@@ -382,10 +416,12 @@ assign_expr() {
      * on the l.h.s. of an assignment.
      */
 
-    auto p = cond_expr(), t = peek_token();
-    if ( is_assop(t) ) {
+    auto struct node *p = cond_expr( req_const );
+    if ( is_assop( peek_token() ) ) {
+        if ( req_const )
+            error("Assignment not permitted in constant expression");
         p = do_binop( p );
-        p[4] = assign_expr();
+        set_op( p, 1, assign_expr( req_const ) );
         chk_assign(p);
     }
 
@@ -393,7 +429,20 @@ assign_expr() {
 }
 
 /* expr ::= ( assign-expr ',' )* assign-expr */
-expr() {
-    extern chk_comma();
-    return bin_level( assign_expr, chk_comma, ',', 0 );
+expr(req_const) {
+    extern struct node *assign_expr();
+    extern struct node *do_binop();
+
+    auto struct node *p = assign_expr( req_const );
+
+    /* Left-to-right associatibity: a, b, c == (a, b), c */
+    while ( peek_token() == ',' ) { 
+        if ( req_const )
+            error("Comma operator not permitted in constant expression");
+        p = do_binop( p );
+        set_op( p, 1, assign_expr( req_const ) );
+        chk_comma(p);
+    }
+
+    return p;
 }

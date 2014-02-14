@@ -1,6 +1,6 @@
-/* cppnode.c  --  node.c rewritten to use structs
+/* nodenew.c  --  node.c rewritten to use structs
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -174,10 +174,58 @@ node_code(node)
     return node->code;
 }
 
+node_arity(node) 
+    struct node* node;
+{
+    return node->arity;
+}
+
+node_type(node)
+    struct node* node;
+{
+    return node->type;
+}
+
+node_op(node, n)
+    struct node* node;
+{
+    return node->ops[n];
+}
+
+set_code(node, code)
+    struct node* node;
+{
+    node->code = code;
+}
+
 set_arity(node, arity)
     struct node* node;
 {
     node->arity = arity;
+}
+
+set_type(node, type)
+    struct node *node, *type;
+{
+    node->type = type;
+}
+
+set_op(node, n, op)
+    struct node *node, *op;
+{
+    node->ops[n] = op;
+}
+
+set_ival(node, val)
+    struct node *node;
+{
+    node->ops[0] = (struct node*) val;
+}
+
+node_ival(node) 
+    struct node *node;
+{
+    return node->ops[0];   
 }
 
 /* Allocate a string node and set its payload to STR */
@@ -215,6 +263,10 @@ static struct pb_slot {
     struct pb_slot* next;
 } *pb_stack = 0; 
 
+pb_empty() {
+    return !pb_stack;
+}
+
 struct node*
 pb_pop() {
     struct node* ret = 0;
@@ -236,11 +288,5 @@ pb_push(token)
     pb_stack = p;
 }
 
-node_streq(node, str)
-    struct node* node;
-    char* str;
-{
-    return node->code == 'id' && strcmp( node_str(node), str ) == 0;
-}
 
 

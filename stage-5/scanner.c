@@ -1,6 +1,6 @@
 /* scanner.c  --  code for converting preprocessor tokens to C ones
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -53,79 +53,10 @@ chk_keyword(node)
 get_number(stream, c, c2) {
     auto char *nptr;
     auto ppnode = get_ppnum(stream, c, c2);
-
-    /* struct node { int type; int dummy; node* type; int val; }; */
-    auto node = new_node('num', 0);
-
-
-    /* At present we only support integer constants.  Floats need 
-     * recognising and treating separately. */
-    extern errno;
-    errno = 0;
-    node[3] = strtoul( &ppnode[3], &nptr, 0 );
-    if ( errno ) error("Overflow in integer constant");
-
-    /* We only use the implicit int type if we don't have a type suffix.
-     * Conceptually a suffix makes it no longer implicit.  And practically
-     * we don't want to alter the implicit int type. */
-    if ( !rchar(nptr, 0) )
-        node[2] = add_ref( implct_int() );
-    else {
-        node[2] = new_node('dclt', 3);
-        node[2][3] = new_node('int', 0);
-    } 
-
-    /* Process type suffixes */
-    while ( c = rchar(nptr, 0) ) {
-        if ( (c == 'u' || c == 'U') && !node[2][5] )
-            node[2][5] = new_node('unsi', 0);
-        else if ( (c == 'l' || c == 'L') && !node[2][4] )
-            node[2][4] = new_node('long', 0);
-        else break;
-        ++nptr;
-    }
-
-    /* TODO: Check for signed overflow.
-     * Also, hex constants without 'u' may still be unsigned. */
-
-    if (c)
-        error("Unexpected character '%c' in number \"%s\"",
-              c, &ppnode[3]);
-
+    auto node = mk_number(ppnode);
     free_node(ppnode);
     return node;
 }
-
-/* Convert a quoted character literal in STR (complete with single quotes,
- * and escapes) into an integer, and return that. */
-parse_chr(str)
-    char *str;
-{
-    auto i = 0, val = 0, bytes = 0;
-
-    if ( rchar( str, i++ ) != '\'' )
-        int_error("Character literal doesn't begin with '");
-
-    while (1) {
-        auto c = rchar( str, i++ );
-        if ( c == '\'' ) break;
-        else if ( bytes == 4 ) 
-            error("Character literal overflows 32 bits");
-        else if ( c == '\\' ) {
-            c = rchar( str, i++ );
-            if ( c == 'n' ) c = '\n';
-            else if ( c == 't' ) c = '\t';
-            else if ( c == '0' ) c = '\0';
-        }
-        val += c << (bytes++ << 3);
-    }
-
-    if ( bytes == 0 )
-        error("Empty character literal");
-
-    return val;
-}
-
 
 /* Handle a #pragma directive */
 prgm_direct(stream) {
@@ -142,7 +73,7 @@ prgm_direct(stream) {
         warning("Unfamiliar form of #pragma directive");
         /* A bare #pragma is a bit silly too, but the grammar allows it. */
         if ( c == '\n' ) ungetc(c, stream);  
-        else pp_slurp(stream, 0);
+        else pp_slurp(stream, 0, 0);
         return 0;
     }
   
@@ -154,7 +85,7 @@ prgm_direct(stream) {
      * Compiler). */
     if ( strcmp( str, "RBC" ) != 0 ) {
         /* An unknown pragma: silently ignore it. */
-        pp_slurp(stream, 0);
+        pp_slurp(stream, 0, 0);
         free_node(tok);
         return 0;
     }
@@ -176,7 +107,7 @@ prgm_direct(stream) {
     }
     else {
         warning("Unhandled #pragma RBC %s", str);
-        pp_slurp(stream, 0);
+        pp_slurp(stream, 0, 0);
     }
 
     end_ppdir(stream, "pragma RBC");

@@ -70,7 +70,8 @@ ccx:	ld libc.o crt0.o $(CCX1_OBJS:%.o=%1.o)
 	ld -o $@ crt0.o $(CCX1_OBJS:%.o=%1.o) libc.o
 
 # These files need to compile without preprocessing
-CPP_OBJS = scanbase.o cpp.o nodenew.o macros.o pvector.o cli.o
+CPP_OBJS = scanbase.o cpp.o nodenew.o macros.o pvector.o cli.o expr.o \
+           cpptype.o eval.o
 
 cpp:	ld libc.o crt0.o $(CPP_OBJS)
 	ld -o $@ crt0.o $(CPP_OBJS) libc.o
