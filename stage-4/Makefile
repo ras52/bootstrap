@@ -1,6 +1,6 @@
 # stage-4/Makefile
 
-# Copyright (C) 2012, 2013 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013, 2014 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 SHELL = /bin/sh
@@ -31,11 +31,12 @@ as ld:
 
 # LIB_OBJS contain a minimal C library written entirely in assembler.
 # LIB0_OBJS adds bootstrap .o files written in assembler that will be replaced.
-# LIB1_OBJS adds replaces the bootstrap files above with versions written in C.
+# LIB1_OBJS adds to and replaces the LIB0_OBJS with versions written in C.
 
 LIB_OBJS = string.o ctype.o unistd.o char.o imath.o
 LIB0_OBJS = $(LIB_OBJS) error.o stdio.o memory.o
-LIB1_OBJS = $(LIB_OBJS) exit.o output.o input.o malloc.o signal.o string2.o
+LIB1_OBJS = $(LIB_OBJS) exit.o output.o input.o malloc.o signal.o string2.o \
+  stdarg.o
 
 CC_OBJS  = i386.o scanner.o symtab.o expr.o stmt.o main.o
 
