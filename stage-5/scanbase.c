@@ -805,3 +805,9 @@ pp_end_expr() {
     set_op(token, 1, new_strnode('id', "end_expr") );
 }
 
+set_token(node)
+    struct node *node;
+{
+    free_node(token);
+    token = node;
+}

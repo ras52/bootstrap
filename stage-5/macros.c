@@ -109,18 +109,16 @@ struct node* new_strnode();
 struct node* add_ref();
 
 static
-mk_unmask(node, strnode)
-    struct node *node, *strnode;
+mk_unmask(strnode)
+    struct node *strnode;
 {
     /* We overwrite the head node on the stack (which will be the macro being
      * expanded) with a _Pragma("RBC cpp_unmask $name") node. */
-    node->code = 'prgm';
-    node->arity = 3;
-    node->type = 0;
+    struct node *node = new_node( 'prgm', 3 );
     node->ops[0] = new_strnode('id', "RBC");
     node->ops[1] = new_strnode('id', "cpp_unmask");
     node->ops[2] = add_ref(strnode);
-    node->ops[3] = 0;
+    return node;
 }
 
 do_expand(name)
@@ -137,7 +135,7 @@ do_expand(name)
     if ( !macd || macd->ops[3] ) 
         int_error("Attempt to expand undefined macro: %s", name);
     macd->ops[3] = (struct node*) 1;
-    mk_unmask( get_node(), macd->ops[0] ); 
+    set_token( mk_unmask( macd->ops[0] ) ); 
 
     /* By pushing the tokens back in this way, we ensure that we rescan 
      * the expanded token sequence. */

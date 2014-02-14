@@ -24,6 +24,8 @@ struct node {
     struct node* ops[4];
 };
 
+struct node* get_node();
+
 /* The preprocessor does not know about keywords. */
 chk_keyword(node) 
     struct node* node;
@@ -240,7 +242,6 @@ eval_cond() {
 /* Require the above _Pragma("RBC end_expr"); */
 static
 check_econd(directive) {
-    extern struct node *get_node();
     struct node *e = get_node();
     if ( e->code != 'prgm' )
         error("Trailing content on #%s directive", directive);
@@ -303,8 +304,6 @@ pp_direct(stream, str) {
     else
         error("Unknown preprocessor directive: %s", str);
 }
-
-struct node* get_node();
 
 static
 set_line( line_ptr, file_ptr, output )
