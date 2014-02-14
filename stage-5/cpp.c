@@ -51,14 +51,16 @@ prgm_direct(stream) {
 /* How deep are we with #if{,def,ndef} directive. */
 static
 struct if_group {
-    int is_else;
+    int is_else;  /* Have we had an #else yet? */
+    int done;     /* Have we processed a group yet? */
     struct if_group* next;
 } *if_stack = 0;
 
 static
-if_push(is_else) {
+if_push(processing) {
     struct if_group* g = (struct if_group*) malloc( sizeof(struct if_group) );
-    g->is_else = is_else;
+    g->is_else = 0;
+    g->done = processing;
     g->next = if_stack;
     if_stack = g;
 }
@@ -96,12 +98,18 @@ skip_if(stream) {
             if_push(0);
         else if ( strcmp( str, "endif" ) == 0 )
             if_pop();
-        else if ( strcmp( str, "else" ) == 0 && if_stack->next == start ) {
-            if ( if_stack->is_else )
-                error("An #if group cannot have more than one #else");
-            if_stack->is_else = 1;
-            free_node(tok);
-            break;   
+ 
+        else if ( if_stack->next == start && !if_stack->done ) {
+            if ( strcmp( str, "elif" ) == 0 ) {
+                if_direct(stream, str, 1);
+                free_node(tok);
+                break;
+            }
+            else if ( strcmp( str, "else" ) == 0 ) {
+                else_direct(stream);
+                free_node(tok);
+                break;   
+            }
         }
         free_node(tok);
 
@@ -126,7 +134,7 @@ ifdf_direct(stream, directive, positive) {
         skip_if(stream);
     }
     else
-        if_push(0);
+        if_push(1);
 
     free_node(name);
 }
@@ -150,7 +158,10 @@ else_direct(stream) {
         error("An #if group cannot have more than one #else");
 
     if_stack->is_else = 1;
-    skip_if(stream);
+    if (if_stack->done)
+        skip_if(stream);
+    else 
+        if_stack->done = 1;
 }
 
 static
@@ -189,18 +200,18 @@ if_expand(node)
     return 0;
 }
 
+/* Tokenise the conditional on an #if or #elif line and push it back 
+ * onto the stack with macros expanded, etc.  */
 static
-if_direct(stream) {
-    extern struct node *expr(), *eval();
-    extern struct node *get_node();
-    struct node *e = new_node('mace', 0), *val;
+expand_cond(stream, directive) {
+    struct node *e = new_node('mace', 0);
     int n;
 
     /* Locate the full preprocessor line, and use if_expand() to expand
      * macros, and convert pp-numbers to numbers. */
     pp_slurp(stream, &e, if_expand);
     if ( !e->arity )
-        error( "Expected constant expression" );
+        error( "Expected constant expression in #%s", directive );
 
     /* Set a _Pragma("RBC end_expr") node, and push back the expression.  
      * This will cause the expression parser die if it gets that far, rather 
@@ -211,41 +222,78 @@ if_direct(stream) {
         unget_token( add_ref( e->ops[n-1] ) );
 
     free_node(e);
+}
 
-    /* Now reparse it as an expression. */
-    e = expr(1);
-    val = eval(e);
+/* Parse a conditional on an #if or #elif line and return its value */
+static
+eval_cond() {
+    extern struct node *expr(), *eval();
+    int n;
+    struct node *e = expr(1);
+    struct noed *val = eval(e);
     free_node(e);
+    n = node_ival(val);
+    free_node(val);
+    return n;
+}
 
-    /* Require the above _Pragma("RBC end_expr"); */
-    e = get_node();
+/* Require the above _Pragma("RBC end_expr"); */
+static
+check_econd(directive) {
+    extern struct node *get_node();
+    struct node *e = get_node();
     if ( e->code != 'prgm' )
-        error("Trailing content on #if directive");
+        error("Trailing content on #%s directive", directive);
     else if ( e->arity != 2 || !node_streq( e->ops[0], "RBC" )
               || !node_streq( e->ops[1], "end_expr" ) )
         int_error("Expected _Pragma(\"RBC end_expr\")");
     free_node(e);
+}
 
-    end_ppdir( stream, "if" );
+static
+if_direct(stream, directive, is_else) {
+    int processing;
 
-    if_push(0);
-    if (!node_ival(val)) 
+    if ( is_else && !if_stack )
+        error( "Unexpected #%s directive", directive );
+    if ( is_else && if_stack->is_else )
+        error("An #%s group cannot follow an #else", directive );
+
+    if ( is_else && if_stack->done ) {
         skip_if(stream);
-    free_node(val);
+        return;
+    }
+
+    expand_cond(stream, directive);
+    processing = eval_cond() != 0;
+    check_econd(directive);
+
+    end_ppdir( stream, directive );
+
+    if (is_else)
+        if_stack->done = processing;
+    else
+        if_push(processing);
+
+    if (!processing)
+        skip_if(stream);
 }
 
 /* Hook for handling preprocessor directives other than #line and #pragma */
 pp_direct(stream, str) {
+    /* #pragma and #line are handled in scanbase.c in pp_dir() */
     if ( strcmp( str, "include" ) == 0 )
         incl_direct( stream );
     else if ( strcmp( str, "define" ) == 0 )
         defn_direct( stream );
     else if ( strcmp( str, "if" ) == 0 )
-        if_direct( stream );
+        if_direct( stream, str, 0 );
     else if ( strcmp( str, "ifdef" ) == 0 )
         ifdf_direct( stream, str, 1 );
     else if ( strcmp( str, "ifndef" ) == 0 )
         ifdf_direct( stream, str, 0 );
+    else if ( strcmp( str, "elif" ) == 0 )
+        if_direct( stream, str, 1 );
     else if ( strcmp( str, "else" ) == 0 )
         else_direct( stream );
     else if ( strcmp( str, "endif" ) == 0 )
