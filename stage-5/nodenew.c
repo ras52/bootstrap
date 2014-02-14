@@ -282,7 +282,7 @@ pb_pop() {
 pb_push(token) 
     struct node* token;
 {
-    struct pb_slot* p = malloc( sizeof(struct pb_slot*) );
+    struct pb_slot* p = malloc( sizeof(struct pb_slot) );
     p->next = pb_stack;
     p->node = token;
     pb_stack = p;
