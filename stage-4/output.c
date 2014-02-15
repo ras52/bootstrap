@@ -1,6 +1,6 @@
 /* output.c  --  output stdio functions
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com> 
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com> 
  * All rights reserved.
  */
 
@@ -49,9 +49,9 @@ fclose( stream ) {
     if ( stream[0] != -1 ) {
         fflush( stream );
         rv = close( stream[0] );
+        if ( stream[0] < __filec )
+            __files[ stream[0] ] = 0;
     }
-    if ( stream[0] < __filec )
-        __files[ stream[0] ] = 0;
     /* Free any buffers associated with the stream */
     if ( stream[7] ) {
         free( stream[3] );
