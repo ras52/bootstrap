@@ -117,13 +117,13 @@ freopen( filename, mode, stream ) {
 }
 
 /* A function to get a FILE* interface to a simple string. */
-__fopenstr( str ) {
+__fopenstr( str, len ) {
     auto stream = malloc(32); /* sizeof(struct FILE) */
     stream[0] = -1;  /* an invalid file descriptor */
-    stream[1] = strlen(str);
+    stream[1] = len;
     stream[2] = stream[3] = str;
-    stream[4] = str + stream[1];
-    stream[5] = 0;   /* O_RDONLY */
+    stream[4] = str + len;
+    stream[5] = 2;   /* O_RDWR */
     stream[6] = 0;   /* _IOFBF */
     stream[7] = 0;   /* do not free() the buffer on close */
     return stream;
@@ -156,7 +156,7 @@ fopen( filename, mode ) {
     return stream;
 }
 
-/* Implementation detail __fputsn() -- TODO declare this static */
+/* Implementation detail __fputsn() */
 static
 __fputsn( ptr, len, stream ) {
     auto written = 0;
@@ -361,4 +361,13 @@ printf( fmt ) {
 /* The C library fprintf() */
 fprintf( stream, fmt ) {
     return vfprintf( stream, fmt, &fmt );
+}
+
+/* The C library snprintf() */
+snprintf( buf, len, fmt ) {
+    auto stream = __fopenstr( buf, len );
+    auto len = vfprintf( stream, fmt, &fmt ); 
+    fputc( 0, stream );
+    fclose(stream);
+    return len;
 }

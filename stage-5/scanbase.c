@@ -644,7 +644,7 @@ do_open( in_filename, search_path )
 
 scan_str(str) {
     extern struct FILE* __fopenstr();
-    input_strm = __fopenstr(str);
+    input_strm = __fopenstr(str, strlen(str));
     filename = "<command-line>";
     line = 0;
 }
