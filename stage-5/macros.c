@@ -59,24 +59,33 @@ get_macro(name)
     return 0;
 }
 
+static
+is_builtin(name) {
+    return strcmp( "__FILE__", name ) == 0 || strcmp( "__LINE__", name ) == 0;
+}
+
 /* Handle a #define directive. */
 defn_direct(stream) {
-    struct node* macd = new_node('macd', 3);
+    struct node *macd = new_node('macd', 3);
+    char *name;
 
     int c = skip_hwhite(stream);
 
     if ( !isidchar1(c) )
         error("Expected identifier in #define directive");
 
-    macd->ops[0] = get_word( stream, c );
+    name = node_str( macd->ops[0] = get_word( stream, c ) );
+
+    if ( strcmp(name, "defined") == 0 || is_builtin(name) )
+        error("Cannot redefine '%s'", name);
 
     /* TODO:  Require whitespace before the expansion list */
     macd->ops[2] = new_node('mace', 0);
     pp_slurp(stream, &macd->ops[2], 0);
 
     /* TODO:  We're allowed repeat definitions if they're identical. */
-    if ( get_macro( node_str( macd->ops[0] ) ) )
-        error("Duplicate definition of %s", node_str( macd->ops[0] ) );
+    if ( get_macro(name) )
+        error("Duplicate definition of %s", name);
 
     vec_grow(macd);
 }
@@ -92,6 +101,9 @@ unde_direct(stream) {
         error("Expected identifier in #define directive");
     tok = get_word( stream, c );
     name = node_str(tok);
+
+    if ( strcmp(name, "defined") == 0 || is_builtin(name) )
+        error("Cannot undefine '%s'", name);
 
     for (; i != e; ++i )
         if ( node_streq( (*i)->ops[0], name ) ) {
@@ -145,7 +157,56 @@ clone_node(src)
     else int_error("Cloning a vnode");
 }
 
-do_expand(name)
+static
+struct node *
+esc_strnode(str)
+    char *str;
+{
+    struct node *node = new_node('str', 0);
+    int i = 0, c;
+
+    node_lchar( &node, &i, '"' );
+    while (c = (int)*str++) {
+        int e = 0;
+        if ( c == '\n' ) e = 'n';
+        else if ( c == '\t' ) e = 't';
+        else if ( c == '\0' ) e = '0';
+        else if ( c == '"' || c == '\\' ) e = c;
+        if (e) {
+            node_lchar( &node, &i, '\\' );
+            node_lchar( &node, &i, e );
+        } else 
+            node_lchar( &node, &i, c );
+    }
+    node_lchar( &node, &i, '"' );
+
+    return node;
+}
+
+static
+do_builtin(name) 
+    char *name;
+{
+    /* These all expand to a single pp-token. */
+    struct node *res;
+
+    if (strcmp(name, "__LINE__") == 0) {
+        char buf[16] = {0}; 
+        snprintf(buf, 16, "%d", get_line());
+        res = new_strnode('ppno', buf);
+    }
+    
+    else if (strcmp(name, "__FILE__") == 0)
+        res = esc_strnode( getfilename() );
+    
+    else
+        int_error("Unhandled built-in");
+    
+    set_token(res);
+}
+
+static
+do_expand2(name)
     char* name;
 {
     int n;
@@ -169,11 +230,20 @@ do_expand(name)
         unget_token( clone_node( mace->ops[n-1] ) );
 }
 
+do_expand(name)
+    char *name;
+{
+    if (is_builtin(name))
+        return do_builtin(name);
+    else 
+        return do_expand2(name);
+}
+
 /* Implements the defined() preprocessor function. */
 pp_defined(name)
     char* name;
 {
-    return get_macro(name) ? 1 : 0;
+    return is_builtin(name) || get_macro(name) ? 1 : 0;
 }
 
 can_expand(name)
@@ -181,7 +251,7 @@ can_expand(name)
 {
     struct node *macro = get_macro(name);
     /* Slot [3] is used as an is-masked flag. */
-    return macro && !macro->ops[3];
+    return macro && !macro->ops[3] || is_builtin(name);
 }
 
 cpp_unmask(name) 
