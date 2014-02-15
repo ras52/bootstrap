@@ -378,6 +378,18 @@ chk_bitop(p) {
     p[2] = add_ref( usual_conv(type1, type2) );
 }
 
+/* If TYPE is an array type, promote it to a pointer; otherwise return 
+ * a copy calling add_ref() on it. */
+static
+prom_array(type) {
+    if ( type[0] == '[]' ) {
+        auto ptr = new_node( '*', 1 );
+        ptr[3] = add_ref( type[3] );
+        return ptr;
+    } 
+    else return add_ref(type);
+}
+
 /* Determine the type of an + or - expression. */
 chk_add(p) {
     extern compat_flag;
@@ -385,12 +397,12 @@ chk_add(p) {
 
     /* Handle case of: ptr +/- int. */
     if (is_pointer(type1) && is_integral(type2)) 
-        p[2] = add_ref(type1);
+        p[2] = prom_array(type1);
 
     /* Canonicalise case of: int + ptr => ptr + int. */
     else if (op == '+' && is_pointer(type2) && is_integral(type1)) {
         auto tmp = p[3]; p[3] = p[4]; p[4] = tmp;
-        p[2] = add_ref(type2);
+        p[2] = prom_array(type2);
     }
 
     /* Handle case of: ptr - ptr. */
@@ -487,7 +499,7 @@ chk_shift(p) {
 
 chk_comma(p) {
     /* The type of a shift expression is the rhs type, unpromoted. */
-    p[2] = add_ref( prom_type( p[4] ) );
+    p[2] = add_ref( p[4] );
 }
 
 chk_int(p) {
