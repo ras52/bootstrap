@@ -1,6 +1,6 @@
 # unistd.s  --  Linux syscalls
 
-# Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 .data
@@ -338,4 +338,25 @@ unlink:
 	RET
 
 
+####	#  Function:	time_t time(time_t *t);
+	#
+.globl time
+time:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+	PUSH	%ebx
 
+	MOVL	8(%ebp), %ebx
+	MOVL	$13, %eax		# 13 == __NR_time
+	INT	$0x80
+	CMPL	$-4096, %eax		# -4095 <= %eax < 0 for errno
+	JNA	.L13
+
+	NEGL	%eax
+	MOVL	%eax, errno
+	XORL	%eax, %eax
+	DECL	%eax
+.L13:
+	POP	%ebx
+	POP	%ebp
+	RET
