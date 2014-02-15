@@ -121,6 +121,30 @@ mk_unmask(strnode)
     return node;
 }
 
+static
+clone_node(src)
+    struct node *src;
+{
+    if (!src) 
+        return src;
+
+    else if ( src->code == 'str' || src->code == 'chr' ||
+              src->code == 'ppno' || src->code == 'id' )
+        return new_strnode( src->code, node_str(src) );
+
+    else if ( src->arity <= 4 ) {
+        struct node *dest = new_node( src->code, src->arity );
+        /* Shallow copy of fields that shouldn't exist to catch where
+         * we've abused the fields in question. */
+        int n;
+        for ( n = src->arity; n < 4; ++n )
+            set_op( dest, n, node_op(src, n) );
+        return dest;
+    }
+
+    else int_error("Cloning a vnode");
+}
+
 do_expand(name)
     char* name;
 {
@@ -138,10 +162,11 @@ do_expand(name)
     set_token( mk_unmask( macd->ops[0] ) ); 
 
     /* By pushing the tokens back in this way, we ensure that we rescan 
-     * the expanded token sequence. */
+     * the expanded token sequence.  We clone them, rather than using 
+     * add_ref(), because the expression parser expectes to modify them. */
     mace = macd->ops[2];
     for ( n = mace->arity; n; --n ) 
-        unget_token( add_ref( mace->ops[n-1] ) );
+        unget_token( clone_node( mace->ops[n-1] ) );
 }
 
 /* Implements the defined() preprocessor function. */
