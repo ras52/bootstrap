@@ -1,6 +1,6 @@
 /* codegen.c  --  code generation pass
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -92,7 +92,13 @@ unary_pre(stream, node, need_lval) {
     auto sz = type_size(node[2]);
     expr_code( stream, node[3], op_needs_lv );
 
-    if      ( op == '+'  ) ;
+    if ( op == '+'  ) {
+        /* Arrays degrade to pointers. */
+        auto src_sz;
+        if ( node[3][2][0] == '[]' ) src_sz = 4;
+        else src_sz = type_size(node[3][2]);
+        promote(stream, node[2][5], src_sz, sz);
+    }
     else if ( op == '-'  ) arith_neg(stream);
     else if ( op == '~'  ) bit_not(stream);
     else if ( op == '!'  ) logic_not(stream);
