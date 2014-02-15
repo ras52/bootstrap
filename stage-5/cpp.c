@@ -24,7 +24,8 @@ struct node {
     struct node* ops[4];
 };
 
-struct node* get_node();
+struct node *get_node();
+struct node *add_ref(); 
 
 /* The preprocessor does not know about keywords. */
 chk_keyword(node) 
@@ -167,7 +168,42 @@ else_direct(stream) {
 }
 
 static
-if_expand(node)
+defined_op(stream) {
+    extern struct node *pb_pop();
+    struct node *name;
+    int val, paren = 0;
+ 
+    set_token(0);
+    int c = pp_next();
+    if ( c == '(' ) {
+        paren = 1;
+        set_token(0);
+        c = pp_next();
+     }
+
+    /* Messy memory management.  The call to set_token() in if_expand() 
+     * expects to free the current token, but we've already done that here.
+     * But depending on whether it's parenthetic, we don't know whether
+     * it wil be the name or the closing parenthesis. */
+    name = add_ref( get_node() );
+    set_token(0);
+    if ( name->code != 'id' )
+        error( "Expected identifier in defined operator" );
+       
+    if ( paren ) {
+        c = pp_next(); 
+        if ( c != ')' ) error( "Expected ')': Got '%Mc'", c);
+        set_token(0);
+    }
+
+    val = pp_defined( node_str(name) );
+    free_node(name);
+
+    return val;
+}
+
+static
+if_expand(stream, node)
     struct node *node;
 {
     /* This is a bit tricky as we cannot remove the current token from
@@ -180,24 +216,29 @@ if_expand(node)
             return 1;
         }
 
+        else if ( strcmp("defined", str) == 0 ) {
+            int val = defined_op(stream);
+
+            struct node *num = new_node( 'num', 0 );
+            set_type( num, add_ref( implct_int() ) );
+            set_op( num, 0, val );
+            set_token( num );
+        }
+
         /* All other identifiers are replaced with 0. */
         else {
-            set_code( node, 'num' );
-            set_type( node, add_ref( implct_int() ) );
-            set_op( node, 0, 0 );
+            struct node *num = new_node( 'num', 0 );
+            set_type( num, add_ref( implct_int() ) );
+            set_op( num, 0, 0 );
+            set_token( num );
         }
     }
 
-    else if ( node->code == 'ppno' ) {
-        /* We would overwrite the token in-place, but the mk_number() code 
-         * allow that; so create a temporary and manually copy over. */
-        struct node *num = mk_number(node);
-        set_code( node, 'num' );
-        set_type( node, add_ref( node_type(num) ) );
-        set_op( node, 0, node_op(num, 0) );
-        free_node(num);
-        return 1;
-    }
+    else if ( node->code == 'prgm' && cpp_pragma(node) )
+        set_token(0);
+
+    else if ( node->code == 'ppno' )
+        set_token( mk_number(node) );
             
     return 0;
 }
@@ -366,6 +407,7 @@ preprocess(output) {
     int c;
     int out_line = 1;
     char* out_file = 0;
+    int put_some = 0;
 
     while ( c = peek_token() ) {
         /* We cannot call take_node() because (i) we don't want to set the
@@ -393,9 +435,12 @@ preprocess(output) {
             print_node(output, node);
             free_node( node );
             next();
+            put_some = 1;
         }
     }
-    fputc('\n', output); /* file needs to end with '\n' */
+    if (put_some)
+        /* file needs to end with '\n' */
+        fputc('\n', output);
 }
 
 static
@@ -540,7 +585,6 @@ handle_eof() {
 }
 
 /* Certain pragmas are handled entirely in the preprocessor. */
-static
 cpp_pragma(node) 
     struct node* node;
 {

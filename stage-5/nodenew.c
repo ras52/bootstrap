@@ -97,6 +97,9 @@ new_node(code, arity) {
     n->code = code; 
     n->arity = arity;
 
+    /* Debugging code: */ /* 
+    extern stderr; fprintf(stderr, "0x%x '%Mc' new\n", n, code); */
+
     return n;
 }
 
@@ -117,6 +120,11 @@ free_node(node)
                 free_node( node->ops[i] );
 
             free_node( node->type );
+
+            /* Debugging code: */ /* 
+            extern stderr; 
+            fprintf(stderr, "0x%x '%Mc' free\n", node, node->code); */
+
             rc_free(node);
         }
     }
@@ -140,8 +148,20 @@ grow_node(node, size, extra)
     int overhead = sizeof(struct node) - sizeof(struct node *[4]);
 
     if ( !rc || size + extra + overhead > rc->capacity ) {
+        struct node *new;
         size += (extra <= size ? size : extra);
-        return rc_realloc( node, size + overhead );
+
+        /* Debugging code: */ /*
+        extern stderr; 
+        if (node) 
+          fprintf(stderr, "0x%x '%Mc' free [realloc]\n", node, node->code); */
+
+        new = (struct node *)rc_realloc( node, size + overhead );
+
+        /* Debugging code: */ /*       
+        fprintf(stderr, "0x%x '%Mc' new [realloc]\n", new, new->code); */
+
+        return new;
     }
 
     return node;

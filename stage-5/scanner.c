@@ -142,3 +142,7 @@ do_get_qlit(stream, c1, c2) {
 handle_eof() {
     return 0;
 }
+
+cpp_pragma() {
+    return 0;
+}

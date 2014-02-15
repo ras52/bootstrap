@@ -480,7 +480,7 @@ static struct node* token;
  * return the code of TOKEN, -1 for EOF, or '\n#' for a # starting a 
  * preprocessor directive. */
 static
-raw_next() {
+raw_next(h_mode) {
     /* Oh! for headers */
     extern struct node* chk_keyword();
     extern struct node* get_number();
@@ -494,9 +494,12 @@ raw_next() {
     if ( token = pb_pop() )
         return node_code( token );
 
-    c = skip_white(stream);
+    if ( h_mode )
+        c = skip_hwhite(stream);
+    else
+        c = skip_white(stream);
     
-    if ( c == -1 || c == '\n#' ) {
+    if ( c == -1 || c == '\n#' || h_mode && c == '\n' ) {
         token = 0;
         return c;
     }
@@ -522,18 +525,28 @@ raw_next() {
     return node_code( token );
 }
 
+/* Skip over a token.  This is used when skipping disabled #if..#else block. */
 next_skip() {
-    auto c = raw_next();
+    auto c = raw_next(0);
     free_node( token );
     return c;
 }
 
+/* This is used in horizontal mode by the preprocessor. */
+pp_next() {
+    while (1) {
+        auto c = raw_next(0);
+        if ( c == 'prgm' && cpp_pragma(token) )
+            free_node( token );
+        else return c;
+    }
+}
 
 /* Read the next lexical element, handling preprocessing directives */
 next() {
     auto c;
     do {
-        c = raw_next();
+        c = raw_next(0);
         if ( c == -1 ) {
             /* In the preprocessor, there might be another file to handle. */
             if ( handle_eof() ) c = '\n#';
@@ -566,16 +579,16 @@ pp_slurp(stream, node_ptr, try_expand)
                 break;
         }
        
-        raw_next();
+        raw_next(0);
 
         /* If (*try_expand)() returns true, then it has handled the token,
          * and probably pushed something onto the push-back stack. */
-        while ( try_expand && try_expand(token) ) 
+        while ( try_expand && try_expand(stream, token) ) 
             ;
 
         c = peek_token();
 
-        if ( node_ptr ) 
+        if ( node_ptr && token )
             *node_ptr = vnode_app( *node_ptr, token );
         else
             free_node( token );

@@ -31,5 +31,5 @@ TODO:
   - Tentative definitions
   - Prototypes
   - Unions, bit fields (probably not in this stage?), floats
-  - #error, defined()
+  - #error
   - Macros with arguments, # and ##
