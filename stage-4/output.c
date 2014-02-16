@@ -235,9 +235,27 @@ putchar( c ) {
     return fputc( c, stdout );
 }
 
+static
+pad( stream, width, n ) {
+    auto written = 0;
+    if ( width >= 0 && n < width ) {
+        /*           1234567890123456  */
+        auto pad = "                ";
+        n = width - n;
+        while ( n ) {
+            auto m = n > 16 ? 16 : n;
+            if ( __fputsn(pad, m, stream) == -1 )
+                return -1;
+            n -= m; written += m;
+        }
+    }
+    return written;
+}
+
 /* The C library vfprintf() */
 vfprintf( stream, fmt, ap ) {
-    auto written = 0, c, n;
+    auto written = 0, c, n, m;
+    auto width;
     while ( c = rchar(fmt++, 0) ) {
         /* Pass normal characters straight through.
          * TODO:  We could strchr for '%' and push through the whole lot
@@ -251,75 +269,83 @@ vfprintf( stream, fmt, ap ) {
 
         c = rchar(fmt++, 0);
 
+        /* Do we have a field width? */
+        width = -1;
+        if ( isdigit(c) ) {
+            width = strtoul(--fmt, &fmt, 10);
+            c = rchar(fmt++, 0);
+        }
+
         /* This is our extension:  %Mc prints a multicharacter constant */
         if (c == 'M') {
             c = rchar(fmt++, 0);
             if (c == 'c') {
                 ap += 4;
                 n = strnlen(ap, 4);
-                if ( __fputsn(ap, n, stream) != n )
+                if ( ( m = pad( stream, width, n ) ) == -1 ||
+                     __fputsn(ap, n, stream) != n )
                     return -1; 
-                written += n;
+                written += m + n;
             }
-            /* %MX for any other X prints a literal 'M', and backtracks for 
-             * the 'X' */
+            /* An other %MX forms are supported, so print it literally. */
             else {
-                c = rchar(--fmt, 0);
-                if ( fputc(c, stream) == -1 )
+                if ( fputc('%', stream) == -1 )
                     return -1;
                 ++written;
+                fmt -= 2;
             }
         }
         /* %c prints a normal character */
         else if (c == 'c') {
             ap += 4;
-            if ( fputc(*ap, stream) == -1 )
+            if ( ( m = pad( stream, width, 1 ) ) == -1 ||
+                 fputc(*ap, stream) == -1 )
                 return -1;
-            ++written;
+            written += m + 1;
         }
         /* %s prints a null-terminated character string */
         else if (c == 's') {
             ap += 4;
-            if ( ( n = fputs(*ap, stream) ) == -1 )
+            if ( ( m = pad( stream, width, strlen(*ap) ) ) == -1 ||
+                 ( n = fputs(*ap, stream) ) == -1 )
                 return -1; 
-            written += n;
+            written += m + n;
         }
         /* %d prints a decimal number  */
         else if (c == 'd') {
             ap += 4;
             if (*ap == 0) { 
-                if ( fputc('0', stream) == -1 )
+                if ( ( m = pad( stream, width, 1 ) ) == -1 ||
+                     fputc('0', stream) == -1 )
                     return -1;
-                ++written;
+                written += m + 1;
             }
             else {
                 /* We don't currently support character arrays. */
-                auto buffer[4] = {0,0,0,0},  b = 14,  i = *ap;
+                auto buffer[4] = {0,0,0,0},  b = 14,  i = *ap, neg = 0;
 
-                if (i < 0) {
-                    if ( fputc('-', stream) == -1 )
-                        return -1;
-                    ++written;
-                    i = -i;
-                }
+                if (i < 0) { neg = 1; i = -i; }
 
                 while (i) {
                     lchar(buffer, b--, i % 10 + '0');
                     i /= 10;
                 }
 
-                if ( ( n = fputs(buffer+b+1, stream) ) == -1 )
+                if ( ( m = pad( stream, width, 14-b+neg ) ) == -1 ||
+                     neg && fputc('-', stream) == -1 ||
+                     ( n = fputs(buffer+b+1, stream) ) == -1 )
                     return -1; 
-                written += n;
+                written += m + n + neg;
             }
         }
         /* %x prints a hexdecimal number  */
         else if (c == 'x') {
             ap += 4;
             if (*ap == 0) { 
-                if ( fputc('0', stream) == -1 )
+                if ( ( m = pad( stream, width, 1 ) ) == -1 ||
+                     fputc('0', stream) == -1 )
                     return -1;
-                ++written;
+                written += m + 1;
             }
             else {
                 /* We don't currently support character arrays. */
@@ -332,16 +358,19 @@ vfprintf( stream, fmt, ap ) {
                     i /= 16;
                 }
 
-                if ( ( n = fputs(buffer+b+1, stream) ) == -1 )
+                if ( ( m = pad( stream, width, 14-b ) ) == -1 ||
+                     ( n = fputs(buffer+b+1, stream) ) == -1 )
                     return -1; 
-                written += n;
+                written += m + n;
             }
         }
-        /* %X for any other X prints a literal 'X' */
+        /* Either %% or an unsupported format specifier: just print it out */
         else {
-            if ( fputc(c, stream) == -1 )
+            if ( fputc('%', stream) == -1 )
                 return -1;
             ++written;
+            if ( c != '%' && width == -1 ) 
+                --fmt;
         }
     }
 
