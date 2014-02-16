@@ -1,6 +1,6 @@
 # stage-5/Makefile
 
-# Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 SHELL = /bin/sh
@@ -76,7 +76,7 @@ CPP_OBJS = scanbase.o cpp.o nodenew.o macros.o pvector.o cli.o expr.o \
 cpp:	ld libc.o crt0.o $(CPP_OBJS)
 	ld -o $@ crt0.o $(CPP_OBJS) libc.o
 
-CC_OBJS = pvector.o cc.o cli.o
+CC_OBJS = pvector.o timeconv.o cc.o cli.o
 
 cc:	ld libc.o crt0.o $(CC_OBJS:%.o=%2.o)
 	ld -o $@ crt0.o $(CC_OBJS:%.o=%2.o) libc.o

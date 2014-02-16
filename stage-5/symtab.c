@@ -199,7 +199,7 @@ member_type( struct_name, mem_name, off_ptr ) {
     if (!e) int_error("No such struct found '%s'", struct_name);
  
     e = lookup_tab( &e[5], 24, mem_name );    /* sizeof(sym_entry) */
-    if (!e) error("Struct %s has no member %s", struct_name, mem_name);
+    if (!e) error("No member %s in struct %s", mem_name, struct_name);
     if (off_ptr) *off_ptr = e[3];
     return e[5][2];
 }

@@ -201,11 +201,9 @@ cmp_op(stream, node) {
 static
 binary_op(stream, node, need_lval) {
     auto op = node[0], sz = type_size( node[2] );
+
     expr_code( stream, node[3], is_assop(op) );
-
-    /* Discard the l.h.s. of the , operator. */
-    if ( op != ',' ) asm_push( stream );
-
+    asm_push( stream );
     expr_code( stream, node[4], 0 );
 
     if      ( op == '[]'  ) subscript(stream, node, need_lval);
@@ -232,7 +230,7 @@ binary_op(stream, node, need_lval) {
     else if ( op == '|='  ) pop_bitor(stream, 1, sz);
     else if ( op == '^='  ) pop_bitxor(stream, 1, sz);
 
-    else if ( op != ','   ) int_error("Unknown operator: '%Mc'", op);
+    else int_error("Unknown operator: '%Mc'", op);
 
     /* The assignment operators are implemented to return lvalues, but
      * the C standard says they're not lvalues.  (The C++ standard has
@@ -264,6 +262,11 @@ opexpr_code(stream, node, need_lval) {
     else if ( op == '<' || op == '>' || op == '<=' || op == '>='
               || op == '==' || op == '!=' )
         cmp_op( stream, node );
+
+    else if ( op == ',' ) {
+        expr_code( stream, node[3], 0 );
+        expr_code( stream, node[4], 0 );
+    }
 
     /* Binary operators */
     else if ( node[1] == 2 )

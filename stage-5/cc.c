@@ -1,12 +1,13 @@
 /* cc.c  --  the C compiler driver
  *  
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */ 
 
 /* The Makefile sticks --compat on the command line.  Remove it. */
 #pragma RBC compatibility 5 
 
+#include <time.h>
 #include "pvector.h"
 
 static struct pvector *temps, *pp_args, *cc_args, *as_args, *ld_args;
@@ -265,12 +266,20 @@ link(argc, argv)
     return fail;
 }
 
+static char *months[12] = { 
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
+
 main(argc, argv)
     int argc;
     char **argv;
 {
     char** t;
     int res;
+    time_t now = time(NULL);
+    struct tm *tm = gmtime(&now);
+    char buf1[32], buf2[32];
 
     temps = pvec_new();
     pp_args = pvec_new(); pvec_push( pp_args, "cpp" );
@@ -283,6 +292,15 @@ main(argc, argv)
      * to include new functionality. */
     pvec_push( pp_args, "-Iinclude" );
     pvec_push( pp_args, "-include=include/rbc_init.h" );
+
+    /* Define these standard macros, as they need compiler support. 
+     * Other variables, such as __STDC__ probably belong in <rbc_init.h>. */ 
+    snprintf(buf1, 32, "-D__DATE__=\"%3s %2d %4d\"", 
+             months[tm->tm_mon], tm->tm_mday, tm->tm_year+1900);
+    snprintf(buf2, 32, "-D__TIME__=\"%02d:%02d:%02d\"", 
+             tm->tm_hour, tm->tm_min, tm->tm_sec);
+    pvec_push( pp_args, buf1 );
+    pvec_push( pp_args, buf2 );
 
     parse_args( argc, argv );
     res = preprocess(argc, argv);
