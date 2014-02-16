@@ -236,11 +236,10 @@ putchar( c ) {
 }
 
 static
-pad( stream, width, n ) {
+pad( stream, width, n, padc ) {
     auto written = 0;
     if ( width >= 0 && n < width ) {
-        /*           1234567890123456  */
-        auto pad = "                ";
+        auto pad[5];  memset( pad, padc, 16 );
         n = width - n;
         while ( n ) {
             auto m = n > 16 ? 16 : n;
@@ -255,8 +254,9 @@ pad( stream, width, n ) {
 /* The C library vfprintf() */
 vfprintf( stream, fmt, ap ) {
     auto written = 0, c, n, m;
-    auto width;
     while ( c = rchar(fmt++, 0) ) {
+        auto width = -1, padc = ' ';
+
         /* Pass normal characters straight through.
          * TODO:  We could strchr for '%' and push through the whole lot
          * with fputs */
@@ -269,8 +269,13 @@ vfprintf( stream, fmt, ap ) {
 
         c = rchar(fmt++, 0);
 
+        /* Do we have a '0' flag? */
+        if ( c == '0' ) {
+            padc = c;
+            c = rchar(fmt++, 0);
+        }  
+
         /* Do we have a field width? */
-        width = -1;
         if ( isdigit(c) ) {
             width = strtoul(--fmt, &fmt, 10);
             c = rchar(fmt++, 0);
@@ -282,7 +287,7 @@ vfprintf( stream, fmt, ap ) {
             if (c == 'c') {
                 ap += 4;
                 n = strnlen(ap, 4);
-                if ( ( m = pad( stream, width, n ) ) == -1 ||
+                if ( ( m = pad( stream, width, n, ' ' ) ) == -1 ||
                      __fputsn(ap, n, stream) != n )
                     return -1; 
                 written += m + n;
@@ -298,7 +303,7 @@ vfprintf( stream, fmt, ap ) {
         /* %c prints a normal character */
         else if (c == 'c') {
             ap += 4;
-            if ( ( m = pad( stream, width, 1 ) ) == -1 ||
+            if ( ( m = pad( stream, width, 1, ' ' ) ) == -1 ||
                  fputc(*ap, stream) == -1 )
                 return -1;
             written += m + 1;
@@ -306,7 +311,7 @@ vfprintf( stream, fmt, ap ) {
         /* %s prints a null-terminated character string */
         else if (c == 's') {
             ap += 4;
-            if ( ( m = pad( stream, width, strlen(*ap) ) ) == -1 ||
+            if ( ( m = pad( stream, width, strlen(*ap), ' ' ) ) == -1 ||
                  ( n = fputs(*ap, stream) ) == -1 )
                 return -1; 
             written += m + n;
@@ -315,7 +320,7 @@ vfprintf( stream, fmt, ap ) {
         else if (c == 'd') {
             ap += 4;
             if (*ap == 0) { 
-                if ( ( m = pad( stream, width, 1 ) ) == -1 ||
+                if ( ( m = pad( stream, width, 1, padc ) ) == -1 ||
                      fputc('0', stream) == -1 )
                     return -1;
                 written += m + 1;
@@ -331,8 +336,11 @@ vfprintf( stream, fmt, ap ) {
                     i /= 10;
                 }
 
-                if ( ( m = pad( stream, width, 14-b+neg ) ) == -1 ||
+                if ( padc != '0' && 
+                         ( m = pad( stream, width, 14-b+neg, padc ) ) == -1 ||
                      neg && fputc('-', stream) == -1 ||
+                     padc == '0' && 
+                         ( m = pad( stream, width, 14-b+neg, padc ) ) == -1 ||
                      ( n = fputs(buffer+b+1, stream) ) == -1 )
                     return -1; 
                 written += m + n + neg;
@@ -342,7 +350,7 @@ vfprintf( stream, fmt, ap ) {
         else if (c == 'x') {
             ap += 4;
             if (*ap == 0) { 
-                if ( ( m = pad( stream, width, 1 ) ) == -1 ||
+                if ( ( m = pad( stream, width, 1, padc ) ) == -1 ||
                      fputc('0', stream) == -1 )
                     return -1;
                 written += m + 1;
@@ -358,7 +366,7 @@ vfprintf( stream, fmt, ap ) {
                     i /= 16;
                 }
 
-                if ( ( m = pad( stream, width, 14-b ) ) == -1 ||
+                if ( ( m = pad( stream, width, 14-b, padc ) ) == -1 ||
                      ( n = fputs(buffer+b+1, stream) ) == -1 )
                     return -1; 
                 written += m + n;
