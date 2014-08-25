@@ -4,7 +4,7 @@
  * All rights reserved.
  */
 
-/* Is the --compat flag given? */
+/* Is the --compatibility=4 flag given? */
 compat_flag = 0;
 
 static
@@ -17,7 +17,7 @@ compile(output) {
 }
 
 usage() {
-    cli_error("Usage: ccx [--compat] [-o filename.s] filename.c\n");
+    cli_error("Usage: ccx [--compatibility=N] [-o filename.s] filename.c\n");
 }
 
 main(argc, argv) 
@@ -26,25 +26,31 @@ main(argc, argv)
 {
     extern char* strdup();
     extern struct FILE* fopen();
+    extern char* opt_arg();
 
     auto char *filename = 0, *outname = 0;
-    auto int l, i = 0, freeout = 0;
+    auto int l, i = 1, freeout = 0;
     auto struct FILE* file;
 
-    while ( ++i < argc ) {
-        if ( strcmp( argv[i], "-o" ) == 0 ) {
-            if ( ++i == argc ) usage();
+    while ( i < argc ) {
+        auto char *arg = argv[i], *arg2;
+
+        if ( arg2 = opt_arg( argv, argc, &i, "-o" ) ) {
             if ( outname ) cli_error(
-                "cc: multiple output files specified: '%s' and '%s'\n",
-                outname, argv[i]);
-            outname = argv[i];
+                "Multiple output files specified: '%s' and '%s'\n",
+                outname, arg2 );
+            outname = arg2;
         }
 
-        else if ( strcmp( argv[i], "--help" ) == 0 ) 
+        else if ( strcmp( arg, "--help" ) == 0 ) 
             usage();
 
-        else if ( strcmp( argv[i], "--compat" ) == 0 )
-            compat_flag = 1;
+        else if ( arg2 = opt_arg( argv, argc, &i, "--compatibility" ) ) {
+            if ( strcmp( arg2, "4" ) == 0 )
+                compat_flag = 1;
+            else if ( strcmp( arg2, "5" ) != 0 )
+                cli_error("Compatibility with stage %s not supported", arg2);
+        }
 
         else if ( rchar(argv[i], 0) == '-' )
             cli_error("cc: unknown option: %s\n", argv[i]);
@@ -54,6 +60,7 @@ main(argc, argv)
                 "cc: multiple input files specified: '%s' and '%s'\n",
                 filename, argv[i]);
             filename = argv[i];
+            ++i;
         }
     }
 

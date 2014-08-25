@@ -171,7 +171,8 @@ node_lchar( node_ptr, len_ptr, chr )
 }
 
 /* Push-back facility doesn't really belong here, but having to keep 
- * compatibility with the stage-5 cc without --compat is tricky. 
+ * compatibility with the stage-5 cc without --compatibility=4 is 
+ * painful. 
  *
  * This is a struct pb_slot { struct node* token; struct pb_slot* next } *; */
 static pb_stack = 0;

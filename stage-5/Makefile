@@ -38,16 +38,16 @@ $(INIT) $(XINIT):
 %0.s:	%.c cc0
 	cc0 -S -o $@ $<
 
-# The --compat option enables compatibility with the stage-4 cc.
+# The --compatibility=4 flag enables compatibility with the stage-4 cc.
 %1.s:	%.c ccx1
-	ccx1 --compat -o $@ $<
+	ccx1 --compatibility=4 -o $@ $<
 
-# We cannot remove the --compat flag on this build, because of the untyped
+# We cannot remove --compatibility=4 on this build, because of the untyped
 # use of structs-as-arrays in the code.  They should be coded as structs,
 # but that's not possible because it would be too difficult to add struct 
 # support to the stage-4 cc.
 %2.s:	%.i ccx
-	ccx --compat -o $@ $<
+	ccx --compatibility=4 -o $@ $<
 
 %.i:	%.c cpp
 	cpp -Iinclude -o $@ $<
@@ -55,6 +55,7 @@ $(INIT) $(XINIT):
 %.s:	%.c ccx
 	ccx -o $@ $<
 
+# All these files get compiled with --compatibility=4
 CCX_OBJS  = scanbase.o scanner.o symtab.o expr.o stmt.o type.o \
             codegen.o i386.o main.o cli.o
 
@@ -69,7 +70,9 @@ ccx1:	ld libc.o crt0.o $(CCX0_OBJS:%.o=%0.o)
 ccx:	ld libc.o crt0.o $(CCX1_OBJS:%.o=%1.o)
 	ld -o $@ crt0.o $(CCX1_OBJS:%.o=%1.o) libc.o
 
-# These files need to compile without preprocessing
+# These files need to compile without preprocessing, and are not given
+# --compatiibility=4.  Note that cli.o, scanbase.o and expr.o are also 
+# used by the compiler and need also to compile with the stage 4 cc.
 CPP_OBJS = scanbase.o cpp.o nodenew.o macros.o pvector.o cli.o expr.o \
            cpptype.o eval.o
 
@@ -91,7 +94,7 @@ clean:
 	$(RM) -f $(CCX1_OBJS:%.o=%2.s) $(CCX1_OBJS:%.o=%2.i) 
 	$(RM) -f $(CCX1_OBJS:%.o=%2.o) ccx2
 	$(RM) -f $(CC_OBJS:%.o=%.i) $(CC_OBJS:%.o=%2.s) $(CC_OBJS:%.o=%2.s) cc
-	$(RM) -f cc2
+	$(RM) -f $(CC_OBJS:%.o=%2.o) cc2
 
 check:	ccx2 cc2
 	$(CMP) ccx2 ccx

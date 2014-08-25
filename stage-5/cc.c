@@ -4,7 +4,7 @@
  * All rights reserved.
  */ 
 
-/* The Makefile sticks --compat on the command line.  Remove it. */
+/* The Makefile sticks --compatibility=4 on the command line.  Remove it. */
 #pragma RBC compatibility 5 
 
 #include <time.h>
@@ -17,7 +17,7 @@ static int nostdlib = 0;    /* --nostdlib */
 
 static
 usage() {
-    cli_error("Usage: cc {-E | -S | -c} [-o output] [options] files...\n");
+    cli_error("Usage: cc [-E | -S | -c] [-o output] [options] files...\n");
 }
 
 extern char* opt_arg();
@@ -66,7 +66,7 @@ parse_args(argc, argv)
             o_name = arg2;
         }
 
-        else if ( strcmp( arg, "--compat" ) == 0 ) {
+        else if ( arg2 = opt_arg( argv, argc, &i, "--compatibility" ) ) {
             pvec_push( cc_args, arg ); ++i;
         }
 
@@ -291,7 +291,7 @@ main(argc, argv)
      * nor the preprocessor, need to be updated when the compiler is updated 
      * to include new functionality. */
     pvec_push( pp_args, "-Iinclude" );
-    pvec_push( pp_args, "-include=include/rbc_init.h" );
+    pvec_push( pp_args, "--include=include/rbc_init.h" );
 
     /* Define these standard macros, as they need compiler support. 
      * Other variables, such as __STDC__ probably belong in <rbc_init.h>. */ 

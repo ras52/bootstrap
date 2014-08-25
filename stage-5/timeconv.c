@@ -4,7 +4,7 @@
  * All rights reserved.
  */ 
 
-/* The Makefile sticks --compat on the command line.  Remove it. */
+/* The Makefile sticks --compatibility=4 on the command line.  Remove it. */
 #pragma RBC compatibility 5 
 
 #include <bits/struct_tm.h>

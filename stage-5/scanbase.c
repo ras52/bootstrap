@@ -245,6 +245,7 @@ pp_dir(stream) {
     auto char* str;
     auto int c;
 
+    /* Is it the null directive? */
     if ( !tok )
         return 0;
 

@@ -192,7 +192,7 @@ chk_assign(node) {
                 error("Cannot assign from an incompatible pointer");
         }
         else if ( compat_flag && type1 == s_int )
-            /* Allow assignment to implicit int with --compat */ ;
+            /* Allow assignment to implicit int with --compatibility=4 */ ;
         else if ( type2 == s_int && node[4][0] == 'num' && node[4][3] == 0 )
             /* Allow '0' as a null-pointer literal */ ;
         else
