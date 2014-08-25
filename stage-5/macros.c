@@ -11,7 +11,7 @@ struct node* vnode_app();
 char* node_str();
 
 /* A macro definition is just a 'macd' node with 3 operands: 
- * [0] name, [1] unused (reserved for params), [2] expansion;
+ * [0] name, [1] is the parameter list, [2] expansion;
  * slot [3] is (ab)used for an is-masked flag.  The expansion op
  * is a 'mace' vnode all of whose operands are tokens in the expansion.  
  * The node struct is documented in nodenew.c.
@@ -64,6 +64,36 @@ is_builtin(name) {
     return strcmp( "__FILE__", name ) == 0 || strcmp( "__LINE__", name ) == 0;
 }
 
+static
+struct node *
+ident_list(stream) {
+    int c;
+    struct node *p = new_node('()', 0);
+    p = vnode_app( p, 0 );  /* Macros don't have return type */
+
+    fgetc(stream);  /* skip ')' */
+    c = skip_hwhite(stream);
+    if ( c == ')' ) 
+        return p;
+
+    while (1) {
+        if ( !isidchar1(c) )
+            error( "Expected identifier as macro parameter" );
+        p = vnode_app( p, get_word( stream, c ) );
+    
+        c = skip_hwhite(stream);
+        if ( c == ')' ) break;
+        else if ( c != ',' ) 
+            error("Expected comma separating macro parameters");
+
+        c = skip_hwhite(stream);
+    }
+
+    /* We've just called skip_hwhite() whhich as returned ')', which means
+     * that character has been read and not ungetc()'d. */
+    return p;
+}
+
 /* Handle a #define directive. */
 defn_direct(stream) {
     struct node *macd = new_node('macd', 3);
@@ -79,7 +109,19 @@ defn_direct(stream) {
     if ( strcmp(name, "defined") == 0 || is_builtin(name) )
         error("Cannot redefine '%s'", name);
 
-    /* TODO:  Require whitespace before the expansion list */
+    /* We need to test here for *any* whitespace, so we bypass the normal 
+     * test routine with skip_white(). */
+    ungetc( c = fgetc(stream), stream );
+
+    /* lparen doesn't permit preceding whitespace */
+    if ( c == '(' )
+        macd->ops[1] = ident_list(stream);
+
+    /* Require whitespace (incl. '\n') before the expansion list.  
+     * XXX It's not clear to me that this is correct in C90. */
+    else if ( !isspace(c) ) 
+        error("Expected whitespace before macro replacement list");
+
     macd->ops[2] = new_node('mace', 0);
     pp_slurp(stream, &macd->ops[2], 0);
 
@@ -221,6 +263,9 @@ do_expand2(name)
         int_error("Attempt to expand undefined macro: %s", name);
     macd->ops[3] = (struct node*) 1;
     set_token( mk_unmask( macd->ops[0] ) ); 
+
+    if ( macd->ops[1] )
+        error("Expansion of function-like macros is not supported");
 
     /* By pushing the tokens back in this way, we ensure that we rescan 
      * the expanded token sequence.  We clone them, rather than using 

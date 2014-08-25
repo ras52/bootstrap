@@ -478,8 +478,8 @@ is_op(op) {
 static struct node* token;
 
 /* Read the next lexical element into TOKEN without preprocessing, and
- * return the code of TOKEN, -1 for EOF, or '\n#' for a # starting a 
- * preprocessor directive. */
+ * return the code of TOKEN, -1 for EOF, or if H_MODE '\n' for a new line
+ * and if not H_NODE '\n#' for a # starting a preprocessor directive. */
 static
 raw_next(h_mode) {
     /* Oh! for headers */

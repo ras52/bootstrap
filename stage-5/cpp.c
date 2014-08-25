@@ -202,6 +202,7 @@ defined_op(stream) {
     return val;
 }
 
+/* This is the call-back used to expand tokens on an #if line. */
 static
 if_expand(stream, node)
     struct node *node;
@@ -213,6 +214,8 @@ if_expand(stream, node)
         char *str = node_str(node);
         if ( can_expand(str) ) {
             do_expand(str);
+            /* Returning 1 tells pp_slurp that we haven't set a token, but to 
+               call us again. */
             return 1;
         }
 
