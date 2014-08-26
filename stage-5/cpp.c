@@ -26,6 +26,10 @@ struct node {
 
 struct node *get_node();
 struct node *add_ref(); 
+struct node* new_node();
+struct node* vnode_app();
+struct node* next();
+struct node* pp_next();
 
 /* The preprocessor does not know about keywords. */
 chk_keyword(node) 
@@ -174,12 +178,16 @@ defined_op(stream) {
     int val, paren = 0;
  
     set_token(0);
-    int c = pp_next();
+    int c = pp_next()->code;
+
     if ( c == '(' ) {
         paren = 1;
         set_token(0);
-        c = pp_next();
+        c = pp_next()->code;
      }
+
+    if ( c == -1 || c == '\n' )
+        error( "Expected identifier in defined operator" );
 
     /* Messy memory management.  The call to set_token() in if_expand() 
      * expects to free the current token, but we've already done that here.
@@ -191,7 +199,7 @@ defined_op(stream) {
         error( "Expected identifier in defined operator" );
        
     if ( paren ) {
-        c = pp_next(); 
+        c = pp_next()->code; 
         if ( c != ')' ) error( "Expected ')': Got '%Mc'", c);
         set_token(0);
     }
@@ -211,15 +219,12 @@ if_expand(stream, node)
      * the stack: instead, we must overwrite the current token to avoid 
      * an infinite loop. */
     if ( node->code == 'id' ) {
-        char *str = node_str(node);
-        if ( can_expand(str) ) {
-            do_expand(str);
+        if ( try_expand(node, pp_next) )
             /* Returning 1 tells pp_slurp that we haven't set a token, but to 
                call us again. */
             return 1;
-        }
 
-        else if ( strcmp("defined", str) == 0 ) {
+        if ( strcmp( "defined", node_str(node) ) == 0 ) {
             int val = defined_op(stream);
 
             struct node *num = new_node( 'num', 0 );
@@ -446,24 +451,21 @@ preprocess(output) {
          * also necessary to get the right line numbers in the file. */
         struct node* node = get_node();
 
-        if ( c == 'id' && can_expand( node_str(node) ) ) {
-            /* It's a macro that has been expanded and pushed back on to
-             * the parser stack: we do that to ensure proper re-scanning. */
-            do_expand( node_str(node) );
-        }
-        else if ( c == 'prgm' && cpp_pragma(node) ) {
+        if ( c == 'prgm' && cpp_pragma(node) ) {
             /* It's a pragma that's been handled entirely in a preprocessor
              * and should not be included in the output. */
             free_node( node );
             next();
+            continue;
         }
-        else {
-            set_line( &out_line, &out_file, output );
-            print_node(output, node);
-            free_node( node );
-            next();
-            put_some = 1;
-        }
+        else if ( c == 'id' && try_expand(node, next) )
+            continue;
+
+        set_line( &out_line, &out_file, output );
+        print_node(output, node);
+        free_node( node );
+        next();
+        put_some = 1;
     }
     if (put_some)
         /* file needs to end with '\n' */

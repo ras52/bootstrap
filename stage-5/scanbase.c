@@ -25,6 +25,7 @@ print_msg(fmt, ap)
     fprintf(stderr, "%s:%d: ", filename, line);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
+    fflush(stderr); /* Should this be necessary? */ 
 }
 
 warning(fmt)
@@ -536,10 +537,10 @@ next_skip() {
 /* This is used in horizontal mode by the preprocessor. */
 pp_next() {
     while (1) {
-        auto c = raw_next(0);
+        auto c = raw_next(1);
         if ( c == 'prgm' && cpp_pragma(token) )
             free_node( token );
-        else return c;
+        else return token;
     }
 }
 

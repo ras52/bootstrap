@@ -111,7 +111,12 @@ free_node(node)
         struct rc_node* rc = (unsigned char*)node - sizeof(struct rc_node);
 
         /* Trap for double delete */ 
-        if ( rc->ref_count == 0 ) abort();
+        if ( rc->ref_count == 0 ) { 
+            extern stderr; 
+            fprintf( stderr, "Double delete of node type '%Mc' at 0x%x\n",
+                     node->code, node );
+            abort();
+        }
 
         /* Only delete if the reference count drops to zero. */
         if ( --rc->ref_count == 0 ) {

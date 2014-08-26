@@ -264,9 +264,6 @@ do_expand2(name)
     macd->ops[3] = (struct node*) 1;
     set_token( mk_unmask( macd->ops[0] ) ); 
 
-    if ( macd->ops[1] )
-        error("Expansion of function-like macros is not supported");
-
     /* By pushing the tokens back in this way, we ensure that we rescan 
      * the expanded token sequence.  We clone them, rather than using 
      * add_ref(), because the expression parser expectes to modify them. */
@@ -291,12 +288,20 @@ pp_defined(name)
     return is_builtin(name) || get_macro(name) ? 1 : 0;
 }
 
-can_expand(name)
+/* Returns 0 if NAME is not a macro or is masked, 1 if NAME is an object-like
+ * macro, and 2 if it is a function-like macro. */
+macro_type(name)
     char* name;
 {
     struct node *macro = get_macro(name);
+
     /* Slot [3] is used as an is-masked flag. */
-    return macro && !macro->ops[3] || is_builtin(name);
+    if (!macro || macro->ops[3]) return 0;
+
+    /* All builtins are object-like, currently. */
+    if (is_builtin(name)) return 1; 
+
+    return macro->ops[1] ? 2 : 1;
 }
 
 cpp_unmask(name) 
@@ -337,4 +342,103 @@ parse_d_opt(arg)
         macd->ops[2] = vnode_app( macd->ops[2], t );
     
     vec_grow(macd);
+}
+
+/* The current token is the '('.  Read macro arguments to the corresponding 
+ * ')', which is left as head of the stack. */
+static
+macro_args(name_node, next_fn) 
+    struct node *name_node;
+    struct node *(*next_fn)();
+{
+    char *name = node_str(name_node);
+    struct node *macro = get_macro(name);
+    struct node *args = new_node('()', 0), *arg = 0, *n;
+    int depth = 0, n_params, n_args;
+
+    args = vnode_app( args, name_node );
+
+    /* Skip the opening '(' */
+    free_node( get_node() );
+    n = next_fn();
+
+    while (1) {
+        /* We don't know whether this is a EOF or end of line: that 
+         * depends on whether next_fn is pp_next or next. */
+        if (!n) error("Incomplete macro argument list");
+
+        if ( n->code == '(' ) ++depth;
+        else if ( n->code == ')' ) {
+            if ( depth == 0 ) break;  
+            else --depth;
+        }
+
+        /* If the first argument is empty, e.g. in f(,x) then arg is 
+         * undefined.  This is necessary because f() can be a macro
+         * invocation with one empty argument or with zero arguments. */
+        if (!arg) arg = new_node('mace', 0);
+
+        if ( n->code == ',' && depth == 0 ) {
+            args = vnode_app( args, arg );
+            arg = new_node('mace', 0);
+            free_node(n);
+        }
+        else
+            arg = vnode_app( arg, n );
+
+        n = next_fn();        
+    }
+
+    /* Note: The '()' nodes have slot zero reserved for a return type
+     * or callee.  This is for consistency with elsewhere in the code.  
+     * Hence using arity-1 throughout. */
+    n_params = macro->ops[1]->arity-1;
+    n_args = args->arity-1;
+
+    /* We cannot distinguish between zero arguments and one empty argument,
+     * so we try to DTRT. */
+    if ( n_params == 1 && n_args == 0 && !arg )
+        arg = new_node('mace', 0);
+
+    if (arg) { args = vnode_app( args, arg ); ++n_args; }
+
+    if ( n_params != n_args )
+        error( "Macro '%s' expects %d arguments but called with %d arguments",
+               name, n_params, n_args );
+
+    return args;
+}
+
+try_expand(node, next_fn)
+    struct node *node;
+    struct node *(*next_fn)();
+{
+    char *name = node_str(node);
+    int mac_type = macro_type(name);
+    
+    if ( mac_type == 1 ) {
+        /* It's a macro that will be expanded and pushed back on to
+         * the parser stack by do_expand: we do that to ensure proper 
+         * re-scanning. */
+        do_expand(name);
+        return 1;
+    }
+    else if ( mac_type == 2 ) {
+        /* Function-like macros are only expanded if the next pp token
+         * is an open bracket.  This allows the (fn)(a, b) syntax to 
+         * be used to suppress macro expansion of a macro that hides
+         * a function of the same name. */
+        struct node *brack = next_fn();
+        if (brack && brack->code == '(') {
+            struct node *args = macro_args(node, next_fn);
+
+            warning("Function-like macros expansion not supported");
+            do_expand(name); /* will overwrite ')' */
+            free_node(args);
+            return 1;
+        }
+        else unget_token(node);
+    }
+
+    return 0;
 }
