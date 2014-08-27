@@ -94,12 +94,40 @@ ident_list(stream) {
     return p;
 }
 
+static
+find_params(macd) 
+    struct node *macd;
+{
+    int i, j;
+    struct node *mace = macd->ops[2], *params = macd->ops[1];
+
+    /* Iterate over the replacement list looking for identifiers */
+    for ( i = 0; i < mace->arity; ++i ) {
+        struct node *n = mace->ops[i];
+        if ( n->code == 'id' ) {
+            /* Iterate over the parameter list checking N is a parameter */
+            for ( j = 1; j < params->arity; ++j ) {
+                struct node *p = params->ops[j];
+                if ( strcmp( node_str(n), node_str(p) ) == 0 ) {
+                    /* Replace the 'id' node with a parameter node, 'macp'.
+                     * This has arity 0, and abuses slot [0] for the parameter
+                     * number. */
+                    free_node(n);
+                    n = mace->ops[i] = new_node('macp', 0);
+                    n->ops[0] = (struct node*) j;
+                    break;
+                }
+            }
+        }
+    }
+}
+
 /* Handle a #define directive. */
 defn_direct(stream) {
     struct node *macd = new_node('macd', 3);
     char *name;
 
-    int c = skip_hwhite(stream);
+    int c = skip_hwhite(stream), i;
 
     if ( !isidchar1(c) )
         error("Expected identifier in #define directive");
@@ -128,6 +156,10 @@ defn_direct(stream) {
     /* TODO:  We're allowed repeat definitions if they're identical. */
     if ( get_macro(name) )
         error("Duplicate definition of %s", name);
+
+    /* Locate macro parameters in the replacement list */
+    if ( macd->ops[1] ) 
+        find_params(macd);
 
     vec_grow(macd);
 }
@@ -192,7 +224,7 @@ clone_node(src)
          * we've abused the fields in question. */
         int n;
         for ( n = src->arity; n < 4; ++n )
-            set_op( dest, n, node_op(src, n) );
+            dest->ops[n] = src->ops[n];
         return dest;
     }
 
@@ -248,8 +280,9 @@ do_builtin(name)
 }
 
 static
-do_expand2(name)
+do_expand(name, args)
     char* name;
+    struct node *args;
 {
     int n;
     struct node *macd = get_macro(name), *mace;
@@ -268,17 +301,24 @@ do_expand2(name)
      * the expanded token sequence.  We clone them, rather than using 
      * add_ref(), because the expression parser expectes to modify them. */
     mace = macd->ops[2];
-    for ( n = mace->arity; n; --n ) 
-        unget_token( clone_node( mace->ops[n-1] ) );
-}
+    for ( n = mace->arity; n; --n ) {
+        struct node *src = mace->ops[n-1];
 
-do_expand(name)
-    char *name;
-{
-    if (is_builtin(name))
-        return do_builtin(name);
-    else 
-        return do_expand2(name);
+        /* Substitute arguments for parameters */
+        if ( src->code == 'macp' ) {
+            int p = (int) src->ops[0], j;
+
+            if ( !args ) int_error( 
+                "Attempting argument substitution in an object-like macro" 
+            );
+
+            src = args->ops[p];
+            for ( j = src->arity; j; --j )
+                unget_token( clone_node( src->ops[j-1] ) );
+        }
+            
+        else unget_token( clone_node(src) );
+    }
 }
 
 /* Implements the defined() preprocessor function. */
@@ -360,9 +400,11 @@ macro_args(name_node, next_fn)
 
     /* Skip the opening '(' */
     free_node( get_node() );
-    n = next_fn();
+    next_fn();
 
     while (1) {
+        struct node* n = get_node();
+
         /* We don't know whether this is a EOF or end of line: that 
          * depends on whether next_fn is pp_next or next. */
         if (!n) error("Incomplete macro argument list");
@@ -383,10 +425,17 @@ macro_args(name_node, next_fn)
             arg = new_node('mace', 0);
             free_node(n);
         }
+        /* Is it a pragma that's been handled entirely in a preprocessor
+         * and should not be included in the output? */
+        else if ( n->code == 'prgm' && cpp_pragma(n) )
+            free_node( n );
+        /* Allow for nested macro invocations, such as f(g(x)). */
+        else if ( n->code == 'id' && try_expand(n, next_fn) )
+            continue;
         else
             arg = vnode_app( arg, n );
 
-        n = next_fn();        
+        next_fn();        
     }
 
     /* Note: The '()' nodes have slot zero reserved for a return type
@@ -420,7 +469,10 @@ try_expand(node, next_fn)
         /* It's a macro that will be expanded and pushed back on to
          * the parser stack by do_expand: we do that to ensure proper 
          * re-scanning. */
-        do_expand(name);
+        if (is_builtin(name))
+            do_builtin(name);
+        else 
+            do_expand(name, 0);
         return 1;
     }
     else if ( mac_type == 2 ) {
@@ -431,9 +483,7 @@ try_expand(node, next_fn)
         struct node *brack = next_fn();
         if (brack && brack->code == '(') {
             struct node *args = macro_args(node, next_fn);
-
-            warning("Function-like macros expansion not supported");
-            do_expand(name); /* will overwrite ')' */
+            do_expand(name, args); /* will overwrite ')' */
             free_node(args);
             return 1;
         }
