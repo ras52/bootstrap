@@ -9,7 +9,8 @@ New features in stage 5 compiler:
   - for loops
   - comma operator
   - goto and labelled statements
-  - switch, case labels and default (implemented as sequential if-else)
+  - switch, case labels and default (implemented inefficiently as a 
+      sequence of if-else statements)
   - a type system, including all of C's integer and character types, 
       pointers, arrays and function pointers
   - structs
@@ -21,11 +22,15 @@ New features in stage 5 compiler:
 
 The compiler is named ccx.
 
-  Usage: ccx [--compatibility=N] [-o filename.s] filename.c
+  Usage: ccx [OPTIONS] FILENAME
 
-The -o option specifies the output file's name; if it not specified and
-the input file has a .c or .i extension, the output is the same file
-name but with a .s extension.  
+  Options:
+    --help              Displays the help text
+    -o FILENAME         Specifies the output file name
+    --compatibility=N   Sets compatibility with the stage N tools
+
+If no -o option is specified, the input file has a .c or .i extension,
+the output is the same file name but with a .s extension.  
 
 The --compatibility=4 flag enables compatibility with the stage 4
 compiler.  This will permit arbitrary assignment to implicit int (but
@@ -61,6 +66,10 @@ use of the four build tools (cpp, ccx, as and ld).
     -D NAME[=VAL]       Pre-defines a macro, optionally with a value
     --compatibility=N   Sets compatibility with the stage N tools
     --nostdlib          Do not link against crt0.o and libc.o
+    --with-cpp=PROGRAM  Use the specified program as the preprocessor
+    --with-ccx=PROGRAM  Use the specified program as the compiler
+    --with-as=PROGRAM   Use the specified program as the assembler
+    --with-ld=PROGRAM   Use the specified program as the linker
 
 Input files are distinguished using their extensions.  A .c file as
 assumed to be a C file that needs preprocessing; a .i file is assumed
@@ -70,7 +79,8 @@ and a .o file is assumed to be an object file.
 The compiler driver instructs the preprocessor to search the include/
 directory and prepend include=include/rbc_init.h (which currently only
 defines the version number in __RBC_INIT).  The __DATE__ and __TIME__
-macros are also defined here.
+macros are also defined by the driver and passed to the preprocessor via
+the command line.
 
 TODO:
   - Errors on duplicate declarations at global scope

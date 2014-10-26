@@ -620,9 +620,17 @@ cpp_pragma(node)
     if ( node->arity != 3 ) return 0;
     if ( !node_streq( node->ops[0], "RBC" ) ) return 0;
 
+    /* The scanner code only cares whether it returns 0 or 1, but we 
+     * call the same function in macro_args in the preprocessor where we 
+     * use it to count macro expansion depth, by using +/- 1 */
+
     if ( node_streq( node->ops[1], "cpp_unmask" ) ) {
-        cpp_unmask( node_str( node->ops[2] ) );
-        return 1;
+        cpp_setmask( node_str( node->ops[2] ), 0 );
+        return -1;
+    }
+    else if ( node_streq( node->ops[1], "cpp_mask" ) ) {
+        cpp_setmask( node_str( node->ops[2] ), 1 );
+        return +1;
     }
 
     return 0;

@@ -195,14 +195,14 @@ struct node* new_strnode();
 struct node* add_ref();
 
 static
-mk_unmask(strnode)
+mk_prgm_rbc(strnode, name)
     struct node *strnode;
+    char *name;
 {
-    /* We overwrite the head node on the stack (which will be the macro being
-     * expanded) with a _Pragma("RBC cpp_unmask $name") node. */
+    /* Used to generate nodes like _Pragma("RBC cpp_unmask $name"). */
     struct node *node = new_node( 'prgm', 3 );
     node->ops[0] = new_strnode('id', "RBC");
-    node->ops[1] = new_strnode('id', "cpp_unmask");
+    node->ops[1] = new_strnode('id', name);
     node->ops[2] = add_ref(strnode);
     return node;
 }
@@ -218,12 +218,20 @@ clone_node(src)
               src->code == 'ppno' || src->code == 'id' )
         return new_strnode( src->code, node_str(src) );
 
+    else if ( src->arity == 0 ) 
+        return new_node( src->code, 0 );
+
     else if ( src->arity <= 4 ) {
         struct node *dest = new_node( src->code, src->arity );
-        /* Shallow copy of fields that shouldn't exist to catch where
-         * we've abused the fields in question. */
+
+        if ( src->code != 'prgm' ) 
+            int_error( "Cloning node type %Mc\n", src->code );
+
+        /* Shallow copy */
         int n;
-        for ( n = src->arity; n < 4; ++n )
+        for ( n = 0; n < src->arity; ++n )
+            dest->ops[n] = add_ref( src->ops[n] );
+        for ( ; n < 4; ++n )
             dest->ops[n] = src->ops[n];
         return dest;
     }
@@ -294,8 +302,8 @@ do_expand(name, args)
      * it is never freed. */
     if ( !macd || macd->ops[3] ) 
         int_error("Attempt to expand undefined macro: %s", name);
-    macd->ops[3] = (struct node*) 1;
-    set_token( mk_unmask( macd->ops[0] ) ); 
+    macd->ops[3] = (struct node*) 1;  /* set mask bit */
+    set_token( mk_prgm_rbc( macd->ops[0], "cpp_unmask" ) ); 
 
     /* By pushing the tokens back in this way, we ensure that we rescan 
      * the expanded token sequence.  We clone them, rather than using 
@@ -344,13 +352,16 @@ macro_type(name)
     return macro->ops[1] ? 2 : 1;
 }
 
-cpp_unmask(name) 
+cpp_setmask(name, val) 
     char* name;
+    int val;
 {
     struct node *macro = get_macro(name);
     if ( !macro )
-        error("Unable to unmask non-existent macro '%s'", name);
-    macro->ops[3] = 0;
+        error("Unable to set mask on non-existent macro '%s'", name);
+    /* The 'macd' arity is 3, so the unused [3] slot is abused to store an 
+     * is-masked flag. */
+    macro->ops[3] = (struct node*) val;
 }
 
 fini_macros() {
@@ -415,6 +426,9 @@ macro_args(name_node, next_fn)
             else --depth;
         }
 
+        /* Copy in case we need to create a cpp_mask after overwriting. */
+        n = add_ref(n);
+
         /* If the first argument is empty, e.g. in f(,x) then arg is 
          * undefined.  This is necessary because f() can be a macro
          * invocation with one empty argument or with zero arguments. */
@@ -425,15 +439,23 @@ macro_args(name_node, next_fn)
             arg = new_node('mace', 0);
             free_node(n);
         }
-        /* Is it a pragma that's been handled entirely in a preprocessor
-         * and should not be included in the output? */
-        else if ( n->code == 'prgm' && cpp_pragma(n) )
-            free_node( n );
-        /* Allow for nested macro invocations, such as f(g(x)). */
-        else if ( n->code == 'id' && try_expand(n, next_fn) )
+        /* "A parameter in the replacement list [...] is replaced by the 
+         * corresponding argument after all macros contained therein have 
+         * been expanded." [C11 6.10.3.1/1] */
+        else if ( n->code == 'id' && try_expand(n, next_fn) ) {
+            unget_token( mk_prgm_rbc( n, "cpp_mask" ) ); 
+            free_node(n); /* Undo the add_ref, above */
             continue;
-        else
+        }
+        else {
+            /* If it's a preprocessor pragma, it needs processing, but also
+             * needs to be passed through to the main preprocessor loop. */
+            if ( n->code == 'prgm' ) depth += cpp_pragma(n);
             arg = vnode_app( arg, n );
+        }
+
+        /* Undo the add_ref above. */
+        free_node(n);
 
         next_fn();        
     }
@@ -481,6 +503,11 @@ try_expand(node, next_fn)
          * be used to suppress macro expansion of a macro that hides
          * a function of the same name. */
         struct node *brack = next_fn();
+
+        /* Skip any _Pragma("RBC cpp_mask $n") directives, processing them. */
+        while (brack && brack->code == 'prgm' && cpp_pragma(brack)) 
+            free_node(brack), brack = next_fn();
+
         if (brack && brack->code == '(') {
             struct node *args = macro_args(node, next_fn);
             do_expand(name, args); /* will overwrite ')' */
