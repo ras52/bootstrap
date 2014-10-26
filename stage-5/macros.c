@@ -6,6 +6,7 @@
 
 struct node* get_word();
 struct node* next();
+struct node* get_node();
 struct node* new_node();
 struct node* vnode_app();
 char* node_str();
@@ -288,21 +289,18 @@ do_builtin(name)
 }
 
 static
-do_expand(name, args)
-    char* name;
-    struct node *args;
+do_expand(macd, args)
+    struct node *macd, *args;
 {
     int n;
-    struct node *macd = get_macro(name), *mace;
+    struct node *mace;
+    char *name = node_str(macd->ops[0]);
 
     /* Mask the macro, and push a _Pragma("RBC cpp_unmask $name") node.
      * This implements the standard behaviour that macros cannot recursively
      * reference themselves.  This is used in #define errno errno.
      * The [3] slot is abused to store an is-masked flag.  As arity is 3,
      * it is never freed. */
-    if ( !macd || macd->ops[3] ) 
-        int_error("Attempt to expand undefined macro: %s", name);
-    macd->ops[3] = (struct node*) 1;  /* set mask bit */
     set_token( mk_prgm_rbc( macd->ops[0], "cpp_unmask" ) ); 
 
     /* By pushing the tokens back in this way, we ensure that we rescan 
@@ -321,12 +319,13 @@ do_expand(name, args)
             );
 
             src = args->ops[p];
-            for ( j = src->arity; j; --j )
+            for ( j = src->arity; j; --j ) 
                 unget_token( clone_node( src->ops[j-1] ) );
         }
             
         else unget_token( clone_node(src) );
     }
+    unget_token( mk_prgm_rbc( macd->ops[0], "cpp_mask" ) );
 }
 
 /* Implements the defined() preprocessor function. */
@@ -336,38 +335,28 @@ pp_defined(name)
     return is_builtin(name) || get_macro(name) ? 1 : 0;
 }
 
-/* Returns 0 if NAME is not a macro or is masked, 1 if NAME is an object-like
- * macro, and 2 if it is a function-like macro. */
-macro_type(name)
+cpp_setmask(name, delta) 
     char* name;
-{
-    struct node *macro = get_macro(name);
-
-    /* Slot [3] is used as an is-masked flag. */
-    if (!macro || macro->ops[3]) return 0;
-
-    /* All builtins are object-like, currently. */
-    if (is_builtin(name)) return 1; 
-
-    return macro->ops[1] ? 2 : 1;
-}
-
-cpp_setmask(name, val) 
-    char* name;
-    int val;
+    int delta;
 {
     struct node *macro = get_macro(name);
     if ( !macro )
-        error("Unable to set mask on non-existent macro '%s'", name);
+        int_error("Unable to set mask on non-existent macro '%s'", name);
     /* The 'macd' arity is 3, so the unused [3] slot is abused to store an 
      * is-masked flag. */
-    macro->ops[3] = (struct node*) val;
+    int cur = (int)macro->ops[3];
+    if ( cur + delta < 0 ) 
+        int_error("Macro '%s' is already unmasked", name);
+    macro->ops[3] = (struct node*)( cur + delta );
 }
 
 fini_macros() {
     struct node **i = macro_vec.start, **e = macro_vec.end;
-    for (; i != e; ++i )
+    for (; i != e; ++i ) {
+        if ( (*i)->ops[3] ) 
+            int_error( "Macro '%s' left masked", node_str( (*i)->ops[0] ) );
         free_node(*i);
+    }
 }
 
 /* Parse a -D command-line option */
@@ -405,57 +394,47 @@ macro_args(name_node, next_fn)
     char *name = node_str(name_node);
     struct node *macro = get_macro(name);
     struct node *args = new_node('()', 0), *arg = 0, *n;
-    int depth = 0, n_params, n_args;
+    int pdepth = 0, edepth = 0, n_params, n_args;
 
     args = vnode_app( args, name_node );
 
-    /* Skip the opening '(' */
-    free_node( get_node() );
-    next_fn();
-
     while (1) {
-        struct node* n = get_node();
+        n = get_node();
 
         /* We don't know whether this is a EOF or end of line: that 
          * depends on whether next_fn is pp_next or next. */
         if (!n) error("Incomplete macro argument list");
 
-        if ( n->code == '(' ) ++depth;
+        if ( n->code == '(' ) ++pdepth;
         else if ( n->code == ')' ) {
-            if ( depth == 0 ) break;  
-            else --depth;
+            if ( pdepth == 0 ) break;  
+            else --pdepth;
         }
-
-        /* Copy in case we need to create a cpp_mask after overwriting. */
-        n = add_ref(n);
 
         /* If the first argument is empty, e.g. in f(,x) then arg is 
          * undefined.  This is necessary because f() can be a macro
          * invocation with one empty argument or with zero arguments. */
         if (!arg) arg = new_node('mace', 0);
 
-        if ( n->code == ',' && depth == 0 ) {
+        if ( n->code == ',' && pdepth == 0 && edepth == 0 ) {
             args = vnode_app( args, arg );
             arg = new_node('mace', 0);
             free_node(n);
         }
+
         /* "A parameter in the replacement list [...] is replaced by the 
          * corresponding argument after all macros contained therein have 
-         * been expanded." [C11 6.10.3.1/1] */
-        else if ( n->code == 'id' && try_expand(n, next_fn) ) {
-            unget_token( mk_prgm_rbc( n, "cpp_mask" ) ); 
-            free_node(n); /* Undo the add_ref, above */
+         * been expanded." [C11 6.10.3.1/1]  This is doing that expansion
+         * of macros in arguments. */
+        else if ( n->code == 'id' && try_expand(n, next_fn, &arg) ) 
             continue;
-        }
+        
         else {
             /* If it's a preprocessor pragma, it needs processing, but also
              * needs to be passed through to the main preprocessor loop. */
-            if ( n->code == 'prgm' ) depth += cpp_pragma(n);
+            if ( n->code == 'prgm' ) edepth += cpp_pragma(n);
             arg = vnode_app( arg, n );
         }
-
-        /* Undo the add_ref above. */
-        free_node(n);
 
         next_fn();        
     }
@@ -480,42 +459,89 @@ macro_args(name_node, next_fn)
     return args;
 }
 
-try_expand(node, next_fn)
+static
+has_brack(next_fn, arg)
+    struct node *(*next_fn)();
+    struct node **arg;
+{
+    struct node *masks = new_node('tmp',0);
+    struct node *name = get_node(), *n = next_fn();
+    int i;
+
+    /* Skip any _Pragma("RBC cpp_mask $n") directive. */
+    while ( n && n->code == 'prgm' && n->arity == 3 &&
+            node_streq( n->ops[0], "RBC" ) && 
+            ( node_streq( n->ops[1], "cpp_mask" ) || 
+              node_streq( n->ops[1], "cpp_unmask" ) ) ) {
+        masks = vnode_app( masks, n );
+        n = next_fn();
+    }
+
+    if ( n && n->code == '(' ) { 
+        /* Process the pragmas */
+        for ( i=0; i<masks->arity; ++i )
+            cpp_pragma( masks->ops[i] );
+
+        /* This is where we finally skip the '(' */
+        free_node(n);
+        next_fn(); 
+
+        if (arg)
+            for ( i=0; i<masks->arity; ++i )
+                *arg = vnode_app(*arg, add_ref( masks->ops[i] ) );
+
+        free_node(masks);
+        return 1; 
+    }
+    else {
+        /* Restore the pragmas: decrement arity to prevent freeing */
+        while ( masks->arity )
+            unget_token( masks->ops[ --masks->arity ] );
+        free_node(masks);
+    
+        unget_token(name);
+        return 0;
+    }
+}
+
+/* Called with the name as the current token */
+try_expand(node, next_fn, arg)
     struct node *node;
     struct node *(*next_fn)();
+    struct node **arg; /* Pass-through for cpp masks */
 {
     char *name = node_str(node);
-    int mac_type = macro_type(name);
-    
-    if ( mac_type == 1 ) {
+    struct node *macd = get_macro(name);
+
+    /* Slot [3] is used as an is-masked flag. */
+    if (!macd || macd->ops[3])
+        return 0;
+
+    /* All builtins are object-like, currently. */
+    else if ( is_builtin(name) ) {
+        do_builtin(name);
+        return 1;
+    }
+
+    /* Slot [1] is the arguments */
+    else if ( ! macd->ops[1] ) {
         /* It's a macro that will be expanded and pushed back on to
          * the parser stack by do_expand: we do that to ensure proper 
          * re-scanning. */
-        if (is_builtin(name))
-            do_builtin(name);
-        else 
-            do_expand(name, 0);
+        do_expand(macd, 0);
         return 1;
     }
-    else if ( mac_type == 2 ) {
-        /* Function-like macros are only expanded if the next pp token
-         * is an open bracket.  This allows the (fn)(a, b) syntax to 
-         * be used to suppress macro expansion of a macro that hides
-         * a function of the same name. */
-        struct node *brack = next_fn();
 
-        /* Skip any _Pragma("RBC cpp_mask $n") directives, processing them. */
-        while (brack && brack->code == 'prgm' && cpp_pragma(brack)) 
-            free_node(brack), brack = next_fn();
-
-        if (brack && brack->code == '(') {
-            struct node *args = macro_args(node, next_fn);
-            do_expand(name, args); /* will overwrite ')' */
-            free_node(args);
-            return 1;
-        }
-        else unget_token(node);
+    /* Function-like macros are only expanded if the next pp token is an open 
+     * bracket.  This allows the (fn)(a, b) syntax to be used to suppress 
+     * macro expansion of a macro that hides a function of the same name. */
+    else if ( has_brack(next_fn, arg) ) {
+        struct node *args = macro_args(node, next_fn);
+        do_expand(macd, args); /* will overwrite ')' */
+        free_node(args);
+        return 1;
     }
 
-    return 0;
+    /* The remaining case is a function-like macro name not invoked as such. */
+    else return 0;
 }

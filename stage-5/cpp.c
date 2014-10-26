@@ -219,7 +219,7 @@ if_expand(stream, node)
      * the stack: instead, we must overwrite the current token to avoid 
      * an infinite loop. */
     if ( node->code == 'id' ) {
-        if ( try_expand(node, pp_next) )
+        if ( try_expand(node, pp_next, 0) )
             /* Returning 1 tells pp_slurp that we haven't set a token, but to 
                call us again. */
             return 1;
@@ -458,7 +458,7 @@ preprocess(output) {
             next();
             continue;
         }
-        else if ( c == 'id' && try_expand(node, next) )
+        else if ( c == 'id' && try_expand(node, next, 0) )
             continue;
 
         set_line( &out_line, &out_file, output );
@@ -625,11 +625,11 @@ cpp_pragma(node)
      * use it to count macro expansion depth, by using +/- 1 */
 
     if ( node_streq( node->ops[1], "cpp_unmask" ) ) {
-        cpp_setmask( node_str( node->ops[2] ), 0 );
+        cpp_setmask( node_str( node->ops[2] ), -1 );
         return -1;
     }
     else if ( node_streq( node->ops[1], "cpp_mask" ) ) {
-        cpp_setmask( node_str( node->ops[2] ), 1 );
+        cpp_setmask( node_str( node->ops[2] ), +1 );
         return +1;
     }
 
