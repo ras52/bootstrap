@@ -1,6 +1,6 @@
 /* nodenew.c  --  node.c rewritten to use structs
  *
- * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -281,6 +281,21 @@ node_lchar( node_ptr, len_ptr, chr )
     *node_ptr = node;
 }
 
+/* Append string STR to the payload of the node *NODE_PTR which is treated 
+ * as a string with current length *LEN_PTR.  The value of *LEN_PTR is 
+ * incremented.  The node may be reallocated. */
+node_strcat( node_ptr, len_ptr, str, len )
+    struct node** node_ptr;
+    int *len_ptr;
+    char *str;
+{
+    struct node* node = grow_node( *node_ptr, *len_ptr, len );
+    char* buf = node_str(node);
+    strncpy( buf + *len_ptr, str, len );
+    *len_ptr += len;
+    *node_ptr = node;
+}
+    
 /* Push-back facility doesn't really belong here, but having to keep 
  * compatibility with the stage-4 cc is tricky. */
 static struct pb_slot {

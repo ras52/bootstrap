@@ -1,6 +1,6 @@
 /* macros.c  --  support for preprocessor macros
  *
- * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -95,6 +95,7 @@ ident_list(stream) {
     return p;
 }
 
+/* Replace instances of a parameter 'id' node with a 'macp' node. */
 static
 find_params(macd) 
     struct node *macd;
@@ -119,6 +120,29 @@ find_params(macd)
                     break;
                 }
             }
+        }
+    }
+}
+
+/* Check that any # or ## operators are in syntactically valid places. */
+static
+check_hash(mace) 
+    struct node *mace;
+{
+    int i, n;
+
+    /* Iterate over the replacement list looking for # and ## operators. 
+     * This is necessary so that we generate an error even if the macro
+     * is never expanded. */
+    for ( i = 0, n = mace->arity; i < n; ++i ) {
+        int c = mace->ops[i]->code;
+        if ( c == '#' ) {
+            if ( i+1 == n || mace->ops[i+1]->code != 'macp' )
+                error("Expected macro parameter after # operator");
+        }
+        else if ( c == '##' ) {
+            if ( i+1 == n || i == 0 )
+                error("Argument missing to operator ##");
         }
     }
 }
@@ -161,6 +185,9 @@ defn_direct(stream) {
     /* Locate macro parameters in the replacement list */
     if ( macd->ops[1] ) 
         find_params(macd);
+
+    /* Ensure any # or ## operators are syntactically valid. */
+    check_hash( macd->ops[2] );
 
     vec_grow(macd);
 }
@@ -289,43 +316,261 @@ do_builtin(name)
 }
 
 static
+is_cpp_prgm(n)
+    struct node *n;
+{
+    return n && n->code == 'prgm' && n->arity == 3 
+        && node_streq( n->ops[0], "RBC" )
+        && ( node_streq( n->ops[1], "cpp_mask" ) || 
+             node_streq( n->ops[1], "cpp_unmask" ) );
+}
+
+static
+node_concat( node_ptr, len_ptr, node )
+    struct node **node_ptr, *node;
+    int *len_ptr;
+{
+    int c = node->code;
+
+    /* XXX We don't escape a 'str' or 'chr' node, because we escape the
+     * whole string later.  Ideally this will change when string nodes
+     * contain their value rather the quoted and escaped lexical values. */
+    if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' ) {
+        char *s = node_str(node); 
+        node_strcat( node_ptr, len_ptr, s, strlen(s) );   
+    }
+    else
+        node_strcat( node_ptr, len_ptr, &c, strnlen(&c, 4) );
+}
+
+static
+struct node *
+stringify(arg) 
+    struct node *arg;
+{
+    struct node *str = new_node('str', 0), *str2;
+    int i, l = 0;
+
+    for ( i = 0; i != arg->arity; ++i ) {
+        struct node *node = arg->ops[i];
+
+        /* Don't stringify _Pragma("RBC cpp_mask"): otherwise it's an op. */
+        if ( is_cpp_prgm(node) ) continue;
+
+        if (l) node_lchar( &str, &l, ' ' );
+        node_concat( &str, &l, node );
+    }
+    node_lchar( &str, &l, 0 );  /* NUL termination */
+ 
+    /* XXX Now escape and quote the whole string.  This will go if we 
+     * make the 'str' node contain its value. */
+    str2 = esc_strnode( node_str(str) );
+    free_node(str);
+    return str2;
+}
+
+/* Check that NODE is a valid pp-token (e.g. following concatenation) and 
+ * set its code accordingly. */
+static
+check_pptok(node) 
+    struct node *node;
+{
+    char *s = node_str(node);
+    int c = rchar(s, 0);
+
+    /* A . could be the start of a ppnumber, or a '.' operator.  Handle it
+     * first so we can continue with the isdigit loop below.  */
+    if ( c == '.' && isdigit(s[1]) ) ++s;
+
+    if ( isidchar1(c) ) {
+        /* Once encoding prefixes for strings are supported, this needs 
+         * handle.   E.g.  L ## "foo". */
+        while ( c = rchar(++s, 0) )
+            if ( !isidchar(c) )
+                return 0;
+        node->code = 'id';
+    }
+    else if ( isdigit(c) ) {
+        while ( c = rchar(++s, 0) ) {
+            if ( c != '.' && !isalnum(c) )
+                return 0;
+            /* 'E' and 'e' are for exponents, and can have a sign suffix.
+             * C99 adds 'P' and 'p'. */
+            if ( (c == 'e' || c == 'E') && (s[1] == '+' || s[1] == '-') )
+                ++s;
+        }
+        node->code = 'ppno';
+    }
+    else if ( c == '\'' || c == '\"' ) {
+        /* We're only called following concatenation, but one half may be 
+         * empty; all we have to do is check for trailing garbage. 
+         * (This is no longer true with C++11's user-defined literals.) */
+        char q = c;
+        while ( c = *++s ) {
+            if ( c == q && s[1] ) return 0; /* An unescaped internal quote */
+            else if ( c == '\\' && s[1] ) ++s;
+        }
+        node->code = q == '"' ? 'str' : 'chr';
+    }
+    else {
+        int op = c;
+        /* Maximum operator length is 3 (e.g. <<=). */
+        if ( strlen(s) >= 4 ) return 0;
+
+        /* Careful!  A one or two character operator might have garbage 
+         * in the last byte(s) of its string. */
+        if ( c = *s++ ) {
+            lchar( &op, 1, c ); 
+            if ( c = *s++ ) lchar( &op, 2, c );
+        }
+
+        /* Must allow generation of ## */
+        if ( !is_op(op) && op != '#' && op != '##' ) 
+            return 0;
+        node->code = op;
+    }
+
+    return 1;
+}
+
+/* If *RHS_PTR is a node, then treat NODE as the left-hand argument to a 
+ * ## operator, and concatenate them. */
+static
+do_concat(expansion, i) 
+    struct node *expansion;
+{
+    struct node **lhs_p = 0, **rhs_p = 0;
+    struct node *lhs, *rhs, *conc;
+    int j;
+
+    /* Locate the previous and subsequent token in the expansion. */
+    j = i; do lhs_p = &expansion->ops[j-1];
+    while ( !*lhs_p && --j );
+
+    j = i+1; do rhs_p = &expansion->ops[j];
+    while ( !*rhs_p && ++j < expansion->arity );
+
+    if ( !lhs_p || !rhs_p )
+        int_error("Operator ## has no arguments");
+
+    /* If they are parameter expansions, find the last and/or first token
+     * of the expansion proper (i.e. excluding any _Pragma("RBC cpp_mask")s); 
+     * or leave LHS / RHS null as "a placemarker preprocessing token" if 
+     * the expansion is empty. */
+    lhs = *lhs_p; rhs = *rhs_p;
+    if (lhs && lhs->code == 'mace') {
+        j = lhs->arity; do lhs_p = &lhs->ops[j-1];
+        while ( ( !*lhs_p || is_cpp_prgm(*lhs_p) ) && --j );
+    }
+    if (rhs && rhs->code == 'mace') {
+        j = 0; do rhs_p = &rhs->ops[j];
+        while ( ( !*rhs_p || is_cpp_prgm(*rhs_p) ) && ++j < rhs->arity );
+    }
+   
+    /* Handle the cases when we're just concatening zero or one token. */
+    lhs = *lhs_p; rhs = *rhs_p;
+    if (!lhs && !rhs) conc = 0;
+    else if (!lhs) conc = add_ref(rhs); 
+    else if (!rhs) conc = add_ref(lhs);
+    else {
+        /* Use a temporary node of for the concatenated text. */
+        int l = 0;
+        conc = new_node('str', 0);
+
+        node_concat( &conc, &l, lhs );
+        node_concat( &conc, &l, rhs );
+        node_lchar( &conc, &l, 0 );  /* NUL termination */
+
+        /* Set its type */
+        if ( !check_pptok( conc ) )
+            error( "Concatention results in invalid preprocessing token: %s",
+                   node_str(conc) );
+    }
+
+    /* Overwrite the ## token with the concatenated token. */
+    free_node( expansion->ops[i] );
+    expansion->ops[i] = conc;
+
+    /* And delete the tokens that were used to generate it. */
+    if (*lhs_p) { free_node(*lhs_p); *lhs_p = 0; }
+    if (*rhs_p) { free_node(*rhs_p); *rhs_p = 0; }
+}
+
+/* Expand MACD using arguments ARGS. */
+static
 do_expand(macd, args)
     struct node *macd, *args;
 {
-    int n;
-    struct node *mace;
+    int i, j, n;
     char *name = node_str(macd->ops[0]);
 
-    /* Mask the macro, and push a _Pragma("RBC cpp_unmask $name") node.
-     * This implements the standard behaviour that macros cannot recursively
-     * reference themselves.  This is used in #define errno errno.
-     * The [3] slot is abused to store an is-masked flag.  As arity is 3,
-     * it is never freed. */
-    set_token( mk_prgm_rbc( macd->ops[0], "cpp_unmask" ) ); 
+    /* This is the replacement list in the definition. */
+    struct node *mace = macd->ops[2];
 
-    /* By pushing the tokens back in this way, we ensure that we rescan 
-     * the expanded token sequence.  We clone them, rather than using 
-     * add_ref(), because the expression parser expectes to modify them. */
-    mace = macd->ops[2];
-    for ( n = mace->arity; n; --n ) {
-        struct node *src = mace->ops[n-1];
+    struct node *expansion = new_node('mace', 0);
+
+    for ( i = 0; i < mace->arity; ++i ) {
+        struct node *src = mace->ops[i];
 
         /* Substitute arguments for parameters */
         if ( src->code == 'macp' ) {
             int p = (int) src->ops[0], j;
 
-            if ( !args ) int_error( 
-                "Attempting argument substitution in an object-like macro" 
-            );
+            if ( !args ) int_error("Unexpected macro parameter");
 
-            src = args->ops[p];
-            for ( j = src->arity; j; --j ) 
-                unget_token( clone_node( src->ops[j-1] ) );
+            src = args->ops[p]; /* A 'mace' node containing the args. */
+
+            /* Is it the argument of the stringification operator? */
+            if ( i && mace->ops[i-1]->code == '#' )
+                expansion = vnode_app( expansion, stringify(src) );
+
+            else {
+                /* We clone the argument list so we can overwrite it: 
+                 * this is required so that a parameter can be concatenated
+                 * more than once. */
+                struct node *clone = new_node('mace', 0);
+                for ( j = 0; j < src->arity; ++j ) 
+                    clone = vnode_app( clone, add_ref(src->ops[j] ) );
+                expansion = vnode_app( expansion, clone );
+            }
         }
-            
-        else unget_token( clone_node(src) );
+
+        /* The # operator is handled above. */
+        else if ( src->code != '#' )
+            expansion = vnode_app( expansion, add_ref(src) );
+    }
+
+    /* Handle any ## operators.  They will replace some nodes with NULL. */
+    for ( i = 0; i < expansion->arity; ++i )
+        if ( expansion->ops[i]->code == '##' )
+            do_concat( expansion, i );
+
+    /* Push a _Pragma("RBC cpp_unmask $name") node (for the end), then
+     * push back the expansion in reverse order, and finally mask it.
+     * This implements the standard behaviour that macros cannot recursively
+     * reference themselves.  This is used in #define errno errno.
+     * The [3] slot is abused to store an is-masked flag.  As arity is 3,
+     * it is never freed. */
+    set_token( mk_prgm_rbc( macd->ops[0], "cpp_unmask" ) ); 
+    for ( n = expansion->arity; n; --n ) {
+        int j;
+        struct node *node = expansion->ops[n-1];
+        /* We clone nodes, rather than using add_ref(), because the expression 
+         * parser expectes to modify them. */
+        if (node) {
+            /* Flatten the result of parameter expansion */
+            if (node->code == 'mace') {
+                for ( j = node->arity; j; --j )
+                    if ( node->ops[j-1] )
+                        unget_token( clone_node( node->ops[j-1] ) );
+            }
+            else 
+                unget_token( clone_node(node) );
+        }
     }
     unget_token( mk_prgm_rbc( macd->ops[0], "cpp_mask" ) );
+
+    free_node( expansion );
 }
 
 /* Implements the defined() preprocessor function. */
@@ -469,10 +714,7 @@ has_brack(next_fn, arg)
     int i;
 
     /* Skip any _Pragma("RBC cpp_mask $n") directive. */
-    while ( n && n->code == 'prgm' && n->arity == 3 &&
-            node_streq( n->ops[0], "RBC" ) && 
-            ( node_streq( n->ops[1], "cpp_mask" ) || 
-              node_streq( n->ops[1], "cpp_unmask" ) ) ) {
+    while ( is_cpp_prgm(n) ) {
         masks = vnode_app( masks, n );
         n = next_fn();
     }

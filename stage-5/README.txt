@@ -7,7 +7,6 @@ C (most notably, a type system) and is more efficient.
 
 New features in stage 5 compiler:
   - for loops
-  - comma operator
   - goto and labelled statements
   - switch, case labels and default (implemented inefficiently as a 
       sequence of if-else statements)
@@ -16,6 +15,7 @@ New features in stage 5 compiler:
   - structs
   - member access with the -> and . operators
   - sizeof operator
+  - comma operator
   - type casts
   - C++-style comments
   - typedefs
@@ -87,4 +87,4 @@ TODO:
   - Tentative definitions
   - Prototypes
   - Unions, bit fields (probably not in this stage?), floats
-  - # and ## 
+  - n1062 #scopes?

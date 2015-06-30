@@ -1,6 +1,6 @@
 /* scanner.c  --  code for tokenising the C input stream
  *
- * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -425,11 +425,15 @@ get_qlit(stream, q1, q2, len_ptr)
  * valid lexical representation of an operator.  So '[]' does not  */
 static
 is_2charop(op) {
-    /* TODO: digraphs and trigraphs */
-    auto mops[20] = { 
+    /* TODO: digraphs and trigraphs. */
+
+    /* Even outside the preprocessor ## is an operator, albeit one that
+     * can never be used validly. */
+    auto mops[21] = { 
         /* 0     1     2     3     4     5     6     7     8     9 */
         '++', '--', '<<', '>>', '<=', '>=', '==', '!=', '&&', '||',
-        '*=', '%=', '/=', '+=', '-=', '&=', '|=', '^=',  '->', 0 
+        '*=', '%=', '/=', '+=', '-=', '&=', '|=', '^=', '->', '##',
+        0 
     };
 
     /* Search for two-character operator name in the mops[] list, above */
@@ -442,6 +446,7 @@ is_2charop(op) {
 
 /* Read an operator, starting with character C, and return a node with
  * NODE->type set to the operator as a multicharacter literal. */
+static
 struct node*
 get_multiop(stream, c) {
     /* Fetch the second character */
@@ -450,9 +455,9 @@ get_multiop(stream, c) {
     else lchar( &c, 1, c2 );
 
     /* If it's not a two-character operator, it must be a single character 
-     * operator -- node that the only three-character operators and two-
+     * operator because the only three-character operators are two-
      * character operators with an extra character appended.  
-     * TODO: '...' breaks that assumption. */
+     * TODO: '...' breaks that assumption, but that's for later. */
     if ( !is_2charop(c) ) {
         ungetc( rchar( &c, 1 ), stream );
         return new_node( rchar( &c, 0 ), 0 );
@@ -471,7 +476,7 @@ get_multiop(stream, c) {
 /* Test whether token type OP is an operator in the syntax tree. */
 is_op(op) {
     return strnlen(&op, 4) == 1 && strchr("&*+-~!/%<>^|=.,", op)
-        || is_2charop(op) || op == '?:' || op == '[]' 
+        || is_2charop(op) && op != '##' || op == '?:' || op == '[]' 
         || op == '>>=' || op == '<<=';
 }
 
@@ -483,11 +488,13 @@ static struct node* token;
  * and if not H_NODE '\n#' for a # starting a preprocessor directive. */
 static
 raw_next(h_mode) {
-    /* Oh! for headers */
+    /* Oh! for headers.  These are points of customisation for the PP vs C. */
     extern struct node* chk_keyword();
     extern struct node* get_number();
-    extern struct node* new_node();
     extern struct node* do_get_qlit();
+
+    /* In node.c / nodenew.c */
+    extern struct node* new_node();
     extern struct node* pb_pop();
 
     auto c;
