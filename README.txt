@@ -44,4 +44,4 @@ Stage 5 -- ccx, cpp & cc
   as and ld.
 
 
-The code in this project is copyright (C) Richard Smith, 2009-13.
+The code in this project is copyright (C) Richard Smith, 2009-15.
