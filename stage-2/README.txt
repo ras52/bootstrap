@@ -11,7 +11,7 @@ assembler.  This is the main tool introduced in this stage.
 
 The stage 2 assembler makes two passes over the source code assembler, 
 the first building up a symbol table and the second writing out machine 
-code.  This means that forward jumps are supported.  The supported 
+code.  This means that backwards jumps are supported.  The supported 
 instruction set is loosely based on the 8086 instruction set, but with 
 32-bit addressing.  In practice, certain more recent instructions are 
 added such as the far conditional jumps (opcode 0F 8x, introduced in 
