@@ -19,6 +19,7 @@ New features in stage 5 compiler:
   - type casts
   - C++-style comments
   - typedefs
+  - #line directives (in the compiler proper) for improved diagnostics
 
 The compiler is named ccx.
 

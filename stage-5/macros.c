@@ -440,31 +440,38 @@ do_concat(expansion, i)
     struct node *expansion;
 {
     struct node **lhs_p = 0, **rhs_p = 0;
-    struct node *lhs, *rhs, *conc;
+    struct node *lhs, *rhs, *conc, *null = 0;
     int j;
 
     /* Locate the previous and subsequent token in the expansion. */
-    j = i; do lhs_p = &expansion->ops[j-1];
-    while ( !*lhs_p && --j );
+    j = i; do 
+        lhs = *( lhs_p = &expansion->ops[j-1] );
+    while ( !lhs && --j );
 
-    j = i+1; do rhs_p = &expansion->ops[j];
-    while ( !*rhs_p && ++j < expansion->arity );
-
-    if ( !lhs_p || !rhs_p )
-        int_error("Operator ## has no arguments");
+    j = i+1; do 
+        rhs = *( rhs_p = &expansion->ops[j] );
+    while ( !rhs && ++j < expansion->arity );
 
     /* If they are parameter expansions, find the last and/or first token
      * of the expansion proper (i.e. excluding any _Pragma("RBC cpp_mask")s); 
      * or leave LHS / RHS null as "a placemarker preprocessing token" if 
      * the expansion is empty. */
-    lhs = *lhs_p; rhs = *rhs_p;
     if (lhs && lhs->code == 'mace') {
-        j = lhs->arity; do lhs_p = &lhs->ops[j-1];
-        while ( ( !*lhs_p || is_cpp_prgm(*lhs_p) ) && --j );
+        for (j = lhs->arity; j; --j) {
+            lhs = *( lhs_p = &lhs->ops[j-1] );
+            if (lhs && !is_cpp_prgm(lhs)) goto got_lhs;
+        }
+        lhs = *( lhs_p = &null );
+      got_lhs:;
     }
+
     if (rhs && rhs->code == 'mace') {
-        j = 0; do rhs_p = &rhs->ops[j];
-        while ( ( !*rhs_p || is_cpp_prgm(*rhs_p) ) && ++j < rhs->arity );
+        for (j = 0; j < rhs->arity; ++j) {
+            rhs = *( rhs_p = &rhs->ops[j] );
+            if (rhs && !is_cpp_prgm(rhs)) goto got_rhs;
+        }
+        rhs = *( rhs_p = &null );
+      got_rhs:;
     }
    
     /* Handle the cases when we're just concatening zero or one token. */
@@ -541,9 +548,11 @@ do_expand(macd, args)
     }
 
     /* Handle any ## operators.  They will replace some nodes with NULL. */
-    for ( i = 0; i < expansion->arity; ++i )
-        if ( expansion->ops[i]->code == '##' )
+    for ( i = 0; i < expansion->arity; ++i ) {
+        struct node *node = expansion->ops[i];
+        if ( node && node->code == '##' )
             do_concat( expansion, i );
+    }
 
     /* Push a _Pragma("RBC cpp_unmask $name") node (for the end), then
      * push back the expansion in reverse order, and finally mask it.
@@ -552,6 +561,7 @@ do_expand(macd, args)
      * The [3] slot is abused to store an is-masked flag.  As arity is 3,
      * it is never freed. */
     set_token( mk_prgm_rbc( macd->ops[0], "cpp_unmask" ) ); 
+
     for ( n = expansion->arity; n; --n ) {
         int j;
         struct node *node = expansion->ops[n-1];
