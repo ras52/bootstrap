@@ -15,7 +15,7 @@ all the work to the kernel with a mmap(MAP_ANON) syscall.  This results
 in a new memory page being allocated for every block of memory
 allocated.  For the present purpose this is acceptable, but it will
 rapidly cease to be as code becomes more complex.  However, at present
-there is a strong disincentive to implement a better malloc
+there is a strong disincentive to implementing a better malloc
 implementation: that there is no mechanism for code reuse.  Bug fixes or
 improvements to the implementation will tend to get lost or incorrectly
 applied to the multiple copies scattered around the code.
@@ -104,7 +104,9 @@ would choose to write an address in terms of its ASCII representation).
 The same escape characters are accepted as for strings.  Multicharacter 
 literals are allowed where a 32-bit immediate is expected, and may 
 contain upto four characters.  Their layout is such as to make them 
-useful for short text fragments: 'xyz' the same layout as "xyz".
+useful for short text fragments: 'xyz' the same layout as "xyz".  (Note
+that this layout is the opposite design decision to that made in gcc.
+Neither the C standard nor the ABI provide any guidance on the matter.)
 
 The assembler requires its source file to be suffixed .s and
 automatically assigns the output file name by replacing the .s with a 

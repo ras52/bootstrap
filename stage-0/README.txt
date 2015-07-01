@@ -37,5 +37,6 @@ the binutils diagnostic tools (objdump, etc.) are of limited use on it.
 Conceptually the program should have been written using some lower-level
 technique, such as with a hex-editor.  In practice the Makefile contains
 a simple one-line shell script to perform the same action as unhex, and
-it is generated source in its own language.
+it is generated source in its own language.  We check the program works
+by compiling its own source and comparing the output.
 

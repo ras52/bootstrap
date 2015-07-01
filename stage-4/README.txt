@@ -20,9 +20,12 @@ address.  Incrementing the value increments the underlying address by
 one, as with a char* in C.  This means, that unlike in B, incrementing 
 an address  does not move to the next integer in an array: use ptr += 4 
 for that.  However, subscripting with [] works with 32-bit word offsets,
-so that ptr[1] is equivalent to *(ptr + 4).  When types are introduced
-in a subsequent stage, this behaviour can be preserved because 
-subscripting an int (other than with a pointer) is not legal in C.
+so that ptr[1] is equivalent to *(ptr + 4).  To treat a pointer as a
+string and get character-level access, B uses two functions lchar(s,n)
+and rchar(s,n,c) to get and set a character, respectively, at the given
+offset.  These are provided in char.s.  When types are introduced in a
+subsequent stage, this behaviour can be preserved because subscripting
+an int (other than with a pointer) is not legal in C.
 
 For forwards compatibility, certain type constructs are allowed and
 completely ignored.  The (otherwise unsupported) int keyword may be
@@ -57,6 +60,8 @@ conversions are done as separate statements, so to read a local auto
 variable, we generated LEA -offset(%ebp), %eax; MOVL (%eax), %eax
 instead of the more obvious MOVL -offset(%ebp), %eax.
 
+  Usage: cc -S file.c
+
 The compiler is initially linked against a trivial I/O library that
 implements the basic C I/O functions in an unbuffered manner, doing one
 syscall per call to getchar() or putchar().  Similarly, malloc() is
@@ -68,5 +73,7 @@ library, libc.o.  There is also a trivial startup file, crt0.o, that
 implements _start() by calling exit(main()).  We use these to relink 
 the compiler against this to produce a significantly faster compiler.
 
-  Usage: cc -S file.c
+Linking a program is typically achieved with a command such as:
+
+  ld -o prog libc.o crt0.o file1.o file2.o ...
 
