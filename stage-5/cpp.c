@@ -1,6 +1,6 @@
 /* cpp.c  --  the C preprocessor
  *
- * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -565,33 +565,84 @@ struct scanner {
     struct if_group* if_at_entry;
 };
 
+/* Include the file whose name is in TOK; SYS=1 if a <header>, otherwise 0  */
+static
+do_include(tok, sys) 
+    struct node *tok;
+{
+    char* file = extract_str(tok);
 
+    struct scanner* scanner = malloc( sizeof(struct scanner) );
+    pvec_push( incl_vec, scanner );
+
+    store_scan( &scanner->filename, &scanner->line, &scanner->stream );
+    scanner->if_at_entry = if_stack;
+
+    /* We ignore the first element of incl_path if it's a <header>.
+     * That's because it is ".". */
+    open_scan(file, incl_path->start + sys );
+
+    free(file);
+    free_node(tok);
+}
+
+/* This is the call-back used to expand tokens on an #include line. */
+static
+inc_expand(stream, node)
+    struct node *node;
+{
+    /* This is a bit tricky as we cannot remove the current token from
+     * the stack: instead, we must overwrite the current token to avoid 
+     * an infinite loop. */
+    if ( node->code == 'id' ) {
+        if ( try_expand(node, pp_next, 0) )
+            /* Returning 1 tells pp_slurp that we haven't set a token, but to 
+               call us again. */
+            return 1;
+    }
+
+    else if ( node->code == 'prgm' && cpp_pragma(node) )
+        set_token(0);
+
+    return 0;
+}
 
 /* Handle a #include directive. */
 static
 incl_direct(stream) {
     int c = skip_hwhite(stream);
-    /* TODO:  We should handle the #include pp-toks form of C90 (and later) 
-     * that processes its args */
-    if ( c == '"' || c == '<' ) {
-        struct node* tok = get_qlit(stream, c, c == '<' ? '>' : c, 0);
-        char* file = extract_str(tok);
-    
-        struct scanner* scanner = malloc( sizeof(struct scanner) );
-        pvec_push( incl_vec, scanner );
 
-        store_scan( &scanner->filename, &scanner->line, &scanner->stream );
-        scanner->if_at_entry = if_stack;
+    if ( c == '"' ) 
+        do_include( get_qlit(stream, '"', '"', 0), 0 );
+    else if ( c == '<' ) 
+        do_include( get_qlit(stream, '<', '>', 0), 1 );
 
-        /* We ignore the first element of incl_path if it's a <header>.
-         * That's because it is ".". */
-        open_scan(file, incl_path->start + (c == '<') );
+    /* Handle the #include pp-toks form per C90 (and later) and expand 
+     * the macros in its argument. */
+    else {
+        struct node *e = new_node('mace', 0);
 
-        free(file);
-        free_node(tok);
+        ungetc(c, stream);
+        pp_slurp(stream, &e, inc_expand);
+
+        /* Does it match the "file.h" format? */
+        if (e->arity == 1 && e->ops[0]->code == 'str')
+            do_include( add_ref(e->ops[0]), 0 );
+
+        /* Or in the <header> format? */
+        else if (e->arity >= 3 && e->ops[0]->code == '<' &&
+                 e->ops[e->arity-1]->code == '>') {
+            struct node *hdr = new_node('hdr', 0);
+            int i, l = 0;
+            for ( i = 0; i != e->arity; ++i )
+                node_concat( &hdr, &l, e->ops[i] );
+            do_include( hdr, 1 );
+        }
+        else
+            error("Unamed to parse #include line");
+        free_node(e);
     }
-    else
-        error( "Missing file name on #include" );
+
 }
 
 /* This is called by next() when we get EOF.  Returns 1 if EOF has been

@@ -338,7 +338,7 @@ is_cpp_prgm(n)
              node_streq( n->ops[1], "cpp_unmask" ) );
 }
 
-static
+/* This is also used in generating a header name to include. */
 node_concat( node_ptr, len_ptr, node )
     struct node **node_ptr, *node;
     int *len_ptr;
