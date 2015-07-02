@@ -127,17 +127,22 @@ find_params(macd)
 
 /* Check that any # or ## operators are in syntactically valid places. */
 static
-check_hash(mace) 
-    struct node *mace;
+check_hash(macd) 
+    struct node *macd;
 {
     int i, n;
+    struct node *mace = macd->ops[2];
 
     /* Iterate over the replacement list looking for # and ## operators. 
      * This is necessary so that we generate an error even if the macro
      * is never expanded. */
     for ( i = 0, n = mace->arity; i < n; ++i ) {
         int c = mace->ops[i]->code;
-        if ( c == '#' ) {
+
+        /* "Each # preprocessing token in the replacement list for a 
+         * function-like macro shall be followed by a parameter as the 
+         * next preprocessing token in the replacement list." [C90 6.8.3.2] */
+        if ( c == '#' && macd->ops[1] ) {
             if ( i+1 == n || mace->ops[i+1]->code != 'macp' )
                 error("Expected macro parameter after # operator");
         }
@@ -188,7 +193,7 @@ defn_direct(stream) {
         find_params(macd);
 
     /* Ensure any # or ## operators are syntactically valid. */
-    check_hash( macd->ops[2] );
+    check_hash( macd );
 
     vec_grow(macd);
 }
@@ -414,9 +419,10 @@ check_pptok(node)
          * empty; all we have to do is check for trailing garbage. 
          * (This is no longer true with C++11's user-defined literals.) */
         char q = c;
-        while ( c = *++s ) {
-            if ( c == q && s[1] ) return 0; /* An unescaped internal quote */
-            else if ( c == '\\' && s[1] ) ++s;
+        while ( c = rchar(++s, 0) ) {
+            /* Look for an unescaped internal quote */
+            if ( c == q && rchar(s,1) ) return 0; 
+            else if ( c == '\\' && rchar(s,1) ) ++s;
         }
         node->code = q == '"' ? 'str' : 'chr';
     }
@@ -427,9 +433,9 @@ check_pptok(node)
 
         /* Careful!  A one or two character operator might have garbage 
          * in the last byte(s) of its string. */
-        if ( c = *s++ ) {
+        if ( c = rchar(++s, 0) ) {
             lchar( &op, 1, c ); 
-            if ( c = *s++ ) lchar( &op, 2, c );
+            if ( c = rchar(++s, 0) ) lchar( &op, 2, c );
         }
 
         /* Must allow generation of ## */
@@ -542,7 +548,7 @@ debug_node(node)
     else
         fprintf( stderr, "%Mc", c );
 }
-*/ /* End debugging */
+*/ /* End Debugging */
 
 /* Expand MACD using arguments ARGS. */
 static
@@ -584,7 +590,10 @@ do_expand(macd, args)
         }
 
         /* The # operator is handled above. */
-        else if ( src->code != '#' )
+        else if ( args && src->code == '#' )
+            ;
+        /* Pass through other tokens. */
+        else
             expansion = vnode_app( expansion, add_ref(src) );
     }
 
@@ -606,7 +615,7 @@ do_expand(macd, args)
         }
     }
     fputc('\n', stderr);
-    */ /* End debugging */
+    */ /* End Debugging */
 
     /* Push a _Pragma("RBC cpp_unmask $name") node (for the end), then
      * push back the expansion in reverse order, and finally mask it.
