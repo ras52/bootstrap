@@ -41,7 +41,13 @@ commonly this triggers with character arrays which had to be manipulated
 with lchar and rchar in stage 4.  An error is also given when doing
 pointer arithmetic on objects that are not single bytes. 
 
-The new C-like compiler is used to implement a simple preprocessor, cpp.
+
+The new C-like compiler is used to implement a simple preprocessor, cpp,
+which is almost entirely compliant with the C90 standard.  (The only
+known deviations from the standard are that it fails to handle
+white-space correctly in stringification, doesn't implement digraphs or
+trigraphs, or the ... punctuator, and will not concatenate string
+literals.)
 
   Usage: cpp [OPTIONS] FILENAME
 
@@ -51,9 +57,11 @@ The new C-like compiler is used to implement a simple preprocessor, cpp.
     -I DIRECTORY        Appends a directory to the header search path
     -D NAME[=VAL]       Pre-defines a macro, optionally with a value
     --include FILENAME  Prefixes the specified file to the input
+    -P                  Don't put #line directives in output
+
 
 Finally, a compiler driver called cc has been written to simplify the
-use of the four build tools (cpp, ccx, as and ld).
+use of the four build tools (cpp, ccx, as and ld).  
 
   Usage: cc [OPTIONS] FILES...
 
@@ -89,3 +97,5 @@ TODO:
   - Prototypes
   - Unions, bit fields (probably not in this stage?), floats
   - n1062 #scopes?
+  - #pragma once?
+  - Use temporary file names in driver

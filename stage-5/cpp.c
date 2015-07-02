@@ -16,6 +16,9 @@ static struct pvector* incl_vec;
 /* Vector of files to include in series */
 static struct pvector* incl_files;
 
+/* Are we running with -P? */
+static int opt_P;
+
 /* If only we had a preprocessor to avoid these duplications ... :-) */
 struct node {
     int code;           /* character code for the node, e.g. '+' or 'if'. */
@@ -399,17 +402,25 @@ set_line( line_ptr, file_ptr, output )
          * preprocessor output. */
         if (*file_ptr) fputc('\n', output);
         /* TODO:  Properly escape the filename. */
-        fprintf( output, "#line %d \"%s\"\n", *line_ptr = in_line,
-                 *file_ptr = in_file );
+        if ( !opt_P )
+            fprintf( output, "#line %d \"%s\"\n", in_line, in_file );
+        *line_ptr = in_line;
+        *file_ptr = in_file;
     }
-    else if ( *line_ptr > in_line || *line_ptr < in_line - 4 ) 
-        fprintf( output, "\n#line %d\n", *line_ptr = in_line );
-
+    else if ( *line_ptr > in_line || *line_ptr < in_line - 4 ) {
+        fputc('\n', output);
+        if ( !opt_P ) 
+            fprintf( output, "#line %d\n", in_line );
+        *line_ptr = in_line;
+    }
     else if ( *line_ptr == in_line ) 
         fputc(' ', output);
 
     else while ( *line_ptr < in_line ) { 
         fputc('\n', output); 
+        /* If we're running with -P, we suppress all blank lines by only 
+         * emitting a single '\n'. */
+        if (opt_P) { *line_ptr = in_line; break; } 
         ++*line_ptr;
     }
 }
@@ -475,7 +486,7 @@ preprocess(output) {
 static
 usage() {
     cli_error(
-"Usage: cpp [-I include-dir] [-D name[=val]] [-o filename.i] filename.c\n"
+"Usage: cpp [-P] [-I include-dir] [-D name[=val]] [-o filename.i] filename.c\n"
     );
 }
 
@@ -509,6 +520,9 @@ main(argc, argv)
 
         else if ( strcmp( arg, "--help" ) == 0 ) 
             usage();
+
+        else if ( strcmp( arg, "-P" ) == 0 ) 
+            opt_P = 1, ++i;
 
         else if ( arg2 = opt_arg( argv, argc, &i, "-I" ) )
             pvec_push( incl_path, arg2 );
