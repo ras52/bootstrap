@@ -139,7 +139,7 @@ setvbuf( stream, buf, mode, size ) {
     /* Without a buffer passed, this is a resize request. */
     else {
         if ( stream[7] ) buf = realloc( stream[3], size );
-        else buf = malloc( stream[1] );
+        else buf = malloc(size);
         if (!buf) return -1;
         stream[7] = 1;   /* We do now manage the memory for the buffer. */
     }
