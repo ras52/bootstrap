@@ -9,6 +9,7 @@ struct node* next();
 struct node* get_node();
 struct node* new_node();
 struct node* vnode_app();
+struct node* vnode_prep();
 char* node_str();
 
 /* A macro definition is just a 'macd' node with 3 operands: 
@@ -223,14 +224,14 @@ struct node* new_strnode();
 struct node* add_ref();
 
 static
-mk_prgm_rbc(strnode, name)
+mk_prgm_rbc(strnode, type)
     struct node *strnode;
-    char *name;
+    char *type;
 {
     /* Used to generate nodes like _Pragma("RBC cpp_unmask $name"). */
     struct node *node = new_node( 'prgm', 3 );
     node->ops[0] = new_strnode('id', "RBC");
-    node->ops[1] = new_strnode('id', name);
+    node->ops[1] = new_strnode('id', type);
     node->ops[2] = add_ref(strnode);
     return node;
 }
@@ -316,11 +317,18 @@ do_builtin(name)
 }
 
 static
+is_rbc_prgm(n)
+    struct node *n;
+{
+    return n && n->code == 'prgm' && n->arity >= 2 
+        && node_streq( n->ops[0], "RBC" );
+}
+
+static
 is_cpp_prgm(n)
     struct node *n;
 {
-    return n && n->code == 'prgm' && n->arity == 3 
-        && node_streq( n->ops[0], "RBC" )
+    return is_rbc_prgm(n)
         && ( node_streq( n->ops[1], "cpp_mask" ) || 
              node_streq( n->ops[1], "cpp_unmask" ) );
 }
@@ -503,6 +511,39 @@ do_concat(expansion, i)
     if (*rhs_p) { free_node(*rhs_p); *rhs_p = 0; }
 }
 
+/* Debugging code */ /*
+static
+debug_node(node) 
+    struct node* node;
+{
+    extern stderr;
+    int c = node->code, i;
+
+    if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
+        fputs( node_str(node), stderr );
+    else if (c == 'mace') {
+        fputs("[[", stderr);
+        for ( i = 0; i < node->arity; ++i ) {
+            if (i) fputc(' ', stderr);
+            if ( node->ops[i] ) 
+                debug_node( node->ops[i] );
+        }
+        fputs("]]", stderr);
+    }
+    else if ( c == 'prgm' ) {
+        int i;
+        fputs( "_Pragma(", stderr );
+        for ( i = 0; i < node->arity; ++i ) {
+            if (i) fputc(' ', stderr);
+            debug_node( node->ops[i] );
+        }
+        fputc(')', stderr);
+    }
+    else
+        fprintf( stderr, "%Mc", c );
+}
+*/ /* End debugging */
+
 /* Expand MACD using arguments ARGS. */
 static
 do_expand(macd, args)
@@ -523,7 +564,7 @@ do_expand(macd, args)
         if ( src->code == 'macp' ) {
             int p = (int) src->ops[0], j;
 
-            if ( !args ) int_error("Unexpected macro parameter");
+            if (!args) int_error("Unexpected macro parameter");
 
             src = args->ops[p]; /* A 'mace' node containing the args. */
 
@@ -553,6 +594,19 @@ do_expand(macd, args)
         if ( node && node->code == '##' )
             do_concat( expansion, i );
     }
+
+    /* Debugging code */ /*
+    extern stderr;
+    fprintf(stderr, "Expanding %s:\n\t", name);
+    for ( i = 0; i < expansion->arity; ++i ) {
+        struct node *node = expansion->ops[i];
+        if (node) { 
+            fputc(' ', stderr);
+            debug_node(node);
+        }
+    }
+    fputc('\n', stderr);
+    */ /* End debugging */
 
     /* Push a _Pragma("RBC cpp_unmask $name") node (for the end), then
      * push back the expansion in reverse order, and finally mask it.
@@ -639,6 +693,62 @@ parse_d_opt(arg)
     vec_grow(macd);
 }
 
+/* Fix ARG to be a valid macro argument, and return its new value. */
+static
+struct node *
+fix_arg(arg)
+    struct node *arg;
+{
+    /* Currently the only purpose of this function is to handle unbalanced
+     * _Pragma("RBC cpp_mask") type pragmas.  These can arise in code like
+     * 
+     *     #define f(a) f(2 * (a))
+     *     #define g f
+     *     #define h g(~
+     *     h 5);
+     *
+     * ... when f is expanded, its argument is 
+     *
+     *     ~ _Pragma("RBC cpp_unmask h") 5
+     *
+     * We try to detect such cases and prepend the necessary cpp_mask
+     * or append the necessary cpp_unmask to balance it out. */
+    int i, j;
+
+  restart:
+    for (i=0; i<arg->arity; ++i) {
+        struct node *n = arg->ops[i];
+        if ( !is_rbc_prgm(n) ) continue;
+
+        else if ( node_streq( n->ops[1], "cpp_unmask" ) ) {
+            char *name = node_str( n->ops[2] );
+            for (j=0; j<i; ++j) {
+                struct node *m = arg->ops[j];
+                if ( is_rbc_prgm(m) && node_streq( m->ops[1], "cpp_mask" )
+                     && node_streq( m->ops[2], name ) )
+                    goto cont;
+            }
+            arg = vnode_prep( arg, mk_prgm_rbc( n->ops[2], "cpp_mask" ) );
+            goto restart;
+        }
+
+        else if ( node_streq( n->ops[1], "cpp_mask" ) ) {
+            char *name = node_str( n->ops[2] );
+            for (j=i+1; j<arg->arity; ++j) {
+                struct node *m = arg->ops[j];
+                if ( is_rbc_prgm(m) && node_streq( m->ops[1], "cpp_unmask" )
+                     && node_streq( m->ops[2], name ) )
+                    goto cont;
+            }
+            arg = vnode_app( arg, mk_prgm_rbc( n->ops[2], "cpp_unmask" ) );
+            goto restart;
+        }
+      cont:;
+    }
+
+    return arg;
+}
+
 /* The current token is the '('.  Read macro arguments to the corresponding 
  * ')', which is left as head of the stack. */
 static
@@ -672,6 +782,7 @@ macro_args(name_node, next_fn)
         if (!arg) arg = new_node('mace', 0);
 
         if ( n->code == ',' && pdepth == 0 && edepth == 0 ) {
+            arg = fix_arg(arg);
             args = vnode_app( args, arg );
             arg = new_node('mace', 0);
             free_node(n);
@@ -705,7 +816,11 @@ macro_args(name_node, next_fn)
     if ( n_params == 1 && n_args == 0 && !arg )
         arg = new_node('mace', 0);
 
-    if (arg) { args = vnode_app( args, arg ); ++n_args; }
+    if (arg) { 
+        arg = fix_arg(arg);
+        args = vnode_app( args, arg ); 
+        ++n_args; 
+    }
 
     if ( n_params != n_args )
         error( "Macro '%s' expects %d arguments but called with %d arguments",

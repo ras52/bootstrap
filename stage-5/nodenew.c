@@ -184,6 +184,20 @@ vnode_app( vec, child )
     return vec;
 }
 
+/* Prepend node CHILD to node VEC, growing the vector if necessary, 
+ * and returning the (possibly reallocated) vector. */
+struct node *
+vnode_prep( vec, child )
+    struct node *vec, *child;
+{
+    vec = grow_node( vec, vec->arity * sizeof(struct node*), 
+                     sizeof(struct node*) );
+    memmove( &vec->ops[1], &vec->ops[0], vec->arity * sizeof(struct node*) );
+    vec->arity++;
+    vec->ops[0] = child;
+    return vec;
+}
+
 /* Returns a pointer to the string payload of a node */
 node_str(node) 
     struct node* node;
