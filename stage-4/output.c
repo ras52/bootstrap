@@ -1,6 +1,6 @@
 /* output.c  --  output stdio functions
  *
- * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com> 
+ * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com> 
  * All rights reserved.
  */
 
@@ -10,8 +10,8 @@ static __buf2[32];
 
 /*                    0     1       2       3       4       5    6     7
  * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode free } */
-static __file1[8] = { 1,    128,    __buf1, __buf1, __buf1, 2,   0,    0    };
-static __file2[8] = { 2,    128,    __buf2, __buf2, __buf2, 2,   2,    0    };
+static __file1[8] = { 1,    128,    __buf1, __buf1, __buf1, 2,   1,    0    };
+static __file2[8] = { 2,    128,    __buf2, __buf2, __buf2, 2,   3,    0    };
 /* MODE is as per the second argument to open(2).  
  * BMODE is an _IO?BF flag */
 
@@ -26,7 +26,6 @@ stderr = __file2;
 static __files = 0;
 /* Count of entries in the __files array */
 static __filec = 0;
-
 
 /* The C library fflush() */
 fflush( stream ) {
@@ -124,22 +123,49 @@ __fopenstr( str, len ) {
     stream[2] = stream[3] = str;
     stream[4] = str + len;
     stream[5] = 2;   /* O_RDWR */
-    stream[6] = 0;   /* _IOFBF */
+    stream[6] = 1;   /* _IOFBF */
     stream[7] = 0;   /* do not free() the buffer on close */
     return stream;
+}
+
+/* The C library setvbuf() */
+setvbuf( stream, buf, mode, size ) {
+    if ( buf ) {
+        /* Free old buffer */
+        if ( stream[7] ) free( stream[3] );
+        stream[7] = 0;   /* We no longer manage the memory for the buffer. */
+    }
+
+    /* Without a buffer passed, this is a resize request. */
+    else {
+        if ( stream[7] ) buf = realloc( stream[3], size );
+        else buf = malloc( stream[1] );
+        if (!buf) return -1;
+        stream[7] = 1;   /* We do now manage the memory for the buffer. */
+    }
+        
+    stream[1] = size;
+    stream[2] = stream[3] = stream[4] = buf;
+    stream[6] = mode;
+    return 0;
+}
+
+/* The C library setvbuf() */
+setbuf( stream, buf ) {
+    /* BUFSIZ == 4096 in our implementation. */
+    setvbuf( stream, buf, buf ? 1 : 3, 4096 ); /* 1 == _IOFBF; 3 = _IONBF */
 }
 
 /* The C library fopen() */
 fopen( filename, mode ) {
     auto stream = malloc(32); /* sizeof(struct FILE) */
-    stream[0] = -1;  /* an invalid file descriptor */
-    stream[1] = 128; /* buffer size */
-    stream[2] = stream[3] = stream[4] = malloc( stream[1] );
-    stream[5] = 0;   /* O_RDONLY */
-    stream[6] = 0;   /* _IOFBF */
-    stream[7] = 1;   /* free() the buffer on close */
+    if (!stream) return 0;
+    memset(stream, 0, 32);    /* sizeof(struct FILE) */
+    stream[0] = -1;           /* an invalid file descriptor */
 
-    if ( freopen( filename, mode, stream ) == 0 ) {
+    setvbuf( stream, 0, 1, 128 );  /* 1 = _IOFBF */
+
+    if ( !stream[3] || freopen( filename, mode, stream ) == 0 ) {
         /* It failed, so clean up. */
         free( stream[3] );
         free( stream );
@@ -251,6 +277,37 @@ pad( stream, width, n, padc ) {
     return written;
 }
 
+/* Handle the %o, %u and %x options, and return the bytes written or -1. */
+static
+fmt_uint( stream, n, base, width, padc, xchr ) {
+    /* Special case n=0. */
+    if (n == 0) {
+        auto written;
+        if ( ( written = pad( stream, width, 1, padc ) ) == -1 ||
+             fputc('0', stream) == -1 )
+            return -1;
+        return written + 1;
+    }
+    else {
+        /* We don't currently support character arrays.  
+         * 15 bytes is long enough even for octal. */
+        auto buffer[4] = {0,0,0,0}, blen = 14, boff = blen, written1, written2;
+
+        /* Fill in the buffer with the string in the correct base. */
+        while (n) {
+            auto x = n % base;
+            x = x >= 10 ? x + xchr - 10 : x + '0';
+            lchar(buffer, boff--, x);
+            n /= base;
+        }
+
+        if ( ( written1 = pad( stream, width, blen-boff, padc ) ) == -1 ||
+             ( written2 = fputs(buffer+boff+1, stream) ) == -1 )
+            return -1; 
+        return written1 + written2;
+    }
+}
+
 /* The C library vfprintf() */
 vfprintf( stream, fmt, ap ) {
     auto written = 0, c, n, m;
@@ -346,31 +403,33 @@ vfprintf( stream, fmt, ap ) {
                 written += m + n + neg;
             }
         }
-        /* %x prints a hexdecimal number  */
+        /* %o prints an unsigned octal number  */
+        else if (c == 'o') {
+            ap += 4;
+            if ( ( n = fmt_uint( stream, *ap, 8, width, padc, 'a' ) ) == -1 )
+                return -1;
+            written += n;
+        }
+        /* %u prints an unsigned decimal number  */
+        else if (c == 'u') {
+            ap += 4;
+            if ( ( n = fmt_uint( stream, *ap, 10, width, padc, 'a' ) ) == -1 )
+                return -1;
+            written += n;
+        }
+        /* %x prints an unsigned hexdecimal number  */
         else if (c == 'x') {
             ap += 4;
-            if (*ap == 0) { 
-                if ( ( m = pad( stream, width, 1, padc ) ) == -1 ||
-                     fputc('0', stream) == -1 )
-                    return -1;
-                written += m + 1;
-            }
-            else {
-                /* We don't currently support character arrays. */
-                auto buffer[4] = {0,0,0,0},  b = 14,  i = *ap;
-
-                while (i) {
-                    auto x = i % 16;
-                    x = x >= 10 ? x + 'a' - 10 : x + '0';
-                    lchar(buffer, b--, x);
-                    i /= 16;
-                }
-
-                if ( ( m = pad( stream, width, 14-b, padc ) ) == -1 ||
-                     ( n = fputs(buffer+b+1, stream) ) == -1 )
-                    return -1; 
-                written += m + n;
-            }
+            if ( ( n = fmt_uint( stream, *ap, 16, width, padc, 'a' ) ) == -1 )
+                return -1;
+            written += n;
+        }
+        /* %X prints an unsigned hexdecimal number in upper case */
+        else if (c == 'X') {
+            ap += 4;
+            if ( ( n = fmt_uint( stream, *ap, 16, width, padc, 'A' ) ) == -1 )
+                return -1;
+            written += n;
         }
         /* Either %% or an unsupported format specifier: just print it out */
         else {
@@ -385,7 +444,7 @@ vfprintf( stream, fmt, ap ) {
     /* XXX  This isn't really right: we should handle line buffering 
      * distinctly from unbuffered, and also do similarly in the other ouput
      * functions. */
-    if ( stream[6] ) fflush(stream);
+    if ( stream[6] > 1 ) fflush(stream);
 
     return written;
 }
