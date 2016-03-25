@@ -1,6 +1,6 @@
 /* <bits/file_access.h>  --  file access functions for <stdio.h>
  *
- * Copyright (C) 2005, 2013, 2015 Richard Smith <richard@ex-parrot.com>.
+ * Copyright (C) 2005, 2013, 2015 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 

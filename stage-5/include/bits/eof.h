@@ -1,6 +1,6 @@
 /* <bits/eof.h>  --  the EOF value for <stdio.h>
  *
- * Copyright (C) 2005, 2013 Richard Smith <richard@ex-parrot.com>.
+ * Copyright (C) 2005, 2013 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
