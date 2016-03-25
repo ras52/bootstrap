@@ -1,6 +1,6 @@
 # stage-4/Makefile
 
-# Copyright (C) 2012, 2013, 2014 Richard Smith <richard@ex-parrot.com>
+# Copyright (C) 2012, 2013, 2014, 2016 Richard Smith <richard@ex-parrot.com>
 # All rights reserved.
 
 SHELL = /bin/sh
@@ -86,7 +86,7 @@ check-malloc: cc as malloc.c malloc.o
 clean:
 	$(RM) -f as ld $(LIB0_OBJS)
 	$(RM) -f $(LIB1_OBJS) output.s input.s malloc.s signal.s libc.o
-	$(RM) -f $(CC_OBJS) cc0 cc
+	$(RM) -f $(CC_OBJS) cc0 cc crt0.o
 	$(RM) -f output2.o output2.s input2.o input2.s malloc2.o malloc2.s
 
 world:
