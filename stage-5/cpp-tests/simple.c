@@ -1,5 +1,6 @@
 #if 1
 #define INT int
+#define DECLARE(type, name) type name;
 #endif
 
-INT i;
+DECLARE(INT, i)
