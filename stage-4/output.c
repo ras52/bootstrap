@@ -1,6 +1,6 @@
 /* output.c  --  output stdio functions
  *
- * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com> 
+ * Copyright (C) 2013, 2014, 2015, 2016 Richard Smith <richard@ex-parrot.com> 
  * All rights reserved.
  */
 
@@ -233,7 +233,10 @@ fwrite( buf, size, nmem, stream ) {
 
 /* The C library fputs() */
 fputs( s, stream ) {
-    return __fputsn( s, strlen(s), stream );
+    auto written = __fputsn( s, strlen(s), stream );
+    /* XXX This is wrong -- see comment in vsfprintf */
+    if ( stream[6] > 1 ) fflush(stream);
+    return written;
 }
 
 /* The B library putstr() -- unlike C's puts, it doesn't add a '\n' */
