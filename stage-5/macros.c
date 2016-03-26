@@ -472,8 +472,11 @@ do_concat(expansion, i)
      * the expansion is empty. */
     if (lhs && lhs->code == 'mace') {
         for (j = lhs->arity; j; --j) {
-            lhs = *( lhs_p = &lhs->ops[j-1] );
-            if (lhs && !is_cpp_prgm(lhs)) goto got_lhs;
+            lhs_p = &lhs->ops[j-1];
+            if (*lhs_p && !is_cpp_prgm(*lhs_p)) {
+                lhs = *lhs_p;
+                goto got_lhs;
+            }
         }
         lhs = *( lhs_p = &null );
       got_lhs:;
@@ -481,8 +484,11 @@ do_concat(expansion, i)
 
     if (rhs && rhs->code == 'mace') {
         for (j = 0; j < rhs->arity; ++j) {
-            rhs = *( rhs_p = &rhs->ops[j] );
-            if (rhs && !is_cpp_prgm(rhs)) goto got_rhs;
+            rhs_p = &rhs->ops[j];
+            if (*rhs_p && !is_cpp_prgm(*rhs_p)) {
+                rhs = *rhs_p;
+                goto got_rhs;
+            }
         }
         rhs = *( rhs_p = &null );
       got_rhs:;
@@ -497,6 +503,15 @@ do_concat(expansion, i)
         /* Use a temporary node of for the concatenated text. */
         int l = 0;
         conc = new_node('str', 0);
+
+        /* Debugging code */ /*
+        extern stderr;
+        fputs("Concatenating ", stderr);
+        debug_node(lhs);
+        fputs(" and ", stderr);
+        debug_node(rhs);
+        fputc('\n', stderr);
+        */ /* End Debugging */
 
         node_concat( &conc, &l, lhs );
         node_concat( &conc, &l, rhs );
@@ -526,13 +541,13 @@ debug_node(node)
     int c = node->code, i;
 
     if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
-        fputs( node_str(node), stderr );
+        fprintf( stderr, "%Mc:\"%s\"", c, node_str(node) );
     else if (c == 'mace') {
-        fputs("[[", stderr);
+        fprintf( stderr, "[[%d:", node->arity );
         for ( i = 0; i < node->arity; ++i ) {
-            if (i) fputc(' ', stderr);
-            if ( node->ops[i] ) 
-                debug_node( node->ops[i] );
+            fputc(' ', stderr);
+            if ( node->ops[i] ) debug_node( node->ops[i] );
+            else fputs("NULL", stderr);
         }
         fputs("]]", stderr);
     }
@@ -555,11 +570,18 @@ static
 do_expand(macd, args)
     struct node *macd, *args;
 {
-    int i, j, n;
+    int i, n;
     char *name = node_str(macd->ops[0]);
 
     /* This is the replacement list in the definition. */
     struct node *mace = macd->ops[2];
+
+    /* Debugging code */ /*
+    extern stderr;
+    fprintf(stderr, "Replacement list for %s:\n\t", name);
+    debug_node(mace);
+    fputc('\n', stderr);
+    */ /* End Debugging */
 
     struct node *expansion = new_node('mace', 0);
 
@@ -607,13 +629,7 @@ do_expand(macd, args)
     /* Debugging code */ /*
     extern stderr;
     fprintf(stderr, "Expanding %s:\n\t", name);
-    for ( i = 0; i < expansion->arity; ++i ) {
-        struct node *node = expansion->ops[i];
-        if (node) { 
-            fputc(' ', stderr);
-            debug_node(node);
-        }
-    }
+    debug_node(expansion);
     fputc('\n', stderr);
     */ /* End Debugging */
 
