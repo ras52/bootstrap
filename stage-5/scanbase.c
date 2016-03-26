@@ -572,9 +572,9 @@ next() {
 /* Slurp all tokens until the next new line into *node_ptr (if not NULL), 
  * and return the next character (which will necessarily be '\n'). 
  * The current token will have been freed. */
-pp_slurp(stream, node_ptr, try_expand)
+pp_slurp(stream, node_ptr, expand)
     struct node** node_ptr;
-    int (*try_expand)();
+    int (*expand)();
 {
     extern struct node *vnode_app();
     auto int i = 0, c;
@@ -590,9 +590,9 @@ pp_slurp(stream, node_ptr, try_expand)
        
         raw_next(0);
 
-        /* If (*try_expand)() returns true, then it has handled the token,
+        /* If (*expand)() returns true, then it has handled the token,
          * and probably pushed something onto the push-back stack. */
-        while ( try_expand && try_expand(stream, token) ) 
+        while ( expand && expand(stream, token) )
             ;
 
         c = peek_token();
