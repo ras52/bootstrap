@@ -9,7 +9,7 @@ PATH  = ..
 all:	check
 
 # We have a proper test suite for the preprocessor
-CPP_TESTS = directive hash include macros
+CPP_TESTS = empty simple directive hash include macros
 
 check:	$(CPP_TESTS:%=%.run)
 
