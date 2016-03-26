@@ -6,6 +6,8 @@
 SHELL = /bin/sh
 PATH  = ..
 
+MAKE  = /usr/bin/make
+
 all:	check
 
 # We have a proper test suite for the preprocessor
@@ -16,6 +18,9 @@ check:	$(CPP_TESTS:%=%.run)
 # Suppress the default rules
 .SUFFIXES:
 
-%.run:	%.c %.i
+../cpp ../cmp:
+	$(MAKE) -C .. $(@:../%=%)
+
+%.run:	%.c %.i ../cpp ../cmp
 	cpp -P $< | cmp - $(<:%.c=%.i)
 
