@@ -1,8 +1,8 @@
 BOOTSTRAP STAGE 1
 
 In writing the stage 0 unhex tool, the two most tedious and error-prone
-tasks were generating valid ELF headers (which entailed keeping track
-of the size of the .text section and the location of the entry point)
+tasks were generating valid ELF headers, which entailed keeping track
+of the size of the .text section and the location of the entry point,
 and calculating the file offsets used as arguments to various JMP and 
 Jcc statements.  These two tasks were particularly prone to introduce
 errors as the code was modified, perhaps to correct some error found
@@ -69,15 +69,15 @@ in the ELF program header, it cannot act as a straightforward filter
 on standard input.  (Placing the program header at the end of the file
 does not help because the program header's offset is needed in the ELF
 header.)  Instead it takes the name of the file containing the .text
-section its only command line argument.
+section as its only command line argument.
 
   Usage: elfify test.ts > test
 
 where .ts is used as the canonical extension for a .text section.
 
 As elfify does not parse the .text section, it cannot work out where 
-the entry point is: it assumes that the entry point is 5 bytes before 
-the end of the .text section.  It is therefore suggested that all 
+the entry point is: it just assumes that the entry point is 5 bytes
+before the end of the .text section.  It is therefore suggested that all
 programs end with a jump to the real entry point.  On x86, a 32-bit
 relative jump requires precisely 5 bytes and can easily be generated
 by unhexl by ending the file with:
@@ -85,6 +85,8 @@ by unhexl by ending the file with:
   E9 main
 
 We check the stage 1 tools are working correctly by using them to build
-a new copy of unhexl from source in its own input language.  This is
-repeated and the second and third generation unhexl binaries are
-required to be identical.
+a new copy of unhexl from source in its own input language.  (This is
+why there are two copies of the source for unhexl: a .ts.x file for
+processing with the stage 0 unhex, and a .ts.xl file for use with the
+stage 1 unhexl.)  This is repeated and the second and third generation
+unhexl binaries are required to be identical.

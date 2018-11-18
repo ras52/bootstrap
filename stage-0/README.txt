@@ -26,8 +26,8 @@ there must not be any trailing space on lines, nor can there be blank
 lines.
 
 The unhex.x file contains the hexadecimal octets for unhex.  Processing
-it with unhex yields another copy of unhex which we check is identical
-to the inital copy.
+it with unhex yields another copy of unhex, which we check is identical
+to the inital copy as a way of testing that the program is working.
 
 The program is deliberately minimal.  Of necessity, it starts with an
 ELF header, followed by one program header for the whole file.  There
@@ -35,8 +35,6 @@ are no section headers and no shstrtab section, which together mean that
 the binutils diagnostic tools (objdump, etc.) are of limited use on it.
 
 Conceptually the program should have been written using some lower-level
-technique, such as with a hex-editor.  In practice the Makefile contains
-a simple one-line shell script to perform the same action as unhex, and
-it is generated source in its own language.  We check the program works
-by compiling its own source and comparing the output.
-
+technique, such as with a hex-editor.  But instead, the Makefile
+contains a simple one-line shell script to perform the same action as
+unhex, which is used to create the first unhex binary.  

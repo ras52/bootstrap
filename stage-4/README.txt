@@ -5,7 +5,7 @@ been to implement a B compiler, perhaps with the caveat that the few
 constructs that changed syntactically between B and C would be 
 implemented in the C way -- for example, += not =+, and 'extern' not
 'extrn'.  But it rapidly became obvious that the B memory model was
-not backwards compatible with the C memory model on machines with byte
+not forwards compatible with the C memory model on machines with byte
 addressing.  Implementing B on a x86 would require pointers to be
 represented as integer offsets into memory, and a pointer dereference,
 *ptr, would translate into a ModR/M + SIB instruction: (%ebx, %eax, 4) 
@@ -31,7 +31,7 @@ For forwards compatibility, certain type constructs are allowed and
 completely ignored.  The (otherwise unsupported) int keyword may be
 placed immediately after auto, and the identifiers in an auto 
 declaration can be preceded with one or more *.  A list of parameter 
-declarations by precede the opening brace of a function.
+declarations may precede the opening brace of a function.
 
 Summary of differences from B:
 
@@ -48,7 +48,7 @@ Summary of differences from B:
   * The return statement does not require brackets.
   * We don't allow backspace (character 0x7F) or dot (.) in identifiers.
   * The escape characters in strings is \ not *, and there is no \e.
-  * We don't support the switch statement, and therefore case labels.
+  * We don't support the switch statement, or therefore case labels.
   * We don't support goto and labeled statements.
 
 The stage 4 compiler is a simple afair, making a single pass over the 
