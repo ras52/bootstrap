@@ -1,6 +1,6 @@
 /* malloc.c
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com> 
+ * Copyright (C) 2013, 2018 Richard Smith <richard@ex-parrot.com> 
  * All rights reserved.
  */
 
@@ -15,6 +15,16 @@
 
 static
 __heap = 0;
+
+/* This is a function pointer:  void (*__membdgfn)( int op, void *ptr )
+ * If set, it is called just before malloc() returns with op == 1, and 
+ * just after free() is called with a non-zero pointer with op == 2. */
+static
+__memdbgfn = 0;
+
+__dbg_alloc( fn ) {
+    __memdbgfn = fn;
+}
 
 static
 __find_blk( last, size ) {
@@ -78,12 +88,15 @@ malloc( size ) {
     if (!p) p  = __new_blk( size );
     __frag( p, size );
     p[1] = 0;
-    return p + 20;
+    auto ptr = p + 20;
+    if (__memdbgfn) __memdbgfn( 1, ptr );
+    return ptr;
 }
 
 /* The C library free() */
 free( ptr ) {
     if (ptr) {
+        if (__memdbgfn) __memdbgfn( 2, ptr );
         auto p = ptr - 20;
         if (p[1]) abort(); /* Double free */
         p[1] = 1;
