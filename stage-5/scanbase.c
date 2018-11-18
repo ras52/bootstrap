@@ -1,6 +1,6 @@
 /* scanner.c  --  code for tokenising the C input stream
  *
- * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015, 2018 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -213,7 +213,7 @@ start_ppdir(stream) {
     /* In principle this matches the non-directive syntax of C99 / C++1x,
      * but that's for use as extensions only, and we unilaterally decide
      * that all our extensions will begin with an identifier (like 'include'). 
-     * This is a valid implementation choice. */
+     * This is a valid (and indeed sensible) implementation choice. */
     if ( !isidchar1(c) ) 
         error("Malformed preprocessor directive");
 
@@ -251,6 +251,7 @@ pp_dir(stream) {
         return 0;
 
     str = node_str(tok);
+    /* Even the compiler needs to know about #line and #pragma directives. */
     if ( strcmp( str, "line" ) == 0 )
         line_direct(stream);
     else if ( strcmp( str, "pragma" ) == 0 )
@@ -317,7 +318,8 @@ isidchar(c) {
  * into NODE->str, set NODE->type, and return NODE. */
 struct node*
 get_word(stream, c) {
-    /* struct node { int type; int dummy; char str[]; } */
+    /* struct node { int code = 'id'; int arity = 0; int type (unused); 
+                     char str[] (overlapping node* ops[4]); } */
     auto struct node* node = new_node('id', 0);
     auto int i = 0;
 

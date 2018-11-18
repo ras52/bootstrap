@@ -1,6 +1,6 @@
 /* cpp.c  --  the C preprocessor
  *
- * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015, 2018 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -222,7 +222,7 @@ if_expand(stream, node)
      * the stack: instead, we must overwrite the current token to avoid 
      * an infinite loop. */
     if ( node->code == 'id' ) {
-        if ( try_expand(node, pp_next, 0) )
+        if ( try_expand(node, pp_next) )
             /* Returning 1 tells pp_slurp that we haven't set a token, but to 
                call us again. */
             return 1;
@@ -355,10 +355,10 @@ err_direct(stream) {
     exit(1);
 }
 
-/* Hook for handling preprocessor directives other than #line and #pragma */
+/* Hook for handling preprocessor directives, which is called by the scanner
+ * (e.g. when next() is called); #pragma, #line and the null directive are 
+ * handled in scanbase.c as the compiler needs to know about them too. */
 pp_direct(stream, str) {
-    /* #pragma, #line and the null directive are handled in scanbase.c 
-     * by pp_dir() */
     if ( strcmp( str, "include" ) == 0 )
         incl_direct( stream );
     else if ( strcmp( str, "define" ) == 0 )
@@ -452,6 +452,9 @@ preprocess(output) {
     char* out_file = 0;
     int put_some = 0;
 
+    /* Parsing of preprocessing directives is done in the scanner, and
+     * this function just sees tokens that exist after they have been
+     * parsed, but before macro expansion. */
     while ( c = peek_token() ) {
         /* We cannot call take_node() because (i) we don't want to set the
          * arity which, for a 'prgm' node, is unknown; and (ii) because it
@@ -469,11 +472,12 @@ preprocess(output) {
             next();
             continue;
         }
-        else if ( c == 'id' && try_expand(node, next, 0) )
+        else if ( c == 'id' && try_expand(node, next) )
             continue;
 
         set_line( &out_line, &out_file, output );
         print_node(output, node);
+fflush(output); /* XXX Temporarily so we can see when we abort() */
         free_node( node );
         next();
         put_some = 1;
@@ -490,6 +494,63 @@ usage() {
     );
 }
 
+/* Debugging code */
+static
+dbg_malloc(op, ptr)
+    int op;
+    char *ptr;
+{
+    extern stderr;
+    if (op == 1) fprintf(stderr, "malloc() = 0x%x\n", ptr);
+    else if (op == 2) fprintf(stderr, "free( 0x%x )\n", ptr);
+    fflush(stderr);
+}
+
+static
+debug_list(node)
+    struct node *node;
+{
+    extern stderr;
+    int i;
+    for ( i = 0; i < node->arity; ++i ) {
+        if (i) fputc(' ', stderr);
+        if ( node->ops[i] ) debug_node( node->ops[i], 0 );
+        else fputs("NULL", stderr);
+    }
+}
+
+static
+debug_node(node, msg) 
+    struct node* node;
+    char *msg;
+{
+    extern stderr;
+    int c = node->code;
+
+    if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
+        fprintf( stderr, "%Mc:\"%s\"", c, node_str(node) );
+    else if (c == 'mace') {
+        fprintf( stderr, "[[%d: ", node->arity );
+        debug_list(node);
+        fputs("]]", stderr);
+    }
+    else if (c == '()') {
+        fprintf( stderr, "((%d: ", node->arity );
+        debug_list(node);
+        fputs("))", stderr);
+    }
+    else if ( c == 'prgm' ) {
+        fputs( "_Pragma(", stderr );
+        debug_list(node);
+        fputc(')', stderr);
+    }
+    else
+        fprintf( stderr, "%Mc", c );
+
+    if (msg) fprintf( stderr, " @ 0x%x: %s\n", node, msg);
+}
+/* End Debugging */
+
 main(argc, argv) 
     int argc;
     char **argv;
@@ -500,6 +561,9 @@ main(argc, argv)
     struct FILE *f = stdout;
     char *filename = 0, *outname = 0, **t;
     int i = 1;
+
+    /* __dbg_alloc( dbg_malloc ); */
+    /* dbg_nodes( debug_node ); */
 
     incl_path = pvec_new();
     incl_vec = pvec_new();
@@ -609,7 +673,7 @@ inc_expand(stream, node)
      * the stack: instead, we must overwrite the current token to avoid 
      * an infinite loop. */
     if ( node->code == 'id' ) {
-        if ( try_expand(node, pp_next, 0) )
+        if ( try_expand(node, pp_next) )
             /* Returning 1 tells pp_slurp that we haven't set a token, but to 
                call us again. */
             return 1;
@@ -700,3 +764,5 @@ cpp_pragma(node)
 
     return 0;
 }
+
+

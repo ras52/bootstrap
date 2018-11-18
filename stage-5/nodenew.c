@@ -1,6 +1,7 @@
 /* nodenew.c  --  node.c rewritten to use structs
  *
- * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015, 2016, 2018 
+ * Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -9,10 +10,17 @@
  * compiler (and, indeed, wouldn't compile if were). */
 #pragma RBC compatibility 5 
 
-extern stderr;
-
 static
 rc_count = 0;
+
+static
+int (*debug_fn)() = 0;
+
+dbg_nodes(fn)
+    int (*fn)();
+{
+    debug_fn = fn;
+}
 
 struct rc_node {
     int ref_count, capacity;
@@ -38,8 +46,7 @@ rc_free(ptr) {
 /* Diagnostic routine to check that all nodes have been unallocated. */
 rc_done() {
     if (rc_count)
-        fprintf(stderr, "Internal error: program leaked %d objects\n",
-                rc_count);
+        int_error("Internal error: program leaked %d objects\n", rc_count);
 }
 
 /* Wrapper around realloc to work with pointers returned by rc_alloc. */
@@ -56,8 +63,8 @@ rc_realloc(ptr, sz) {
      * What should it do?  If the address changes, we need to update all
      * the references, but we cannot do that.  So we'd have to create a unique
      * clone first, but then it's not really shared.  Best to prohibit it. */
-    if ( old_ptr->ref_count > 1 )
-        abort();
+    if ( old_ptr->ref_count != 1 )
+        int_error("Attempt to reallocate a shared ref-counted object");
 
     new_ptr = (struct rc_node*) realloc( old_ptr, sizeof(struct rc_node) + sz );
     new_ptr->ref_count = 1;
@@ -84,7 +91,24 @@ struct node {
      * The scanner never reads a ternary operator (because ?: has two separate
      * lexical elements), but we generate '?:' nodes in the expression parser
      * and want a uniform interface.  Similarly, the 'for' node is a quaternary
-     * "operator" (init, test, incr, stmt). */
+     * "operator" (init, test, incr, stmt). 
+     *
+     * Because of the way we store other data, but particularly strings, in 
+     * nodes, this is really a:
+     *
+     *   union {
+     *     struct node* op[4];
+     *     int ivals[4];
+     *     char str[];
+     *   };  
+     *
+     * The ARITY field is zero when the node contains a string so as to
+     * prevent node_free from treating the string as a node pointer and
+     * freeing it.   There are some other instances where integers are 
+     * stored in the node.  E.g. in a 'macp' node (used to represent the 
+     * occurrence of a macro parameter in the replacement list of a 
+     * function-like macro) has ARITY=0 and nothing in the OP[] array,
+     * but uses IVAL[0] to represent the parameter number.  */
     struct node* ops[4];
 };
 
@@ -93,14 +117,37 @@ new_node(code, arity) {
     struct node* n = rc_alloc( sizeof(struct node) );
     memset( n, 0, sizeof(struct node) );
 
-    /* The type and payload (operands) will get filled in by the parser */
+    /* The type and payload (operands) will get filled in by the parser,
+     * but they were safely zeroed by the above call to memset(). */
     n->code = code; 
     n->arity = arity;
 
-    /* Debugging code: */ /* 
-    extern stderr; fprintf(stderr, "0x%x '%Mc' new\n", n, code); */
+    if (debug_fn) debug_fn(n, "new_node");
 
     return n;
+}
+
+/* Checks that NODE and its children still have non-zero a ref count. */
+check_node(node)
+    struct node* node;
+{
+    if (node) {
+        struct rc_node* rc = (unsigned char*)node - sizeof(struct rc_node);
+        int i;
+
+        if ( rc->ref_count <= 0 || rc->ref_count > 1000 )
+            int_error( "Use of node type '%Mc' at 0x%x with %d ref-count\n",
+                       node->code, node, rc->ref_count );
+
+        for ( i = 0; i < node->arity; ++i ) 
+            check_node( node->ops[i] );
+
+        if (node->code & 0x80808080) 
+            int_error( "Invalid node code '%Mc' at 0x%x with %d ref-count\n",
+                       node->code, node, rc->ref_count );
+    }
+
+    return node;
 }
 
 /* Unallocate a node, NODE, created by new_node(). */
@@ -111,24 +158,21 @@ free_node(node)
         struct rc_node* rc = (unsigned char*)node - sizeof(struct rc_node);
 
         /* Trap for double delete */ 
-        if ( rc->ref_count == 0 ) { 
-            extern stderr; 
-            fprintf( stderr, "Double delete of node type '%Mc' at 0x%x\n",
-                     node->code, node );
-            abort();
-        }
+        if ( rc->ref_count == 0 )
+            int_error( "Double delete of node type '%Mc' at 0x%x\n",
+                       node->code, node );
 
         /* Only delete if the reference count drops to zero. */
         if ( --rc->ref_count == 0 ) {
+            /* This is the latest we can call debug_fn as we're about to free
+             * the children, and the function will probably access them. */
+            if (debug_fn) debug_fn(node, "free_node");
+
             int i;
-            for ( i = 0; i < node->arity; ++i ) 
+            for ( i = 0; i < node->arity; ++i )
                 free_node( node->ops[i] );
 
             free_node( node->type );
-
-            /* Debugging code: */ /* 
-            extern stderr; 
-            fprintf(stderr, "0x%x '%Mc' free\n", node, node->code); */
 
             rc_free(node);
         }
@@ -156,15 +200,18 @@ grow_node(node, size, extra)
         struct node *new;
         size += (extra <= size ? size : extra);
 
-        /* Debugging code: */ /*
-        extern stderr; 
-        if (node) 
-          fprintf(stderr, "0x%x '%Mc' free [realloc]\n", node, node->code); */
+        if (debug_fn && node) debug_fn(node, "grow_node [free]");
 
         new = (struct node *)rc_realloc( node, size + overhead );
 
-        /* Debugging code: */ /*       
-        fprintf(stderr, "0x%x '%Mc' new [realloc]\n", new, new->code); */
+        /* Initialise if it's a new node */
+        if (!node) { 
+            new->code = 0;
+            new->arity = 0;
+            new->type = 0;
+        }
+
+        if (debug_fn) debug_fn(new, "grow_node, [realloced]");
 
         return new;
     }
@@ -182,6 +229,19 @@ vnode_app( vec, child )
                      sizeof(struct node*) );
     vec->ops[ vec->arity++ ] = child;
     return vec;
+}
+
+/* Append nodes with index [FIRST, LAST) from SRC to vnode DEST, growing 
+ * the vector if necessary, and returning the (possibly reallocated) vector. */
+struct node *
+vnode_copy( dest, src, first, last )
+    struct node *dest, *src;
+{
+    int i;
+    if ( last < 0 ) last = src->arity;
+    for ( i = first; i < last; ++i )
+        dest = vnode_app( dest, add_ref(src->ops[i]) );
+    return dest;
 }
 
 /* Prepend node CHILD to node VEC, growing the vector if necessary, 
@@ -274,9 +334,8 @@ new_strnode(code, str)
 {
     int sz = strlen(str) + 1;
     struct node* node = grow_node( 0, 0, sz );
+    /* grow_node() has already zeroed code, arity and type */
     node->code = code;
-    node->arity = 0;
-    node->type = 0;
     strcpy( node_str(node), str, sz );
     return node;
 }

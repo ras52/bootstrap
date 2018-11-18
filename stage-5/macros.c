@@ -1,16 +1,17 @@
 /* macros.c  --  support for preprocessor macros
  *
- * Copyright (C) 2013, 2014, 2015 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015, 2016, 2018 
+ * Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
 struct node* get_word();
-struct node* next();
-struct node* get_node();
 struct node* new_node();
 struct node* vnode_app();
 struct node* vnode_prep();
+struct node* vnode_copy();
 char* node_str();
+free_node();
 
 /* A macro definition is just a 'macd' node with 3 operands: 
  * [0] name, [1] is the parameter list, [2] expansion;
@@ -64,6 +65,17 @@ get_macro(name)
 static
 is_builtin(name) {
     return strcmp( "__FILE__", name ) == 0 || strcmp( "__LINE__", name ) == 0;
+}
+
+static
+struct node *
+macp_arg(macp, args) 
+    struct node *macp, *args;
+{
+     /* The number is in the macp [0] slot (which is okay as arity is 0). 
+      * The parameter number is one-based, and the macro name is put in the 
+      * args->ops[0] slot. */
+     return args->ops[ (int) macp->ops[0] ];
 }
 
 static
@@ -177,14 +189,16 @@ defn_direct(stream) {
         macd->ops[1] = ident_list(stream);
 
     /* Require whitespace (incl. '\n') before the expansion list.  
-     * XXX It's not clear to me that this is correct in C90. */
+     * It's not clear that this is correct in C90, but we treat C99 as
+     * a clarification to C90 rather than a change in behaviour. */
     else if ( !isspace(c) ) 
         error("Expected whitespace before macro replacement list");
 
     macd->ops[2] = new_node('mace', 0);
     pp_slurp(stream, &macd->ops[2], 0);
 
-    /* TODO:  We're allowed repeat definitions if they're identical. */
+    /* TODO:  We're allowed repeat definitions if they're identical. 
+     * This needs better whitespace preservation than we currently have. */
     if ( get_macro(name) )
         error("Duplicate definition of %s", name);
 
@@ -309,16 +323,14 @@ do_builtin(name)
     if (strcmp(name, "__LINE__") == 0) {
         char buf[16] = {0}; 
         snprintf(buf, 16, "%d", get_line());
-        res = new_strnode('ppno', buf);
+        return new_strnode('ppno', buf);
     }
     
     else if (strcmp(name, "__FILE__") == 0)
-        res = esc_strnode( getfilename() );
+        return esc_strnode( getfilename() );
     
     else
-        int_error("Unhandled built-in");
-    
-    set_token(res);
+        int_error("Unhandled built-in");    
 }
 
 static
@@ -380,6 +392,45 @@ stringify(arg)
     str2 = esc_strnode( node_str(str) );
     free_node(str);
     return str2;
+}
+
+/* Pass over MACD handling all # operators. */
+static 
+struct node *
+do_stringfy(mace, args)
+    struct node *mace, *args;
+{
+    struct node *expansion;
+    int i;
+
+    /* Don't do bother cloning the list if there are none */
+    for ( i = 0; i < mace->arity; ++i ) 
+        if ( mace->ops[i]->code == '#' ) break;
+    if (i == mace->arity) return mace;
+
+    expansion = new_node('mace', 0);
+
+    for ( i = 0; i < mace->arity; ++i ) {
+        struct node *node = mace->ops[i];
+
+        /* Is it argument of a stringification operator? */
+        if ( node->code == '#' ) {
+            if (!args) int_error("Unexpected macro parameter");
+            if ( i+1 == mace->arity || mace->ops[i+1]->code != 'macp' )
+                int_error("Expected macro parameter");
+
+            struct node* arg = macp_arg( mace->ops[i+1], args );
+            expansion = vnode_app( expansion, stringify(arg) );
+
+            ++i;  /* skip the 'macp' */
+        }
+
+        /* Pass through other tokens. */
+        else expansion = vnode_app( expansion, add_ref(node) );
+    }
+
+    free_node(mace);
+    return expansion;
 }
 
 /* Check that NODE is a valid pp-token (e.g. following concatenation) and 
@@ -447,219 +498,209 @@ check_pptok(node)
     return 1;
 }
 
-/* If *RHS_PTR is a node, then treat NODE as the left-hand argument to a 
- * ## operator, and concatenate them. */
 static
-do_concat(expansion, i) 
-    struct node *expansion;
+struct node *
+do_concat(mace, args) 
+    struct node *mace, *args;
 {
-    struct node **lhs_p = 0, **rhs_p = 0;
-    struct node *lhs, *rhs, *conc, *null = 0;
-    int j;
+    int i = 0;
 
-    /* Locate the previous and subsequent token in the expansion. */
-    j = i; do 
-        lhs = *( lhs_p = &expansion->ops[j-1] );
-    while ( !lhs && --j );
+    while (1) {
+        struct node *expansion, *lhs, *lhs_val, *rhs, *rhs_val, *conc;
+        int j, k;
+        int no_lhs, no_rhs;
 
-    j = i+1; do 
-        rhs = *( rhs_p = &expansion->ops[j] );
-    while ( !rhs && ++j < expansion->arity );
+         for ( ; i < mace->arity; ++i )
+            if ( mace->ops[i]->code == '##' )
+                break;
 
-    /* If they are parameter expansions, find the last and/or first token
-     * of the expansion proper (i.e. excluding any _Pragma("RBC cpp_mask")s); 
-     * or leave LHS / RHS null as "a placemarker preprocessing token" if 
-     * the expansion is empty. */
-    if (lhs && lhs->code == 'mace') {
-        for (j = lhs->arity; j; --j) {
-            lhs_p = &lhs->ops[j-1];
-            if (*lhs_p && !is_cpp_prgm(*lhs_p)) {
-                lhs = *lhs_p;
-                goto got_lhs;
+        if ( i == mace->arity ) 
+            return mace;
+
+        if ( i == 0 || i == mace->arity-1 )
+            int_error("Incorrectly positioned ##");
+
+
+        expansion = new_node('mace', 0);
+        lhs = lhs_val = mace->ops[i-1];
+        rhs = rhs_val = mace->ops[i+1];
+
+         /* Copy preceeding nodes */
+        expansion = vnode_copy( expansion, mace, 0, i-1 );
+    
+        /* If they are parameter expansions, find the last and/or first token
+         * of the expansion proper (i.e. excluding any _Pragma cpp_masks); 
+         * or leave LHS_VAL null as "a placemarker preprocessing token" if 
+         * the expansion is empty. */
+        if (lhs->code == 'macp' && args) {
+            struct node* arg = macp_arg(lhs, args);
+            lhs_val = 0;  /* This is a placemarker */
+    
+            for (j = arg->arity; j; --j) {
+                struct node* n = arg->ops[j-1];
+                if (!is_cpp_prgm(n)) { lhs_val = n; break; }
+            }
+    
+            /* Expand the parameter without doing macro expansion, leaving the
+             * the final token (at index j) for the concatenation. */
+            expansion = vnode_copy( expansion, arg, 0, j-1 );
+            expansion = vnode_copy( expansion, arg, j, -1 );
+        }
+    
+        /* Repeat for the RHS, but don't yet copy the unused tokens. */
+        if (rhs->code == 'macp' && args) {
+            struct node* arg = macp_arg(rhs, args);
+            rhs_val = 0;
+    
+            for (j = 0; j < arg->arity; ++j) {
+                struct node* n = arg->ops[j];
+                if (!is_cpp_prgm(n)) { rhs_val = n; break; }
             }
         }
-        lhs = *( lhs_p = &null );
-      got_lhs:;
-    }
-
-    if (rhs && rhs->code == 'mace') {
-        for (j = 0; j < rhs->arity; ++j) {
-            rhs_p = &rhs->ops[j];
-            if (*rhs_p && !is_cpp_prgm(*rhs_p)) {
-                rhs = *rhs_p;
-                goto got_rhs;
-            }
-        }
-        rhs = *( rhs_p = &null );
-      got_rhs:;
-    }
+    
+        /* Handle the cases when we're just concatening zero or one token.
+         * Placemarker ('plmk') nodes are used to represent the empty nodes. */
+        no_lhs = (!lhs_val || lhs_val->code == 'plmk');
+        no_rhs = (!rhs_val || rhs_val->code == 'plmk');
+       
+        if (no_lhs && no_rhs) conc = new_node('plmk', 0);
+        else if (no_lhs) conc = add_ref(rhs_val); 
+        else if (no_rhs) conc = add_ref(lhs_val);
+    
+        /* Do the actual concatenation */
+        else {
+            int l = 0;
+            conc = new_node('str', 0);
+            node_concat( &conc, &l, lhs_val );
+            node_concat( &conc, &l, rhs_val );
+            node_lchar( &conc, &l, 0 );  /* NUL termination */
    
-    /* Handle the cases when we're just concatening zero or one token. */
-    lhs = *lhs_p; rhs = *rhs_p;
-    if (!lhs && !rhs) conc = 0;
-    else if (!lhs) conc = add_ref(rhs); 
-    else if (!rhs) conc = add_ref(lhs);
-    else {
-        /* Use a temporary node of for the concatenated text. */
-        int l = 0;
-        conc = new_node('str', 0);
+            /* Set its type */
+            if ( !check_pptok( conc ) )
+                error( "Concatention results in invalid token: %s",
+                       node_str(conc) );
+        }
+    
+        expansion = vnode_app( expansion, conc );
+    
+        /* Expand the RHS parameter without doing macro expansion, leaving the
+         * the first token (at index j) for the concatenation. */
+        if (rhs->code == 'macp' && args) {
+            struct node* arg = macp_arg(rhs, args);
+            expansion = vnode_copy( expansion, arg, 0, j );
+            expansion = vnode_copy( expansion, arg, j+1, -1 );
+        }
+  
+        /* Start here looking for the next ## */ 
+        i = expansion->arity;
 
-        /* Debugging code */ /*
-        extern stderr;
-        fputs("Concatenating ", stderr);
-        debug_node(lhs);
-        fputs(" and ", stderr);
-        debug_node(rhs);
-        fputc('\n', stderr);
-        */ /* End Debugging */
-
-        node_concat( &conc, &l, lhs );
-        node_concat( &conc, &l, rhs );
-        node_lchar( &conc, &l, 0 );  /* NUL termination */
-
-        /* Set its type */
-        if ( !check_pptok( conc ) )
-            error( "Concatention results in invalid preprocessing token: %s",
-                   node_str(conc) );
+        /* Copy trailing nodes */
+        expansion = vnode_copy( expansion, mace, i+2, -1 );
+    
+        free_node(mace);
+        mace = expansion;
     }
-
-    /* Overwrite the ## token with the concatenated token. */
-    free_node( expansion->ops[i] );
-    expansion->ops[i] = conc;
-
-    /* And delete the tokens that were used to generate it. */
-    if (*lhs_p) { free_node(*lhs_p); *lhs_p = 0; }
-    if (*rhs_p) { free_node(*rhs_p); *rhs_p = 0; }
 }
 
-/* Debugging code */ /*
-static
-debug_node(node) 
-    struct node* node;
-{
-    extern stderr;
-    int c = node->code, i;
+struct vnode_iterator {
+    struct node *vnode;
+    int pos;
+};
 
-    if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
-        fprintf( stderr, "%Mc:\"%s\"", c, node_str(node) );
-    else if (c == 'mace') {
-        fprintf( stderr, "[[%d:", node->arity );
-        for ( i = 0; i < node->arity; ++i ) {
-            fputc(' ', stderr);
-            if ( node->ops[i] ) debug_node( node->ops[i] );
-            else fputs("NULL", stderr);
-        }
-        fputs("]]", stderr);
+static vnode_next(iterator)
+    struct vnode_iterator *iterator;
+{
+    if (iterator->pos < iterator->vnode->arity) {
+       struct node *n = add_ref( iterator->vnode->ops[ iterator->pos ] ); 
+       ++iterator->pos;
+       return n;
     }
-    else if ( c == 'prgm' ) {
-        int i;
-        fputs( "_Pragma(", stderr );
-        for ( i = 0; i < node->arity; ++i ) {
-            if (i) fputc(' ', stderr);
-            debug_node( node->ops[i] );
-        }
-        fputc(')', stderr);
-    }
-    else
-        fprintf( stderr, "%Mc", c );
+    else return 0;
 }
-*/ /* End Debugging */
 
-/* Expand MACD using arguments ARGS. */
+/* Expand ARG and append it to VNODE 
+ *
+ * This called during macro expansion.  While copying the replacement list
+ * to the output (in VNODE) we've encountered a macro parameter (denoted
+ * by a 'macp' node.  We've looked up the parameter and found the 
+ * corresponding argument (a 'mace' passed in ARG).  Macro expansion hasn't 
+ * yet been done on the argument, so we do that here. 
+ * 
+ * We are not being passed ownership of ARG, but will typically copy elements
+ * from ARG to VNODE. */
 static
-do_expand(macd, args)
-    struct node *macd, *args;
+struct node *
+expand_arg(vnode, arg)
+    struct node *vnode, *arg;
 {
-    int i, n;
-    char *name = node_str(macd->ops[0]);
+    extern struct node *do_expand();
 
-    /* This is the replacement list in the definition. */
-    struct node *mace = macd->ops[2];
+    if (arg->code != 'mace') 
+        int_error("Macro argument expansion attempted on node type '%Mc'\n",
+                  arg->code);
 
-    /* Debugging code */ /*
-    extern stderr;
-    fprintf(stderr, "Replacement list for %s:\n\t", name);
-    debug_node(mace);
-    fputc('\n', stderr);
-    */ /* End Debugging */
+    int i;
+    for ( i = 0; i < arg->arity; ++i ) {
+        struct node *node = arg->ops[i];
 
+        if ( node->code == 'id' ) {
+            /* This may increment i if a macro is found. */
+            struct node *expansion;
+            struct vnode_iterator it;
+            it.vnode = arg; it.pos = i+1;
+
+            /* Pass free_node as the unget_fn because vnode_next simply does
+             * an add_ref, and if do_expand only calls unget_fn if it fails
+             * (i.e. returns 0).  In that case we ignore it.pos, so all we
+             * need to do is decrement the ref count again. */
+            expansion = do_expand( add_ref(node), vnode_next, &it, free_node);
+
+            if (expansion) {
+                /* Only preserve the increment of i if it succeeded. 
+                 * The for loop is about to call ++i. */
+                i = it.pos - 1;
+                /* Re-scan for further macros  */
+                vnode = expand_arg( vnode, expansion );
+                free_node(expansion);
+                continue;
+            }
+            /* We've called add_ref(), above, but do_expand didn't take it. */
+            else free_node(node);
+        }
+        
+        /* Process any _Pragma cpp_mask macros to handle masking */        
+        if ( node->code == 'prgm' ) cpp_pragma(node);
+        vnode = vnode_app( vnode, add_ref(node) );
+    }
+    return vnode;
+}
+
+/* Substitute any remaining parameters in MACE using ARGS */
+static
+struct node *
+do_subst(mace, args)
+    struct node *mace, *args;
+{
     struct node *expansion = new_node('mace', 0);
+    int i, j;
 
     for ( i = 0; i < mace->arity; ++i ) {
-        struct node *src = mace->ops[i];
+        struct node *node = mace->ops[i];
 
-        /* Substitute arguments for parameters */
-        if ( src->code == 'macp' ) {
-            int p = (int) src->ops[0], j;
+        /* Carry out argument expansion on any remaining parameters */
+        if ( node->code == 'macp' )
+            expansion = expand_arg( expansion, macp_arg( node, args ) );
 
-            if (!args) int_error("Unexpected macro parameter");
-
-            src = args->ops[p]; /* A 'mace' node containing the args. */
-
-            /* Is it the argument of the stringification operator? */
-            if ( i && mace->ops[i-1]->code == '#' )
-                expansion = vnode_app( expansion, stringify(src) );
-
-            else {
-                /* We clone the argument list so we can overwrite it: 
-                 * this is required so that a parameter can be concatenated
-                 * more than once. */
-                struct node *clone = new_node('mace', 0);
-                for ( j = 0; j < src->arity; ++j ) 
-                    clone = vnode_app( clone, add_ref(src->ops[j] ) );
-                expansion = vnode_app( expansion, clone );
-            }
-        }
-
-        /* The # operator is handled above. */
-        else if ( args && src->code == '#' )
+        /* Placemarker nodes now get dropped */
+        else if ( node->code == 'plmk' )
             ;
+
         /* Pass through other tokens. */
-        else
-            expansion = vnode_app( expansion, add_ref(src) );
+        else expansion = vnode_app( expansion, add_ref(node) );
     }
 
-    /* Handle any ## operators.  They will replace some nodes with NULL. */
-    for ( i = 0; i < expansion->arity; ++i ) {
-        struct node *node = expansion->ops[i];
-        if ( node && node->code == '##' )
-            do_concat( expansion, i );
-    }
-
-    /* Debugging code */ /*
-    extern stderr;
-    fprintf(stderr, "Expanding %s:\n\t", name);
-    debug_node(expansion);
-    fputc('\n', stderr);
-    */ /* End Debugging */
-
-    /* Push a _Pragma("RBC cpp_unmask $name") node (for the end), then
-     * push back the expansion in reverse order, and finally mask it.
-     * This implements the standard behaviour that macros cannot recursively
-     * reference themselves.  This is used in #define errno errno.
-     * The [3] slot is abused to store an is-masked flag.  As arity is 3,
-     * it is never freed. */
-    set_token( mk_prgm_rbc( macd->ops[0], "cpp_unmask" ) ); 
-
-    for ( n = expansion->arity; n; --n ) {
-        int j;
-        struct node *node = expansion->ops[n-1];
-        /* We clone nodes, rather than using add_ref(), because the expression 
-         * parser expectes to modify them. */
-        if (node) {
-            /* Flatten the result of parameter expansion */
-            if (node->code == 'mace') {
-                for ( j = node->arity; j; --j )
-                    if ( node->ops[j-1] )
-                        unget_token( clone_node( node->ops[j-1] ) );
-            }
-            else 
-                unget_token( clone_node(node) );
-        }
-    }
-    unget_token( mk_prgm_rbc( macd->ops[0], "cpp_mask" ) );
-
-    free_node( expansion );
+    free_node(mace);
+    return expansion;
 }
 
 /* Implements the defined() preprocessor function. */
@@ -687,8 +728,8 @@ cpp_setmask(name, delta)
 fini_macros() {
     struct node **i = macro_vec.start, **e = macro_vec.end;
     for (; i != e; ++i ) {
-        if ( (*i)->ops[3] ) 
-            int_error( "Macro '%s' left masked", node_str( (*i)->ops[0] ) );
+        /* if ( (*i)->ops[3] ) 
+            int_error( "Macro '%s' left masked", node_str( (*i)->ops[0] ) );*/
         free_node(*i);
     }
 }
@@ -697,6 +738,8 @@ fini_macros() {
 parse_d_opt(arg) 
     char* arg;
 {
+    extern struct node* next();
+
     struct node *macd = new_node('macd', 3), *t;
     int i = 0, c;
 
@@ -736,7 +779,7 @@ fix_arg(arg)
      *
      *     ~ _Pragma("RBC cpp_unmask h") 5
      *
-     * We try to detect such cases and prepend the necessary cpp_mask
+     * We detect such cases and prepend the necessary cpp_mask
      * or append the necessary cpp_unmask to balance it out. */
     int i, j;
 
@@ -774,24 +817,53 @@ fix_arg(arg)
     return arg;
 }
 
-/* The current token is the '('.  Read macro arguments to the corresponding 
- * ')', which is left as head of the stack. */
 static
-macro_args(name_node, next_fn) 
+struct node *
+macro_args(name_node, next_fn, next_fn_arg, unget_fn)
     struct node *name_node;
     struct node *(*next_fn)();
+    *(*unget_fn)();
 {
-    char *name = node_str(name_node);
-    struct node *macro = get_macro(name);
-    struct node *args = new_node('()', 0), *arg = 0, *n;
-    int pdepth = 0, edepth = 0, n_params, n_args;
+    struct node *masks = new_node('mace',0);
+    struct node *macro = get_macro( node_str(name_node) );
+    struct node *n, *args, *arg = 0;
+    int pdepth = 0, n_params, n_args, i;
 
-    args = vnode_app( args, name_node );
+    /* We take ownership of NAME_NODE unless we return 0. */
+    
+    /* Skip any _Pragma("RBC cpp_mask $n") directive. */
+    while ( is_cpp_prgm(n = next_fn(next_fn_arg)) )
+        masks = vnode_app( masks, add_ref(n) );
+
+    if ( !n || n->code != '(' ) { 
+        /* Restore the pragmas: decrement arity to prevent freeing */
+        while ( masks->arity )
+            unget_fn( masks->ops[ --masks->arity ] );
+  
+        /* Give ownership of NAME_NODE back to the stack. */
+        /* free_node(name_node); */
+
+        free_node(masks);
+        return 0;
+    }
+
+    /* This is definitely a function-like macro invocation */
+
+    /* Process the pragmas */
+    for ( i=0; i<masks->arity; ++i )
+        cpp_pragma( masks->ops[i] );
+
+    /* This is where we finally skip the '(' */
+    free_node(n);
+    free_node(masks);
+
+    n = next_fn(next_fn_arg); 
+
+    /* Give ownership of the NAME_NODE to ARGS which we eventually return. */
+    args = vnode_app( new_node('()', 0), name_node );
 
     while (1) {
-        n = get_node();
-
-        /* We don't know whether this is a EOF or end of line: that 
+        /* We don't know whether this is an EOF or end of line: that 
          * depends on whether next_fn is pp_next or next. */
         if (!n) error("Incomplete macro argument list");
 
@@ -806,28 +878,23 @@ macro_args(name_node, next_fn)
          * invocation with one empty argument or with zero arguments. */
         if (!arg) arg = new_node('mace', 0);
 
-        if ( n->code == ',' && pdepth == 0 && edepth == 0 ) {
+        /* pdepth tracks the depth of parentheses: commas are only 
+         * separators when outside parentheses. */
+        if ( n->code == ',' && pdepth == 0 ) {
             arg = fix_arg(arg);
             args = vnode_app( args, arg );
             arg = new_node('mace', 0);
             free_node(n);
         }
 
-        /* "A parameter in the replacement list [...] is replaced by the 
-         * corresponding argument after all macros contained therein have 
-         * been expanded." [C11 6.10.3.1/1]  This is doing that expansion
-         * of macros in arguments. */
-        else if ( n->code == 'id' && try_expand(n, next_fn, &arg) ) 
-            continue;
-        
-        else {
-            /* If it's a preprocessor pragma, it needs processing, but also
-             * needs to be passed through to the main preprocessor loop. */
-            if ( n->code == 'prgm' ) edepth += cpp_pragma(n);
+        /* Expansion cannot yet be done on macros in arguments because 
+         * we don't know whether expansion is suppressed by a # or ##;
+         * the argument might even be used twice: once with and once
+         * without expansion. */
+        else
             arg = vnode_app( arg, n );
-        }
 
-        next_fn();        
+        n = next_fn(next_fn_arg);
     }
 
     /* Note: The '()' nodes have slot zero reserved for a return type
@@ -849,91 +916,129 @@ macro_args(name_node, next_fn)
 
     if ( n_params != n_args )
         error( "Macro '%s' expects %d arguments but called with %d arguments",
-               name, n_params, n_args );
+               node_str(name_node), n_params, n_args );
 
-    return args;
+    return check_node(args);
 }
 
+/* If this return non-NULL, it takes ownership of NODE. 
+ * XXX I don't see how that can be true. */
 static
-has_brack(next_fn, arg)
-    struct node *(*next_fn)();
-    struct node **arg;
-{
-    struct node *masks = new_node('tmp',0);
-    struct node *name = get_node(), *n = next_fn();
-    int i;
-
-    /* Skip any _Pragma("RBC cpp_mask $n") directive. */
-    while ( is_cpp_prgm(n) ) {
-        masks = vnode_app( masks, n );
-        n = next_fn();
-    }
-
-    if ( n && n->code == '(' ) { 
-        /* Process the pragmas */
-        for ( i=0; i<masks->arity; ++i )
-            cpp_pragma( masks->ops[i] );
-
-        /* This is where we finally skip the '(' */
-        free_node(n);
-        next_fn(); 
-
-        if (arg)
-            for ( i=0; i<masks->arity; ++i )
-                *arg = vnode_app(*arg, add_ref( masks->ops[i] ) );
-
-        free_node(masks);
-        return 1; 
-    }
-    else {
-        /* Restore the pragmas: decrement arity to prevent freeing */
-        while ( masks->arity )
-            unget_token( masks->ops[ --masks->arity ] );
-        free_node(masks);
-    
-        unget_token(name);
-        return 0;
-    }
-}
-
-/* Called with the name as the current token */
-try_expand(node, next_fn, arg)
+struct node *
+do_expand(node, next_fn, next_fn_arg, unget_fn)
     struct node *node;
     struct node *(*next_fn)();
-    struct node **arg; /* Pass-through for cpp masks */
+    int *(*unget_fn)();
 {
     char *name = node_str(node);
     struct node *macd = get_macro(name);
+    struct node *expansion, *args;
 
-    /* Slot [3] is used as an is-masked flag. */
+    /* All builtins are object-like, currently, and as we're in control
+     * of how they expand, we don't bother with cpp_mask and cpp_unmask. */
+    if ( is_builtin(name) ) {
+        expansion = vnode_app( new_node('mace', 0), do_builtin(name) );
+        free_node(node);
+        return check_node(expansion);
+    }
+
+    /* If there's no macro of this name, or if it is masked, return 0 to 
+     * indicate no expansion has been done.  (NB: slot [3] is used as an
+     * is-masked flag manipulated by _Pragma cpp_mask and cpp_unmask.) */
     if (!macd || macd->ops[3])
         return 0;
 
-    /* All builtins are object-like, currently. */
-    else if ( is_builtin(name) ) {
-        do_builtin(name);
-        return 1;
-    }
+    if (!macd->ops[2]) int_error("Macro '%s' found with no expansion", name);
 
-    /* Slot [1] is the arguments */
-    else if ( ! macd->ops[1] ) {
-        /* It's a macro that will be expanded and pushed back on to
-         * the parser stack by do_expand: we do that to ensure proper 
-         * re-scanning. */
-        do_expand(macd, 0);
-        return 1;
+    expansion = new_node('mace', 0);
+
+    /* Push a _Pragma("RBC cpp_mask $name") node to implement the standard 
+     * behaviour that macros cannot recursively reference themselves.  This 
+     * is used in #define errno errno.  */
+    expansion = vnode_app( expansion, mk_prgm_rbc( macd->ops[0], "cpp_mask" ) );
+
+    /* Is it an object-like macro?  (NB: slot [1] is the arguments.) */
+    if ( ! macd->ops[1] ) {
+        struct node *mace = add_ref(macd->ops[2]);
+
+        mace = do_concat(mace, 0);
+
+        expansion = vnode_copy( expansion, mace, 0, -1 );
+        free_node(mace);
+        free_node(node);
     }
 
     /* Function-like macros are only expanded if the next pp token is an open 
      * bracket.  This allows the (fn)(a, b) syntax to be used to suppress 
      * macro expansion of a macro that hides a function of the same name. */
-    else if ( has_brack(next_fn, arg) ) {
-        struct node *args = macro_args(node, next_fn);
-        do_expand(macd, args); /* will overwrite ')' */
+    else if ( args = macro_args(node, next_fn, next_fn_arg, unget_fn) ) {
+        struct node *mace = add_ref(macd->ops[2]);
+
+        mace = do_stringfy(mace, args);
+        mace = do_concat(mace, args);
+        mace = do_subst(mace, args);
+
+        expansion = vnode_copy( expansion, mace, 0, -1 );
+        free_node(mace);
         free_node(args);
-        return 1;
     }
 
     /* The remaining case is a function-like macro name not invoked as such. */
-    else return 0;
+    else {
+        /* If we get here, macro_args() returned 0, meaning it didn't take
+         * ownership of NODE. */
+        free_node(expansion);
+        return 0;
+    }
+
+    /* Unmask the macro again. 
+     * Note: NODE and NAME may both may point to deallocated memmory now.
+     * but MACD will also have the same name in ops[0], its name slot. */
+    expansion = vnode_app( expansion, 
+                           mk_prgm_rbc( macd->ops[0], "cpp_unmask" ) );
+    return check_node(expansion);
+}
+
+/* Called with the name as the current token.  If the current token is
+ * macro which can be expanded. */
+try_expand(node, next_fn)
+    struct node *node;
+    struct node *(*next_fn)();
+{
+    extern unget_token();
+
+    /* This point gives us exclusive ownership of the token, without 
+     * calling next(), as would happen if we called take_token().*/
+    struct node *node = add_ref(get_node());
+    set_token(0);
+
+    struct node *res = do_expand(node, next_fn, 0, unget_token);
+
+    if (res) {
+        int i;
+
+        /* This should never happen because even empty expansions have
+         * _Pragma masks and unmasks in them. */
+        if (res->arity == 0) int_error("Pushing back empty vnode");
+    
+        i = res->arity - 1;
+        set_token( add_ref(res->ops[i]) ); 
+    
+        for ( ; i; --i ) {
+            struct node *n = res->ops[i-1];
+
+            /* We clone nodes, rather than using add_ref(), because the 
+             * expression parser expectes to modify them. */
+            if (n) unget_token( clone_node(n) );
+        }
+     
+        free_node(res);
+        return 1;
+    }
+    else {
+        if (get_node()) 
+            int_error("Stack not restored after failed macro expansion");
+        set_token(node);
+        return 0;
+    }
 }
