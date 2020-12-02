@@ -615,8 +615,7 @@ unget_token(t)
     token = t;
 }
 
-static
-do_open( in_filename, search_path ) 
+open_scan( in_filename, search_path )
     char* in_filename;
     char** search_path;
 {
@@ -665,12 +664,8 @@ init_scan(in_filename, search_path) {
     extern char* strdup();
     auto char* null_search[2] = { ".", 0 };
     filename = strdup("<command-line>");
-    do_open( in_filename, search_path ? search_path : null_search );
+    open_scan( in_filename, search_path ? search_path : null_search );
     next();
-}
-
-open_scan(in_filename, search_path) {
-    do_open( in_filename, search_path );
 }
 
 close_scan() {

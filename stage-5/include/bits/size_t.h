@@ -11,6 +11,8 @@
  *
  * "size_t is the unsigned integral type of the result of the sizeof 
  * operator." [C90 7.1.6]
+ *
+ * It is also defined in <stdio.h>, see C90 7.9.1
  */
 typedef unsigned int size_t;
 

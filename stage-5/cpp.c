@@ -625,7 +625,7 @@ main(argc, argv)
     }
 
     for ( t = incl_files->start; t != incl_files->end; ++t ) {
-        init_scan(*t, 0);
+        init_scan(*t, incl_path->start);
         preprocess(f);
         close_scan();
     }

@@ -13,7 +13,8 @@
  *
  * They "are expressions of type "pointed to FILE" that point to the FILE 
  * objects associated, respectively, with standard error, input, and output 
- * stream."  But we want ELF objects of the same name. */
+ * stream."  But we want ELF objects of the same name. 
+ */
 extern FILE *stdin, *stdout, *stderr;
 
 #define stdin  stdin

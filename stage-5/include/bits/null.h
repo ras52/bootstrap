@@ -15,6 +15,8 @@
  *
  * NULL "expands to an implementation-defined null pointer
  * constant." [C90 7.1.6]
+ *
+ * It is also defined in <stdio.h>, see C90 7.9.1
  */
 
 /* FIXME  There is no void type in stage 5. */

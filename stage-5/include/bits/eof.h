@@ -11,7 +11,8 @@
  * 
  * EOF "expands to a negative integral constant expression that is returned
  * by several functions to indicate end-of-file, that is, no more input from
- * a stream." */ 
+ * a stream." 
+ */ 
 #define EOF (-1)
 
 #endif
