@@ -18,7 +18,7 @@ implementation, and this feature of B has been retained in the stage 4
 compiler.  Our single type is a 32-bit integer which also serves as an
 address.  Incrementing the value increments the underlying address by 
 one, as with a char* in C.  This means, that unlike in B, incrementing 
-an address  does not move to the next integer in an array: use ptr += 4 
+an address does not move to the next integer in an array: use ptr += 4 
 for that.  However, subscripting with [] works with 32-bit word offsets,
 so that ptr[1] is equivalent to *(ptr + 4).  To treat a pointer as a
 string and get character-level access, B uses two functions lchar(s,n)

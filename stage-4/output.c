@@ -311,7 +311,7 @@ fmt_uint( stream, n, base, width, padc, xchr ) {
     }
 }
 
-/* The C library vfprintf() */
+/* The C library vfprintf().  See C90 7.9.6.1 for documentation on fprintf() */
 vfprintf( stream, fmt, ap ) {
     auto written = 0, c, n, m;
     while ( c = rchar(fmt++, 0) ) {
