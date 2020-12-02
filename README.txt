@@ -1,10 +1,9 @@
 BOOTSTRAP EXPERIMENT
 
 In this experiment I aim to develop from the ground up a working 
-compiler, assembler, linker and library, for a C-like language.  We
-start with a minimal program capable of generating itself from its
-source and gradually develop higher level tools and abstractions, as 
-follows.
+compiler, assembler, linker and library, for a C-like language.  I start
+with a minimal program capable of generating itself from its source and
+gradually develop higher level tools and abstractions, as follows.
 
 This programs produced in this project are 32-bit ELF executables which
 run on a Linux kernel running on an Intel x86 processor.  They run fine
@@ -51,8 +50,8 @@ Stage 5 -- ccx, cpp, cc & cmp
   suite.
 
 
-The code in this project is copyright (C) Richard Smith, 2009-18, and is
-licensed for use under version 3 or later of the GNU General Public
+The code in this project is copyright (C) Richard Smith, 2009-2020, and
+is licensed for use under version 3 or later of the GNU General Public
 License, a copy of which can be found in the file LICENCE.txt.  The
 documentation in these README.txt files is licensed under the Creative
 Commons BY-NC-SA licence, version 4.

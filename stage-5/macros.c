@@ -1,6 +1,6 @@
 /* macros.c  --  support for preprocessor macros
  *
- * Copyright (C) 2013, 2014, 2015, 2016, 2018 
+ * Copyright (C) 2013, 2014, 2015, 2016, 2018, 2020
  * Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
@@ -271,7 +271,6 @@ clone_node(src)
 
     else if ( src->arity <= 4 ) {
         struct node *dest = new_node( src->code, src->arity );
-
         if ( src->code != 'prgm' ) 
             int_error( "Cloning node type %Mc\n", src->code );
 
@@ -675,7 +674,8 @@ expand_arg(vnode, arg)
     return vnode;
 }
 
-/* Substitute any remaining parameters in MACE using ARGS */
+/* Substitute any remaining parameters in MACE using ARGS, creating a new 
+ * 'mace' node and freeing MACE. */
 static
 struct node *
 do_subst(mace, args)
@@ -833,15 +833,14 @@ macro_args(name_node, next_fn, next_fn_arg, unget_fn)
     
     /* Skip any _Pragma("RBC cpp_mask $n") directive. */
     while ( is_cpp_prgm(n = next_fn(next_fn_arg)) )
-        masks = vnode_app( masks, add_ref(n) );
+        masks = vnode_app( masks, n );
 
-    if ( !n || n->code != '(' ) { 
-        /* Restore the pragmas: decrement arity to prevent freeing */
-        while ( masks->arity )
-            unget_fn( masks->ops[ --masks->arity ] );
-  
-        /* Give ownership of NAME_NODE back to the stack. */
-        /* free_node(name_node); */
+    if ( !n || n->code != '(' ) {
+        if (n) unget_fn(n);
+
+        /* Restore the pragmas */
+        for ( i = masks->arity; i; --i )
+            unget_fn( add_ref(masks->ops[i-1]) );
 
         free_node(masks);
         return 0;
@@ -863,9 +862,10 @@ macro_args(name_node, next_fn, next_fn_arg, unget_fn)
     args = vnode_app( new_node('()', 0), name_node );
 
     while (1) {
-        /* We don't know whether this is an EOF or end of line: that 
-         * depends on whether next_fn is pp_next or next. */
-        if (!n) error("Incomplete macro argument list");
+        /* We don't know whether this is an EOF, end of line or a
+	 * pp directive intruding: that depends on whether next_fn is pp_next
+	 * or next. */
+	if (!n) error("Incomplete macro argument list");
 
         if ( n->code == '(' ) ++pdepth;
         else if ( n->code == ')' ) {
@@ -897,6 +897,9 @@ macro_args(name_node, next_fn, next_fn_arg, unget_fn)
         n = next_fn(next_fn_arg);
     }
 
+    /* Deallocate the ')' */
+    free_node(n);
+
     /* Note: The '()' nodes have slot zero reserved for a return type
      * or callee.  This is for consistency with elsewhere in the code.  
      * Hence using arity-1 throughout. */
@@ -922,7 +925,9 @@ macro_args(name_node, next_fn, next_fn_arg, unget_fn)
 }
 
 /* If this return non-NULL, it takes ownership of NODE. 
- * XXX I don't see how that can be true. */
+ * XXX I don't see how that can be true. 
+ * NEXT_FN is a function which returns the next token.  It is called with
+ * NEXT_FN_ARG as its argument, the meaning of which varies. */
 static
 struct node *
 do_expand(node, next_fn, next_fn_arg, unget_fn)
@@ -999,20 +1004,27 @@ do_expand(node, next_fn, next_fn_arg, unget_fn)
     return check_node(expansion);
 }
 
+/* A version of take_node() that doesn't set the arity and will never
+ * execute preprocessor directives. */
+static
+expand_take(h_mode) {
+    struct node *node = get_node();
+    int c = raw_next(h_mode);
+    return node;
+}
+
 /* Called with the name as the current token.  If the current token is
- * macro which can be expanded. */
-try_expand(node, next_fn)
-    struct node *node;
-    struct node *(*next_fn)();
-{
+ * macro which can be expanded.  H_MODE gets passed down to raw_next():
+ * set it to 1 on a pp directive (e.g. in a #if or #include) so that we
+ * don't read beyond the end of the line, and 0 otherwise to allow 
+ * multi-line macro invocations. */
+try_expand(h_mode) {
     extern unget_token();
 
-    /* This point gives us exclusive ownership of the token, without 
-     * calling next(), as would happen if we called take_token().*/
-    struct node *node = add_ref(get_node());
-    set_token(0);
-
-    struct node *res = do_expand(node, next_fn, 0, unget_token);
+    /* This point gives us ownership of the identifier we're trying to
+     * expand.  If do_expand() returns non-NULL it takes ownership. */
+    struct node *name = expand_take(h_mode);
+    struct node *res = do_expand(name, expand_take, h_mode, unget_token);
 
     if (res) {
         int i;
@@ -1021,10 +1033,7 @@ try_expand(node, next_fn)
          * _Pragma masks and unmasks in them. */
         if (res->arity == 0) int_error("Pushing back empty vnode");
     
-        i = res->arity - 1;
-        set_token( add_ref(res->ops[i]) ); 
-    
-        for ( ; i; --i ) {
+        for ( i = res->arity; i; --i ) {
             struct node *n = res->ops[i-1];
 
             /* We clone nodes, rather than using add_ref(), because the 
@@ -1036,9 +1045,7 @@ try_expand(node, next_fn)
         return 1;
     }
     else {
-        if (get_node()) 
-            int_error("Stack not restored after failed macro expansion");
-        set_token(node);
+        unget_token(name);
         return 0;
     }
 }

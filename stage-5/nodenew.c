@@ -211,7 +211,7 @@ grow_node(node, size, extra)
             new->type = 0;
         }
 
-        if (debug_fn) debug_fn(new, "grow_node, [realloced]");
+        if (debug_fn) debug_fn(new, "grow_node [realloced]");
 
         return new;
     }
@@ -232,7 +232,8 @@ vnode_app( vec, child )
 }
 
 /* Append nodes with index [FIRST, LAST) from SRC to vnode DEST, growing 
- * the vector if necessary, and returning the (possibly reallocated) vector. */
+ * the vector if necessary, and returning the (possibly reallocated) vector. 
+ * If LAST is -1, the whole source vector is copied. */
 struct node *
 vnode_copy( dest, src, first, last )
     struct node *dest, *src;
@@ -337,6 +338,7 @@ new_strnode(code, str)
     /* grow_node() has already zeroed code, arity and type */
     node->code = code;
     strcpy( node_str(node), str, sz );
+    if (debug_fn) debug_fn(node, "new_strnode");
     return node;
 }
 
@@ -352,6 +354,8 @@ node_lchar( node_ptr, len_ptr, chr )
     char* buf = node_str(node);
     buf[ (*len_ptr)++ ] = chr;
     *node_ptr = node;
+
+    if (debug_fn) debug_fn(node, "node_lchar");
 }
 
 /* Append string STR to the payload of the node *NODE_PTR which is treated 

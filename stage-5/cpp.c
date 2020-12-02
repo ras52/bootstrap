@@ -58,7 +58,7 @@ prgm_direct(stream) {
     return node;
 }
 
-/* How deep are we with #if{,def,ndef} directive. */
+/* How deep are we with #if{,def,ndef} directives? */
 static
 struct if_group {
     int is_else;  /* Have we had an #else yet? */
@@ -222,7 +222,7 @@ if_expand(stream, node)
      * the stack: instead, we must overwrite the current token to avoid 
      * an infinite loop. */
     if ( node->code == 'id' ) {
-        if ( try_expand(node, pp_next) )
+        if ( try_expand(1) )
             /* Returning 1 tells pp_slurp that we haven't set a token, but to 
                call us again. */
             return 1;
@@ -454,7 +454,8 @@ preprocess(output) {
 
     /* Parsing of preprocessing directives is done in the scanner, and
      * this function just sees tokens that exist after they have been
-     * parsed, but before macro expansion. */
+     * parsed, but before macro expansion, which is done below by the
+     * call to try_expand(). */
     while ( c = peek_token() ) {
         /* We cannot call take_node() because (i) we don't want to set the
          * arity which, for a 'prgm' node, is unknown; and (ii) because it
@@ -472,12 +473,11 @@ preprocess(output) {
             next();
             continue;
         }
-        else if ( c == 'id' && try_expand(node, next) )
+        else if ( c == 'id' && try_expand(0) )
             continue;
 
         set_line( &out_line, &out_file, output );
         print_node(output, node);
-fflush(output); /* XXX Temporarily so we can see when we abort() */
         free_node( node );
         next();
         put_some = 1;
@@ -525,28 +525,31 @@ debug_node(node, msg)
     char *msg;
 {
     extern stderr;
-    int c = node->code;
-
-    if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
-        fprintf( stderr, "%Mc:\"%s\"", c, node_str(node) );
-    else if (c == 'mace') {
-        fprintf( stderr, "[[%d: ", node->arity );
-        debug_list(node);
-        fputs("]]", stderr);
+    if (!node)
+        fputs("NULL node", stderr);
+    else {
+         int c = node->code;
+     
+         if ( c == 'id' || c == 'ppno' || c == 'str' || c == 'chr' )
+             fprintf( stderr, "%Mc:\"%s\"", c, node_str(node) );
+         else if (c == 'mace') {
+             fprintf( stderr, "[[%d: ", node->arity );
+             debug_list(node);
+             fputs("]]", stderr);
+         }
+         else if (c == '()') {
+             fprintf( stderr, "((%d: ", node->arity );
+             debug_list(node);
+             fputs("))", stderr);
+         }
+         else if ( c == 'prgm' ) {
+             fputs( "_Pragma(", stderr );
+             debug_list(node);
+             fputc(')', stderr);
+         }
+         else
+             fprintf( stderr, "%Mc", c );
     }
-    else if (c == '()') {
-        fprintf( stderr, "((%d: ", node->arity );
-        debug_list(node);
-        fputs("))", stderr);
-    }
-    else if ( c == 'prgm' ) {
-        fputs( "_Pragma(", stderr );
-        debug_list(node);
-        fputc(')', stderr);
-    }
-    else
-        fprintf( stderr, "%Mc", c );
-
     if (msg) fprintf( stderr, " @ 0x%x: %s\n", node, msg);
 }
 /* End Debugging */
@@ -673,7 +676,7 @@ inc_expand(stream, node)
      * the stack: instead, we must overwrite the current token to avoid 
      * an infinite loop. */
     if ( node->code == 'id' ) {
-        if ( try_expand(node, pp_next) )
+        if ( try_expand(1) )
             /* Returning 1 tells pp_slurp that we haven't set a token, but to 
                call us again. */
             return 1;
@@ -717,10 +720,9 @@ incl_direct(stream) {
             do_include( hdr, 1 );
         }
         else
-            error("Unamed to parse #include line");
+            error("Unable to parse #include line");
         free_node(e);
     }
-
 }
 
 /* This is called by next() when we get EOF.  Returns 1 if EOF has been

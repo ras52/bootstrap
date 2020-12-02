@@ -1,6 +1,7 @@
 /* scanner.c  --  code for tokenising the C input stream
  *
- * Copyright (C) 2013, 2014, 2015, 2018 Richard Smith <richard@ex-parrot.com>
+ * Copyright (C) 2013, 2014, 2015, 2018, 2020 
+ * Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
  */
 
@@ -488,7 +489,6 @@ static struct node* token;
 /* Read the next lexical element into TOKEN without preprocessing, and
  * return the code of TOKEN, -1 for EOF, or if H_MODE '\n' for a new line
  * and if not H_NODE '\n#' for a # starting a preprocessor directive. */
-static
 raw_next(h_mode) {
     /* Oh! for headers.  These are points of customisation for the PP vs C. */
     extern struct node* chk_keyword();
@@ -511,6 +511,7 @@ raw_next(h_mode) {
         c = skip_white(stream);
     
     if ( c == -1 || c == '\n#' || h_mode && c == '\n' ) {
+        if ( h_mode && c == '\n' ) ungetc(c, stream); 
         token = 0;
         return c;
     }
@@ -590,11 +591,11 @@ pp_slurp(stream, node_ptr, expand)
                 break;
         }
        
-        raw_next(0);
+        raw_next(1);
 
         /* If (*expand)() returns true, then it has handled the token,
          * and probably pushed something onto the push-back stack. */
-        while ( expand && expand(stream, token) )
+        while ( expand && token && expand(stream, token) )
             ;
 
         c = peek_token();
@@ -823,7 +824,7 @@ node_streq(node, str)
 pp_end_expr() {
     extern struct node* new_node();
     /* We need to overwrite the existing token, as it is still the last
-     * one on the stack (so that we didn't call next() and lose the '\n'.  */
+     * one on the stack (so that we didn't call next() and lose the '\n').  */
     token = new_node('prgm', 2);
     set_op(token, 0, new_strnode('id', "RBC") );
     set_op(token, 1, new_strnode('id', "end_expr") );

@@ -61,8 +61,9 @@ $(INIT) $(XINIT):
 CCX_OBJS  = scanbase.o scanner.o symtab.o expr.o stmt.o type.o \
             codegen.o i386.o main.o cli.o
 
-# We replace node.o with a new version written using structs (and so that
-# won't compile using stage-4 cc), partly as a test of the stage-4 cc.
+# We replace node.o with a new version written using structs (and which
+# therefore won't compile using the stage-4 cc), partly as a test of the
+# stage-4 cc.
 CCX0_OBJS = $(CCX_OBJS) node.o
 CCX1_OBJS = $(CCX_OBJS) nodenew.o
 

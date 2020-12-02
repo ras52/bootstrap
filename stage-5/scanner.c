@@ -1,4 +1,5 @@
 /* scanner.c  --  code for converting preprocessor tokens to C ones
+ * This file is part of the compiler, ccx
  *
  * Copyright (C) 2013, 2014 Richard Smith <richard@ex-parrot.com>
  * All rights reserved.
@@ -81,8 +82,8 @@ prgm_direct(stream) {
     tok = get_word(stream, c);
     str = node_str(tok);
 
-    /* Our #pragmas all live in the RBC namespace (for Richard's Bootstrap 
-     * Compiler). */
+    /* Our #pragmas all live in the RBC namespace (which stands for
+     * Richard's Bootstrap Compiler). */
     if ( strcmp( str, "RBC" ) != 0 ) {
         /* An unknown pragma: silently ignore it. */
         pp_slurp(stream, 0, 0);
