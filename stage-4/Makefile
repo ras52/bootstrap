@@ -17,7 +17,7 @@ LIBDIR = ../lib
 PATH   = $(BINDIR)
 
 
-all:	init cc
+all:	init cc libc.o crt0.o
 
 init:
 	@test -d $(LIBDIR) || $(MAKE) -C .. init
