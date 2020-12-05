@@ -1,10 +1,13 @@
 /* output.c  --  output stdio functions
  *
- * Copyright (C) 2013, 2014, 2015, 2016 Richard Smith <richard@ex-parrot.com> 
+ * Copyright (C) 2013, 2014, 2015, 2016, 2020 
+ * Richard Smith <richard@ex-parrot.com> 
  * All rights reserved.
  */
 
-/* Buffers for the output streams */
+/* Buffers for the output streams.  Note, because we're being compiled by the
+ * stage 4 compiler, arrays are int arrays, meaning these are 4*32 = 128 bytes
+ * long: hence the 128 bufsz parameter in the stream definitions. */
 static __buf1[32];
 static __buf2[32];
 
@@ -12,8 +15,11 @@ static __buf2[32];
  * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode free } */
 static __file1[8] = { 1,    128,    __buf1, __buf1, __buf1, 2,   1,    0    };
 static __file2[8] = { 2,    128,    __buf2, __buf2, __buf2, 2,   3,    0    };
-/* MODE is as per the second argument to open(2).  
- * BMODE is an _IO?BF flag */
+/* BUFEND is the end of data read into the buffer from the file. 
+ * MODE is as per the second argument to open(2).  
+ * BMODE is an _IO?BF flag
+ * FREE is a bit field, with 1 indicating that the buffer should be freed, 
+ * 2 indicating that the stream itself should be freed, and 3 both. */
 
 /* The stdio objects themselves.  
  * We can't just use the arrays themselves because we need to force make 
@@ -52,10 +58,9 @@ fclose( stream ) {
             __files[ stream[0] ] = 0;
     }
     /* Free any buffers associated with the stream */
-    if ( stream[7] ) {
-        free( stream[3] );
-        free( stream );
-    }
+    if ( stream[7] & 1 ) free( stream[3] );
+    if ( stream[7] & 2 ) free( stream );
+    
     return rv;
 }
 
@@ -124,24 +129,24 @@ __fopenstr( str, len ) {
     stream[4] = str + len;
     stream[5] = 2;   /* O_RDWR */
     stream[6] = 1;   /* _IOFBF */
-    stream[7] = 0;   /* do not free() the buffer on close */
+    stream[7] = 2;   /* free the stream but not the buffer on close */
     return stream;
 }
 
 /* The C library setvbuf() */
 setvbuf( stream, buf, mode, size ) {
-    if ( buf ) {
+    if ( buf && (stream[7] & 1) ) {
         /* Free old buffer */
-        if ( stream[7] ) free( stream[3] );
-        stream[7] = 0;   /* We no longer manage the memory for the buffer. */
+        free( stream[3] );
+        stream[7] &= ~1;  /* We no longer manage the memory for the buffer. */
     }
 
     /* Without a buffer passed, this is a resize request. */
     else {
-        if ( stream[7] ) buf = realloc( stream[3], size );
+        if ( stream[7] & 1 ) buf = realloc( stream[3], size );
         else buf = malloc(size);
         if (!buf) return -1;
-        stream[7] = 1;   /* We do now manage the memory for the buffer. */
+        stream[7] |= 1;   /* We do now manage the memory for the buffer. */
     }
         
     stream[1] = size;
@@ -311,7 +316,8 @@ fmt_uint( stream, n, base, width, padc, xchr ) {
     }
 }
 
-/* The C library vfprintf().  See C90 7.9.6.1 for documentation on fprintf() */
+/* The C library vfprintf() per C90 7.9.6.7.  
+ * See C90 7.9.6.1 for documentation on fprintf() */
 vfprintf( stream, fmt, ap ) {
     auto written = 0, c, n, m;
     while ( c = rchar(fmt++, 0) ) {
@@ -327,21 +333,37 @@ vfprintf( stream, fmt, ap ) {
             continue;
         }
 
+        /* We must have a conversion specifier ... */
         c = rchar(fmt++, 0);
 
-        /* Do we have a '0' flag? */
+        /* First after the % are zero or more flag characters, in any order.
+         * C90 supports '-', '+', ' ', '#' and '0'.  We only support '0'. */
         if ( c == '0' ) {
             padc = c;
             c = rchar(fmt++, 0);
         }  
 
-        /* Do we have a field width? */
+        /* Second after the % is an optional field width, which may be either 
+         * an integer or a '*'.  We only support integer field widths. */
         if ( isdigit(c) ) {
             width = strtoul(--fmt, &fmt, 10);
             c = rchar(fmt++, 0);
         }
 
-        /* This is our extension:  %Mc prints a multicharacter constant */
+	/* Third after the % comes an optional precision which is prefixed
+         * with a '.' to delimit it from the field width.  Like the field
+         * width, it may be either an integer or a '*'.  We support neither.
+         *
+	 * Fourth after the % is an optional length modifier character.  
+	 * C90 supports 'h', 'l' and 'L'.  We support none of these, but as an
+	 * extention, we support 'M' to print a multicharacter constant. 
+	 * This does not conflict with any length modifier or format specifier
+	 * in C99, C11, C17 or the current draft C20 spec (N2583).
+         *
+         * Fifth after the % is a mandatory conversion specifier; C90 supports
+         * 'd', 'i', 'o', 'u', 'x', 'X', 'c', 's', 'p', 'n' and '%', all of 
+         * which are supported here; and 'f', 'e', 'E', 'g', 'G', all of which
+         * print floating point types which we do not currently support. */
         if (c == 'M') {
             c = rchar(fmt++, 0);
             if (c == 'c') {
@@ -352,7 +374,7 @@ vfprintf( stream, fmt, ap ) {
                     return -1; 
                 written += m + n;
             }
-            /* An other %MX forms are supported, so print it literally. */
+            /* An other %MX forms are unsupported, so print it literally. */
             else {
                 if ( fputc('%', stream) == -1 )
                     return -1;
@@ -376,8 +398,11 @@ vfprintf( stream, fmt, ap ) {
                 return -1; 
             written += m + n;
         }
-        /* %d prints a decimal number  */
-        else if (c == 'd') {
+        /* %d or %i are synonyms which print a signed decimal integer.
+         * The duplication is to match the behaviour of scanf(), where
+         * %i reads a signed integer, taking its base from its prefix, default
+         * to decimal, while %d always reads a decimal signed integer.  */
+        else if (c == 'd' || c == 'i') {
             ap += 4;
             if (*ap == 0) { 
                 if ( ( m = pad( stream, width, 1, padc ) ) == -1 ||
@@ -406,35 +431,64 @@ vfprintf( stream, fmt, ap ) {
                 written += m + n + neg;
             }
         }
-        /* %o prints an unsigned octal number  */
+        /* %o prints an unsigned octal integer  */
         else if (c == 'o') {
             ap += 4;
             if ( ( n = fmt_uint( stream, *ap, 8, width, padc, 'a' ) ) == -1 )
                 return -1;
             written += n;
         }
-        /* %u prints an unsigned decimal number  */
+        /* %u prints an unsigned decimal integer  */
         else if (c == 'u') {
             ap += 4;
             if ( ( n = fmt_uint( stream, *ap, 10, width, padc, 'a' ) ) == -1 )
                 return -1;
             written += n;
         }
-        /* %x prints an unsigned hexdecimal number  */
+        /* %x prints an unsigned hexdecimal integer in lower case */
         else if (c == 'x') {
             ap += 4;
             if ( ( n = fmt_uint( stream, *ap, 16, width, padc, 'a' ) ) == -1 )
                 return -1;
             written += n;
         }
-        /* %X prints an unsigned hexdecimal number in upper case */
+        /* %X prints an unsigned hexdecimal integer in upper case */
         else if (c == 'X') {
             ap += 4;
             if ( ( n = fmt_uint( stream, *ap, 16, width, padc, 'A' ) ) == -1 )
                 return -1;
             written += n;
         }
-        /* Either %% or an unsupported format specifier: just print it out */
+        /* %p prints a unsigned void* pointer in an implementation defined
+         * way, which we interpret to mean in hexadecimal with an '0x' prefix,
+         * or as '(null)'. */
+        else if (c == 'p') {
+            ap += 4;
+            if (!*ap) {
+                if ( fputs("(null)", stream) == -1 )
+                    return -1;
+                written += 6;
+            } else {
+                if ( fputs("0x", stream) == -1 )
+                    return -1;
+                if ( ( n = fmt_uint( stream, *ap, 16, width, padc, 'a' ) )  
+                             == -1 )
+                    return -1;
+                written += 2 + n;
+            }
+        }
+        /* %n does not print anything.  The corresponding argument is an
+         * int* to which the number of characters written so far is written. */
+        else if (c == 'n') {
+            ap += 4;
+            **ap = written;
+        }
+        /* Either %% or an unsupported format specifier.  Anything other than
+         * exactly %%, including unknown format specifiers or %% specified
+	 * with a flag, width, precision or modifier, invokes undefined
+	 * behaviour.  We define this to just print out the specifier
+	 * character, e.g. the final '%'.  This matches the required behaviour
+	 * for '%%'. */
         else {
             if ( fputc('%', stream) == -1 )
                 return -1;
@@ -452,17 +506,17 @@ vfprintf( stream, fmt, ap ) {
     return written;
 }
 
-/* The C library printf() */
+/* The C library printf() per C90 7.9.6.3 */
 printf( fmt ) {
     return vfprintf( stdout, fmt, &fmt );
 }
 
-/* The C library fprintf() */
+/* The C library fprintf() per C90 7.9.6.1 */
 fprintf( stream, fmt ) {
     return vfprintf( stream, fmt, &fmt );
 }
 
-/* The C library snprintf() */
+/* The C library snprintf(), which was added in C99 7.19.6.5 */
 snprintf( buf, len, fmt ) {
     auto stream = __fopenstr( buf, len );
     auto len = vfprintf( stream, fmt, &fmt ); 
@@ -470,3 +524,13 @@ snprintf( buf, len, fmt ) {
     fclose(stream);
     return len;
 }
+
+/* The C library sprintf() */
+sprintf( buf, fmt ) {
+    /* Because we're only doing output, bufend is never used, so it
+     * doesn't matter if it compares incorrectly to bufp because 
+     * comparisons in the stage-4 compiler use signed arithmetic. */
+    return snprintf( buf, 0x7FFFFFFF, fmt ); /* INT_MAX */
+}
+
+
