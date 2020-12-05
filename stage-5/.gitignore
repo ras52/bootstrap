@@ -1,2 +1,7 @@
-foo
 .*.swp
+*.o
+cc
+ccx
+cpp
+cmp
+ccx1
