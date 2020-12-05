@@ -164,11 +164,21 @@ cont_stmt( loop ) {
     return node;
 }
 
-/*  init-array ::= '{' assign-expr ( ',' assign-expr )* '}' */
+static
+init_charr() {
+    error("Character array initialisation from string literal not supported");
+}
+
+/*  init-array ::= '{' assign-expr ( ',' assign-expr )* '}' | string-lit */
 static
 init_array( type, req_const ) {
     auto init, elts;
-    if (peek_token() != '{')
+    auto t = peek_token();
+
+    /* We only allow initialisation from a string literal for char[] arrays */
+    if ( t == 'str' && type[3][0] == 'dclt' && type[3][3][0] == 'char' )
+        return init_charr();
+    else if ( t != '{' )
         error("Expected array initialiser");
 
     /* TODO:  This is valid: auto x[] = { 1, 2, 3 }; */
