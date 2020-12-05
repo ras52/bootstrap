@@ -302,6 +302,20 @@ mnemonics:
 .hex	50 4F 50 00  00 00 00 00  00 00 00 00    0C 58 8F 00    # POP
 .hex	50 4F 50 4C  00 00 00 00  00 00 00 00    0C 58 8F 00    # POPL == POP
 
+
+# Type 13 instructions.   An r/m8 operand followed by a r8 operand:
+#
+#   TESTB   r/m8, r8        84
+#
+# The three parameters are: 
+#   1) the number of bytes in the op-code (01 here),
+#   2) the first op-code byte (84), and 
+#   3) the second op-code byte (n/a here).
+
+.hex	54 45 53 54  42 00 00 00  00 00 00 00    0D 01 84 00	# TESTB
+.hex	58 43 48 47  42 00 00 00  00 00 00 00    0D 01 86 00	# XCHGB
+
+
 # Type FF 'instructions'.  These are actually directives.    
 #
 #   Sub-type 0:  .hex            -- no parameters
@@ -3378,6 +3392,8 @@ tl_ident:
 	JE	type_06
 	CMPB	$8, %dl
 	JE	type_06
+	CMPB	$13, %dl
+	JE	type_05
 
 	#  Instructions with 32-bit operands
 	MOVL	$32, %ebx	# 32-bit mode
