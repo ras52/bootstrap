@@ -112,23 +112,25 @@ unary_pre(stream, node, need_lval) {
 static
 logical_bin(stream, node) {
     auto l = new_label();
+    auto sz = type_size( node[3][2] );
 
     expr_code( stream, node[3], 0 );
-    if ( node[0] == '&&' ) branch_ifz( stream, l );
-    else branch_ifnz( stream, l );
+    if ( node[0] == '&&' ) branch_ifz( stream, sz, l );
+    else branch_ifnz( stream, sz, l );
 
     expr_code( stream, node[4], 0 );
     emit_label( stream, l );
     cast_bool( stream );
 }
 
+/* This handles the ternary operator */
 static
 conditional(stream, node) {
     auto l1 = new_label(), l2 = new_label();
 
     expr_code( stream, node[3], 0 );
 
-    branch_ifz( stream, l1 );
+    branch_ifz( stream, type_size(node[3][2]), l1 );
     expr_code( stream, node[4], 0 );
     branch( stream, l2 );
     
@@ -330,8 +332,12 @@ if_stmt(stream, node, brk, cont, ret) {
     auto l1 = new_label(), l2 = l1;
 
     expr_code( stream, node[3], 0 );
+
+    /* In principle we should promote this to an integer, but it's more 
+     * efficient to do the test on the actual type: e.g. instead of generating
+     * MOVZVL %al, %eax; TESTL %eax, %eax; we just generatd TESTB %al, %a; */
     
-    branch_ifz( stream, l1 );
+    branch_ifz( stream, type_size(node[3][2]), l1 );
     stmt_code( stream, node[4], brk, cont, ret );
 
     if ( node[5] ) {
@@ -351,7 +357,7 @@ while_stmt(stream, node, brk, cont, ret) {
 
     expr_code( stream, node[3], 0 );
     brk = new_label();
-    branch_ifz( stream, brk );
+    branch_ifz( stream, type_size(node[3][2]), brk );
 
     stmt_code( stream, node[4], brk, cont, ret );
     branch( stream, cont );
@@ -370,7 +376,7 @@ do_stmt(stream, node, brk, cont, ret) {
 
     emit_label( stream, cont );
     expr_code( stream, node[4], 0 );
-    branch_ifnz( stream, start );
+    branch_ifnz( stream, type_size(node[4][2]), start );
     emit_label( stream, brk );
 }
 
@@ -385,7 +391,7 @@ for_stmt(stream, node, brk, cont, ret) {
     brk = new_label();
     if (node[4]) {
         expr_code( stream, node[4], 0 );
-        branch_ifz( stream, brk );
+        branch_ifz( stream, type_size(node[4][2]), brk );
     }
 
     cont = new_label();

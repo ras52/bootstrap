@@ -259,17 +259,18 @@ call_ptr(stream, cleanup_sz) {
 }
 
 static
-cond_branch(stream, mnemonic, label_num) {
-    fprintf(stream, "\tTESTL\t%%eax, %%eax\n\t%s\t.L%d\n", 
-            mnemonic, label_num);
+cond_branch(stream, sz, mnemonic, label_num) {
+    auto acc = sz_accum(sz);
+    fprintf(stream, "\tTEST%c\t%s, %s\n\t%s\t.L%d\n", 
+            sz_suffix(sz), acc, acc, mnemonic, label_num);
 }
 
-branch_ifz(stream, label_num) {
-    cond_branch(stream, "JZ", label_num);
+branch_ifz(stream, sz, label_num) {
+    cond_branch(stream, sz, "JZ", label_num);
 }
 
-branch_ifnz(stream, label_num) {
-    cond_branch(stream, "JNZ", label_num);
+branch_ifnz(stream, sz, label_num) {
+    cond_branch(stream, sz, "JNZ", label_num);
 }
 
 branch(stream, label_num) {
