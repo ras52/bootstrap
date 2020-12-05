@@ -50,6 +50,7 @@ Summary of differences from B:
   * The escape characters in strings is \ not *, and there is no \e.
   * We don't support the switch statement, or therefore case labels.
   * We don't support goto and labeled statements.
+  * Not a difference, but B does not support 'for' loops and nor do we.
 
 The stage 4 compiler is a simple afair, making a single pass over the 
 input file and code generation is done straight out of the parser,
