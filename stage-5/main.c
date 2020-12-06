@@ -76,7 +76,7 @@ main(argc, argv)
         l = strlen(filename);
         if ( rchar( filename, l-1 ) != 'c' && rchar( filename, l-1 ) != 'i'
              || rchar( filename, l-2 ) != '.' )
-            cli_error("ccx: input filename must have .c extension\n");
+            cli_error("ccx: input filename must have .c or .i extension\n");
 
         outname = strdup( filename );
         freeout = 1;
