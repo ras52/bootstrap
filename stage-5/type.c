@@ -229,8 +229,8 @@ chk_subscr(node) {
     /* In compatibility mode, give an error if we're subscripting something 
      * that's not an array of dwords, as the elt size will change. */
     if ( compat_flag && type_size(node[2]) != 4 ) {
-        auto buf[8];
-        print_type( buf, 32, node[2] );
+        auto buf[16];
+        print_type( buf, 64, node[2] );
         error( "Element size has changed since stage-4: %s", buf);
     }
 }
@@ -307,8 +307,8 @@ type_eq(type1, type2) {
 
 static
 op_type_err(type, op) {
-    auto char buf[32];
-    print_type(buf, 32, type);
+    auto buf[16];
+    print_type(buf, 64, type);
     error("Invalid operand type '%s' to %Mc operator", buf, op);
 }
 
@@ -422,8 +422,8 @@ chk_add(p) {
     }
 
     if ( compat_flag && is_pointer( p[2] ) && type_size( p[2][3] ) != 1 ) {
-        auto buf[8];
-        print_type( buf, 32, p[2][3] );
+        auto buf[16];
+        print_type( buf, 64, p[2][3] );
         error( "Element size has changed since stage-4: %s", buf );
     }
 }
@@ -462,8 +462,8 @@ chk_incdec(p) {
     /* In stage-4, increments were always done as if on an int.  This 
      * means that int* now increments differently.  Warn about that. */
     if ( compat_flag && is_pointer( p[2] ) && type_size( p[2][3] ) != 1 ) {
-        auto buf[8];
-        print_type( buf, 32, p[2][3] );
+        auto buf[16];
+        print_type( buf, 64, p[2][3] );
         error( "Element size has changed since stage-4: %s", buf);
     }
         
@@ -535,10 +535,14 @@ print_dclt(buf, sz, t) {
     else if ( t[3][0] == 'char' ) strlcat(buf, "char", sz);
 }
 
+/* print_type1 prints the part of the type name that would come before the
+ * name of the object being declared, if one were present.  E.g. it might be
+ * "int (*".  The remaining part, perhaps ")()" in this example, is printed 
+ * by print_type2. */
 static
 print_type1(buf, sz, t) {
-    if (!t) strlcat(buf, "int", sz);
-    else if (t[0] == 'dclt') print_dclt(buf, sz, t);
+    if (!t) strlcat(buf, "int", sz); /* implicit int */
+    else if (t[0] == 'dclt') print_dclt(buf, sz, t); /* e.g. unsigned int */
     else if (t[0] == '*') {
         print_type1(buf, sz, t[3]); 
         if (t[3] == '[]' || t[3] == '()') strlcat(buf, "(", sz);

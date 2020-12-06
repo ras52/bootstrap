@@ -39,8 +39,11 @@ acc_to_aux(stream) {
     fputs("\tMOVL\t%eax, %ecx\n", stream);
 }
 
-load_num(stream, num) {
-    fprintf(stream, "\tMOVL\t$%d, %%eax\n", num);
+load_num(stream, num, is_unsgn) {
+    /* We want to print big unsigned numbers in hex to avoid an error from
+     * the stage-3 assembler which detects signed overflow on decimals. */
+    fprintf(stream, is_unsgn && num & 0x80000000 
+                      ? "\tMOVL\t$0x%X, %%eax\n" : "\tMOVL\t$%d, %%eax\n", num);
 }
 
 load_chr(stream, chr) {
@@ -121,9 +124,9 @@ start_binop(stream, is_assign, is_sym) {
     }
 }
 
-pop_mult(stream, is_assign, is_unsigned) {
+pop_mult(stream, is_assign, is_unsgn) {
     fputs("\tPOPL\t%ecx\n", stream);
-    fprintf(stream, "\t%s%c\t%s\n", is_unsigned ? "MUL" : "IMUL", 'L',
+    fprintf(stream, "\t%s%c\t%s\n", is_unsgn ? "MUL" : "IMUL", 'L',
             is_assign ? "(%ecx)" : "%ecx");
     if (is_assign)
         fputs("\tMOVL\t%eax, (%ecx)\n\tMOVL\t%ecx, %eax\n", stream);
@@ -132,24 +135,24 @@ pop_mult(stream, is_assign, is_unsigned) {
 /* Note that this *only* POPs the first argument if !is_assign. 
  * Otherwise doing so is the caller's responsibility. */
 static
-common_div(stream, is_assign, is_unsigned) {
+common_div(stream, is_assign, is_unsgn) {
     acc_to_aux(stream);
     if (is_assign)
         fputs("\tMOVL\t(%esp), %eax\nMOVL\t(%eax), %eax\n", stream);
     else
         fputs("\tPOPL\t%eax\n", stream);
     fputs("\tXORL\t%edx, %edx\n", stream);
-    fprintf(stream, "\t%s%c\t%%ecx\n", is_unsigned ? "DIV" : "IDIV", 'L');
+    fprintf(stream, "\t%s%c\t%%ecx\n", is_unsgn ? "DIV" : "IDIV", 'L');
 }
 
-pop_div(stream, is_assign, is_unsigned) {
-    common_div(stream, is_assign, is_unsigned);
+pop_div(stream, is_assign, is_unsgn) {
+    common_div(stream, is_assign, is_unsgn);
     if (is_assign)
         fputs("\tPOPL\t%ecx\nMOVL\t%eax, (%ecx)\nMOVL\t%ecx, %eax\n", stream);
 }
 
-pop_mod(stream, is_assign, is_unsigned) {
-    common_div(stream, is_assign, is_unsigned);
+pop_mod(stream, is_assign, is_unsgn) {
+    common_div(stream, is_assign, is_unsgn);
     if (is_assign)
         fputs("\tPOPL\t%eax\nMOVL\t%edx, (%eax)\n", stream);
     else

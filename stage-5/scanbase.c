@@ -766,17 +766,19 @@ mk_number(ppnode)
 {
     extern struct node *add_ref();
     extern struct node *new_node();
+    extern struct node *implct_int();
 
     /* struct node { int type; int dummy; node* type; int val; }; */
     auto struct node *node = new_node('num', 0), *type;
-    auto char *nptr;
-    auto int c;
+    auto char *nptr, *str = node_str(ppnode);
+    auto int c, is_dec;
 
     /* At present we only support integer constants.  Floats need 
      * recognising and treating separately. */
     extern errno;
     errno = 0;
-    set_op( node, 0, strtoul( node_str(ppnode), &nptr, 0 ) );
+    is_dec = rchar(str, 0) != '0';
+    set_op( node, 0, strtoul( str, &nptr, 0 ) );
     if ( errno ) error("Overflow in integer constant");
 
     /* We only use the implicit int type if we don't have a type suffix.
@@ -800,11 +802,23 @@ mk_number(ppnode)
         ++nptr;
     }
 
-    /* TODO: Check for signed overflow.
-     * Also, hex constants without 'u' may still be unsigned. */
+    /* Check for signed overflow.  Hex and octal numbers promote to unsigned. 
+     * If we make long an 8-bit type, or add support for long long, we will
+     * need to handle promotion to those. */
+    if ( node_op(node, 0) & 0x80000000 && !node_op(type, 2) ) {
+        if (is_dec) error("Overflow in signed integer constant");
+        /* Clone the type to avoid altering implicit int */
+        if ( type == implct_int() ) {
+          free_node(type);
+          type = new_node('dclt', 3);
+          set_op( type, 0, new_node('int', 0) );
+          set_type( node, type );
+        }
+        set_op( type, 2, new_node('unsi', 0) );
+    }
 
     if (c) error("Unexpected character '%c' in number \"%s\"",
-                 c, node_str(ppnode) );
+                 c, str );
 
     return node;
 }

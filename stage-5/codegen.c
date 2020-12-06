@@ -32,14 +32,16 @@ named_label(name, is_defn) {
  * identifers, and so on.  */
 static
 leaf_code(stream, node, need_lval) {
-    if ( node[0] == 'num' || node[0] == 'chr' || node[0] == 'str' ) {
-        if (node[0] == 'num') load_num(stream, node[3]);
-        else if (node[0] == 'chr') load_chr(stream, &node[3]);
-        else if (node[0] == 'str') {
-            auto lc = new_clabel();
-            defn_str(stream, &node[3], lc);
-            load_str(stream, lc);
-        }
+    if (node[0] == 'num')
+        load_num(stream, node[3], is_unsigned(node[2]));
+
+    else if (node[0] == 'chr')
+        load_chr(stream, &node[3]);
+
+    else if (node[0] == 'str') {
+        auto lc = new_clabel();
+        defn_str(stream, &node[3], lc);
+        load_str(stream, lc);
     }
 
     else if ( node[0] == 'id' ) {
@@ -183,7 +185,7 @@ cmp_op(stream, node) {
     if ( node[3][2][0] == '*' ) type = node[3][2];
     else type = usual_conv( node[3][2], node[4][2] );
 
-    auto is_unsgn = type[5];
+    auto is_unsgn = is_unsigned(type);
     auto sz = type_size(type);
 
     expr_code( stream, node[3], 0 );
@@ -201,19 +203,22 @@ cmp_op(stream, node) {
 }
 
 static
+is_unsigned(type) {
+    return type[0] == 'dclt' && type[5] && type[5][0] == 'unsi';
+}
+
+static
 binary_op(stream, node, need_lval) {
     auto op = node[0], sz = type_size( node[2] );
-    auto is_unsgn 
-        = node[2][0] == 'dclt' && node[2][5] && node[2][5][0] == 'unsi';
 
     expr_code( stream, node[3], is_assop(op) );
     asm_push( stream );
     expr_code( stream, node[4], 0 );
 
     if      ( op == '[]'  ) subscript(stream, node, need_lval);
-    else if ( op == '*'   ) pop_mult(stream, 0, is_unsgn);
-    else if ( op == '/'   ) pop_div(stream, 0, is_unsgn);
-    else if ( op == '%'   ) pop_mod(stream, 0, is_unsgn);
+    else if ( op == '*'   ) pop_mult(stream, 0, is_unsigned(node[2]));
+    else if ( op == '/'   ) pop_div(stream, 0, is_unsigned(node[2]));
+    else if ( op == '%'   ) pop_mod(stream, 0, is_unsigned(node[2]));
     else if ( op == '+'   ) add_op(stream, node, 0, sz);
     else if ( op == '-'   ) add_op(stream, node, 0, sz);
     else if ( op == '<<'  ) pop_lshift(stream, 0);
@@ -223,9 +228,9 @@ binary_op(stream, node, need_lval) {
     else if ( op == '^'   ) pop_bitxor(stream, 0, sz);
 
     else if ( op == '='   ) pop_assign(stream, sz);
-    else if ( op == '*='  ) pop_mult(stream, 1);
-    else if ( op == '/='  ) pop_div(stream, 1);
-    else if ( op == '%='  ) pop_mod(stream, 1);
+    else if ( op == '*='  ) pop_mult(stream, 1, is_unsigned(node[2]));
+    else if ( op == '/='  ) pop_div(stream, 1, is_unsigned(node[2]));
+    else if ( op == '%='  ) pop_mod(stream, 1, is_unsigned(node[2]));
     else if ( op == '+='  ) add_op(stream, node, 1, sz);
     else if ( op == '-='  ) add_op(stream, node, 1, sz);
     else if ( op == '<<=' ) pop_lshift(stream, 1);

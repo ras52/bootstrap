@@ -441,11 +441,14 @@ decl_specs() {
         decls[4] = add_ref( implct_int() );
 
     if ( decls[4][0] == 'dclt' ) {
+        /* Make sure the base type (by default int) is always present. */
         if ( !decls[4][3] ) decls[4][3] = new_node('int', 0);
        
+        /* Cannot have a size (e.g. long) on a char. */
         if ( decls[4][3][0] == 'char' && decls[4][4] )
             error("Invalid combination of type specifiers");
     
+        /* The 'signed' specifier is unnecessary on ints. */
         if ( decls[4][3][0] == 'int' && decls[4][5] 
                && decls[4][5][0] == 'sign' ) {
             free_node( decls[4][5] );
