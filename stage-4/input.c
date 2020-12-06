@@ -69,8 +69,10 @@ __fgetsn( ptr, len, stream ) {
 
         /* And for short reads, try to read a whole buffer's worth */
         else {
-	    /* The +1 and -1 is to allow for a one-character putback area */
-            auto n = read( stream[0], stream[3] + 1, stream[1] - 1 );
+            /* The +4 and -4 is to allow for a four-character pushback area.
+             * The standard only requires one, but our implementation of 
+             * scanf requires four in sscanf("+0x!", "%i"). */
+            auto n = read( stream[0], stream[3] + 4, stream[1] - 4 );
             if ( n <= 0 ) {
                 /* Set error indicator (bit 8) if read returned -1, 
                  * or the EOF flag (bit 4) if read returned 0. */
@@ -78,7 +80,7 @@ __fgetsn( ptr, len, stream ) {
                 return nread;
             }
 
-            stream[2] = stream[3] + 1;
+            stream[2] = stream[3] + 4;  /* The size of the pushback area. */
             stream[4] = stream[2] + n;
         }
     }
@@ -154,7 +156,7 @@ ungetc( c, stream ) {
         stream[4] = stream[3] + 1;
     }
 
-    /* If we have a putback slot ... */
+    /* If we have a pushback slot ... */
     else if ( stream[2] > stream[3] )
         lchar( --stream[2], 0, c );
 
@@ -201,11 +203,21 @@ strtoi32( val_ptr, stream, base ) {
     auto hex_prefix = 0;
     if ( (base == 0 || base == 16) && c == '0' ) {
         c = fgetc( stream );
-        if (c == 'x') { base = 16; c = fgetc( stream ); hex_prefix = 1; }
-        /* If we have 0 not followed by x, it is an octal prefix, or a 
-         * bare 0.  Unget the next character so that we have something to
-         * parse if it is a bare 0. */
-        else if (base == 0) { base = 8; ungetc( c, stream ); c = '0';  }
+        if (c == 'x'|| c == 'X') {
+            /* Skip the hex prefix and note that we have done so, so that we
+             * can undo it if we need to unget the prefix. */
+            base = 16;
+            c = fgetc( stream );
+            hex_prefix = c;
+        }
+        else if (base == 0) {
+            /* If we have 0 not followed by x, so it is an octal prefix, or a 
+             * bare 0.  Unget the next character so that we have something to
+             * parse if it is a bare 0. */
+            base = 8;
+            ungetc( c, stream );
+            c = '0';
+        }
     }
     if ( base == 0 ) base = 10;
 
@@ -214,8 +226,11 @@ strtoi32( val_ptr, stream, base ) {
     if (!( c >= '0' && c <= '0' + (base <= 10 ? base - 1 : 9) ||
            base > 10 && c >= 'a' && c <= 'a' + base - 11 || 
            base > 10 && c >= 'A' && c <= 'A' + base - 11 )) {
-      if (hex_prefix) { ungetc( 'x', stream ); ungetc( '0', stream ); }
-      return 2;  /* Malformed input */
+        if (hex_prefix) {
+            ungetc( hex_prefix, stream );
+            ungetc( '0', stream );
+        }
+        return 2;  /* Malformed input */
     }
 
     /* We now know that we are going to have a valid integer (albeit perhaps
