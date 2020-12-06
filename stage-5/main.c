@@ -53,11 +53,11 @@ main(argc, argv)
         }
 
         else if ( rchar(argv[i], 0) == '-' )
-            cli_error("cc: unknown option: %s\n", argv[i]);
+            cli_error("ccx: unknown option: %s\n", argv[i]);
 
         else {
             if ( filename ) cli_error(
-                "cc: multiple input files specified: '%s' and '%s'\n",
+                "ccx: multiple input files specified: '%s' and '%s'\n",
                 filename, argv[i]);
             filename = argv[i];
             ++i;
@@ -65,7 +65,7 @@ main(argc, argv)
     }
 
     if ( !filename )
-        cli_error("cc: no input file specified\n");
+        cli_error("ccx: no input file specified\n");
 
     init_stypes();
     init_symtab();
@@ -76,7 +76,7 @@ main(argc, argv)
         l = strlen(filename);
         if ( rchar( filename, l-1 ) != 'c' && rchar( filename, l-1 ) != 'i'
              || rchar( filename, l-2 ) != '.' )
-            cli_error("cc: input filename must have .c extension\n");
+            cli_error("ccx: input filename must have .c extension\n");
 
         outname = strdup( filename );
         freeout = 1;
@@ -84,7 +84,7 @@ main(argc, argv)
     }
 
     file = fopen( outname, "w" );
-    if (!file) cli_error( "cc: unable to open file '%s'\n", outname );
+    if (!file) cli_error( "ccx: unable to open file '%s'\n", outname );
     if (freeout) free( outname );
 
     compile( file );
