@@ -23,6 +23,12 @@ static __file0[8] = { 0,    128,    __buf0, __buf0, __buf0, 0,   1,    0    };
  * lvalue versions of them, and arrays are only rvalues. */
 stdin  = __file0;
 
+
+/* C90 section 7.9.8:  Direct input/output functions
+ *
+ * Status: all function implemented 
+ * Implementation split between here and output.c */
+
 /* Implementation detail __fgetsn(): reads LEN bytes from STREAM into PTR,
  * and returns the number of bytes read. */
 static
@@ -51,7 +57,12 @@ __fgetsn( ptr, len, stream ) {
 	 * directly into the supplied memory region. */
         else if ( len >= stream[1] - 1 ) {
             auto n = read( stream[0], ptr, len );
-            if ( n <= 0 ) return nread;
+            if ( n <= 0 ) {
+                /* Set error indicator (bit 8) if read returned -1, 
+                 * or the EOF flag (bit 4) if read returned 0. */
+                stream[7] |= n ? 8 : 4;
+                return nread;
+            }
             nread += n;
             len -= n;
         }
@@ -60,7 +71,12 @@ __fgetsn( ptr, len, stream ) {
         else {
 	    /* The +1 and -1 is to allow for a one-character putback area */
             auto n = read( stream[0], stream[3] + 1, stream[1] - 1 );
-            if ( n <= 0 ) return nread;
+            if ( n <= 0 ) {
+                /* Set error indicator (bit 8) if read returned -1, 
+                 * or the EOF flag (bit 4) if read returned 0. */
+                stream[7] |= n ? 8 : 4;
+                return nread;
+            }
 
             stream[2] = stream[3] + 1;
             stream[4] = stream[2] + n;
@@ -70,19 +86,25 @@ __fgetsn( ptr, len, stream ) {
     return nread;
 }
 
-/* The C library fread() */
+/* The C library fread() per C90 7.9.8.1 */
 fread( buf, size, nmem, stream ) {
     return __fgetsn( buf, size * nmem, stream ) / size; 
 }
 
-/* The C library fgetc() */
+
+/* C90 section 7.9.7:  Character input/output functions
+ *
+ * Status: all function implemented 
+ * Implementation split between here and output.c */
+
+/* The C library fgetc() per C90 7.9.7.1 */
 fgetc( stream ) {
     auto c = 0;
     if ( __fgetsn( &c, 1, stream ) == 1 ) return c;
     else return -1; /* EOF */
 }
 
-/* The C library fgets() */
+/* The C library fgets() per 7.9.7.2 */
 fgets( s, n, stream ) {
     auto i = 0;
 
@@ -101,17 +123,18 @@ fgets( s, n, stream ) {
     return 0;
 }
 
-/* The C library getc() */
+/* The C library getc() per 7.9.7.5 */
 getc( stream ) {
     return fgetc( stream );
 }
 
-/* The C library getchar() */
+/* The C library getchar() per 7.9.7.6 */
 getchar() {
     return fgetc( stdin );
 }
 
-/* The C library gets() -- this is unsafe */
+/* The C library gets() per 7.9.7.7
+ * This function is unsafe as there is no way of preventing a buffer overrun */
 gets( s ) {
     auto s = fgets( stdin, 0x7FFFFFFF ); /* INT_MAX */
     auto l = strlen(s);
@@ -120,7 +143,7 @@ gets( s ) {
     return s;
 }
 
-/* The C library ungetc() */
+/* The C library ungetc() per 7.9.7.11 */
 ungetc( c, stream ) {
     if ( c == -1 ) return -1;
 
@@ -129,20 +152,30 @@ ungetc( c, stream ) {
         lchar( stream[3], 0, c );
         stream[2] = stream[3];
         stream[4] = stream[3] + 1;
-        return c;
     }
 
     /* If we have a putback slot ... */
-    if ( stream[2] > stream[3] )
-        return lchar( --stream[2], 0, c );
+    else if ( stream[2] > stream[3] )
+        lchar( --stream[2], 0, c );
 
-    return -1;
+    /* We can't offer pushback.  We're not obliged to be able to always. */
+    else return -1;
+
+    /* Clear the EOF flag */
+    stream[7] &= ~4;
+    return c;
 }
 
 /* Non-standard */
 ungetchar( c ) {
     return ungetc( c, stdin );
 }
+
+
+/* C90 section 7.9.6:  Formatted input/output functions
+ *
+ * Status: all function implemented
+ * Implementation split between here and output.c */
 
 /* Skip whitespace and a sign, and return the sign character, if any */
 static
@@ -449,10 +482,20 @@ fscanf( stream, fmt ) {
     return vfscanf( stream, fmt, &fmt );
 }
 
-/* The C library sscanf() */
+/* The C library sscanf() per C90 7.9.6.6 */
 sscanf( str, fmt ) {
+    return vsscanf( str, fmt, &fmt );
+}
+
+/* The C library vscanf(), which was added in C99 7.19.6.11 */
+vscanf( fmt, ap ) {
+    return vfscanf( stdin, fmt, ap );
+}
+
+/* The C library vsscanf(), which was added in C99 7.19.6.14 */
+vsscanf( str, fmt, ap ) {
     auto stream = __fopenstr( str, strlen(str) );
-    auto items = vfscanf( stream, fmt, &fmt );
+    auto items = vfscanf( stream, fmt, ap );
     fclose(stream);
     return items;
 }

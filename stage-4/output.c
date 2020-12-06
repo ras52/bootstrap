@@ -12,14 +12,17 @@ static __buf1[32];
 static __buf2[32];
 
 /*                    0     1       2       3       4       5    6     7
- * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode free } */
+ * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode flags} */
 static __file1[8] = { 1,    128,    __buf1, __buf1, __buf1, 2,   1,    0    };
 static __file2[8] = { 2,    128,    __buf2, __buf2, __buf2, 2,   3,    0    };
 /* BUFEND is the end of data read into the buffer from the file. 
  * MODE is as per the second argument to open(2).  
  * BMODE is an _IO?BF flag
- * FREE is a bit field, with 1 indicating that the buffer should be freed, 
- * 2 indicating that the stream itself should be freed, and 3 both. */
+ * FLAGS is a bit field: 
+ *   0x01 indicates that the buffer in stream[3] should be freed on close;
+ *   0x02 indicates that the stream object should be freed on close;
+ *   0x04 is the EOF flag on the stream;
+ *   0x08 is the error indicator on the stream. */
 
 /* The stdio objects themselves.  
  * We can't just use the arrays themselves because we need to force make 
@@ -33,22 +36,29 @@ static __files = 0;
 /* Count of entries in the __files array */
 static __filec = 0;
 
-/* The C library fflush() */
+
+/* C90 section 7.9.5:  File access functions
+ *
+ * Status: all function implemented */
+
+/* The C library fflush() per C90 7.9.5.2 */
 fflush( stream ) {
     /* Calling flush on an input stream is undefined behaviour.  We define
      * it to be a no-op. */
     if ( stream[5] ) {
         auto count = stream[2] - stream[3];
         if ( count ) {
-            if ( write( stream[0], stream[3], count ) != count )
+            if ( write( stream[0], stream[3], count ) != count ) {
+                stream[7] |= 8; /* Set error indicator */
                 return -1;
+            }
             stream[2] = stream[3];
         }
     }
     return 0;
 }
 
-/* The C library fclose() */
+/* The C library fclose() per C90 7.9.5.1 */
 fclose( stream ) {
     auto rv = -1;
     if ( stream[0] != -1 ) {
@@ -80,7 +90,7 @@ __io_flush() {
     fclose( stderr );
 }
 
-/* The C library freopen() */
+/* The C library freopen() per 7.9.5.4 */
 freopen( filename, mode, stream ) {
     extern errno;
     /* 0 == O_RDONLY */
@@ -97,6 +107,8 @@ freopen( filename, mode, stream ) {
          * but it seems implied when it says that failure is ignored. */
         errno = 0;
     }
+
+    clearerr( stream );
 
     /* O_WRONLY=1 | O_CREAT=0x40 | O_TRUNC=0x200 */
     if ( rchar(mode, 0) == 'w' ) fmode |= 0x241;
@@ -133,7 +145,7 @@ __fopenstr( str, len ) {
     return stream;
 }
 
-/* The C library setvbuf() */
+/* The C library setvbuf() per C90 7.9.5.6 */
 setvbuf( stream, buf, mode, size ) {
     if ( buf && (stream[7] & 1) ) {
         /* Free old buffer */
@@ -155,13 +167,13 @@ setvbuf( stream, buf, mode, size ) {
     return 0;
 }
 
-/* The C library setvbuf() */
+/* The C library setbuf() per C90 7.9.5.5 */
 setbuf( stream, buf ) {
     /* BUFSIZ == 4096 in our implementation. */
     setvbuf( stream, buf, buf ? 1 : 3, 4096 ); /* 1 == _IOFBF; 3 = _IONBF */
 }
 
-/* The C library fopen() */
+/* The C library fopen() per C90 7.9.5.3 */
 fopen( filename, mode ) {
     auto stream = malloc(32); /* sizeof(struct FILE) */
     if (!stream) return 0;
@@ -187,6 +199,34 @@ fopen( filename, mode ) {
     return stream;
 }
 
+
+/* C90 section 7.9.10:  Error-handling functions
+ *
+ * Status: incomplete, as perror is missing as it relies on strerror which
+ * is also not implemented */
+
+/* The C library fopen() per C90 7.9.10.1 */
+clearerr( stream ) {
+    /* Clear the EOF flag and error indicator */
+    stream[7] &= ~0xC;
+}
+
+/* The C library feof() per C90 7.9.10.2 */
+feof( stream ) {
+    return stream[7] & 4 ? 1 : 0;
+}
+
+/* The C library feof() per C90 7.9.10.3 */
+ferror( stream ) {
+    return stream[7] & 8;
+}
+
+
+/* C90 section 7.9.8:  Direct input/output functions
+ *
+ * Status: all function implemented 
+ * Implementation split between here and input.c */
+
 /* Implementation detail __fputsn() */
 static
 __fputsn( ptr, len, stream ) {
@@ -207,7 +247,10 @@ __fputsn( ptr, len, stream ) {
          * then write the string out directly. */
         else if ( stream[2] == stream[3] && len >= stream[1] ) {
             auto n = write( stream[0], ptr, len );
-            if ( n == -1 ) return written;
+            if ( n == -1 ) {
+                stream[7] |= 8; /* Set error indicator */
+                return written;
+            }
             written += n;
             if ( n != len ) return written;
             len = 0;
@@ -231,12 +274,18 @@ __fputsn( ptr, len, stream ) {
     return written;
 }
 
-/* The C library fwrite() */
+/* The C library fwrite() per C90 7.9.8.2 */
 fwrite( buf, size, nmem, stream ) {
   return __fputsn( buf, size * nmem, stream ) / size; 
 }
 
-/* The C library fputs() */
+
+/* C90 section 7.9.7:  Character input/output functions
+ *
+ * Status: all function implemented
+ * Implementation split between here and input.c */
+
+/* The C library fputs() per C90 7.9.7.4 */
 fputs( s, stream ) {
     auto written = __fputsn( s, strlen(s), stream );
     /* XXX This is wrong -- see comment in vsfprintf */
@@ -249,25 +298,31 @@ putstr( s ) {
     return fputs( s, stdout );
 }
 
-/* The C library puts() */
+/* The C library puts() per C90 7.9.7.10 */
 puts( s ) {
     return putstr(s) + putchar('\n');
 }
 
-/* The C library fputc() */
+/* The C library fputc() per C90 7.9.7.3 */
 fputc( c, stream ) {
     return __fputsn( &c, 1, stream ) == 1 ? c : -1;
 }
 
-/* The C library putc() */
+/* The C library putc() per C90 7.9.7.8 */
 putc( s, stream ) {
     return fputc( s, stream );
 }
 
-/* The C library putchar() */
+/* The C library putchar() per C90 7.9.7.9 */
 putchar( c ) {
     return fputc( c, stdout );
 }
+
+
+/* C90 section 7.9.6:  Formatted input/output functions
+ *
+ * Status: all function implemented
+ * Implementation split between here and input.c */
 
 static
 pad( stream, width, n, padc ) {
@@ -516,21 +571,36 @@ fprintf( stream, fmt ) {
     return vfprintf( stream, fmt, &fmt );
 }
 
-/* The C library snprintf(), which was added in C99 7.19.6.5 */
-snprintf( buf, len, fmt ) {
+/* The C library vprintf() per C90 7.9.6.8 */
+vprintf( fmt, ap ) {
+    return vfprintf( stdout, fmt, ap );
+}
+
+/* The C library vsnprintf(), which was added in C99 7.19.6.12 */
+vsnprintf( buf, len, fmt, ap ) {
     auto stream = __fopenstr( buf, len );
-    auto len = vfprintf( stream, fmt, &fmt ); 
+    auto len = vfprintf( stream, fmt, ap ); 
     fputc( 0, stream );
     fclose(stream);
     return len;
 }
 
-/* The C library sprintf() */
+/* The C library snprintf(), which was added in C99 7.19.6.5 */
+snprintf( buf, len, fmt ) {
+    return vsnprintf( buf, len, fmt, &fmt );
+}
+
+/* The C library sprintf() per C90 7.9.6.5 */
 sprintf( buf, fmt ) {
     /* Because we're only doing output, bufend is never used, so it
      * doesn't matter if it compares incorrectly to bufp because 
      * comparisons in the stage-4 compiler use signed arithmetic. */
-    return snprintf( buf, 0x7FFFFFFF, fmt ); /* INT_MAX */
+    return vsnprintf( buf, 0x7FFFFFFF, fmt, &fmt ); /* INT_MAX */
+}
+
+/* The C library vsprintf() per C90 7.9.6.9 */
+vsprintf( buf, fmt, ap ) {
+    return vsnprintf( buf, 0x7FFFFFFF, fmt, ap );
 }
 
 
