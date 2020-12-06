@@ -203,15 +203,17 @@ cmp_op(stream, node) {
 static
 binary_op(stream, node, need_lval) {
     auto op = node[0], sz = type_size( node[2] );
+    auto is_unsgn 
+        = node[2][0] == 'dclt' && node[2][5] && node[2][5][0] == 'unsi';
 
     expr_code( stream, node[3], is_assop(op) );
     asm_push( stream );
     expr_code( stream, node[4], 0 );
 
     if      ( op == '[]'  ) subscript(stream, node, need_lval);
-    else if ( op == '*'   ) pop_mult(stream, 0, node[2][5]);
-    else if ( op == '/'   ) pop_div(stream, 0, node[2][5]);
-    else if ( op == '%'   ) pop_mod(stream, 0, node[2][5]);
+    else if ( op == '*'   ) pop_mult(stream, 0, is_unsgn);
+    else if ( op == '/'   ) pop_div(stream, 0, is_unsgn);
+    else if ( op == '%'   ) pop_mod(stream, 0, is_unsgn);
     else if ( op == '+'   ) add_op(stream, node, 0, sz);
     else if ( op == '-'   ) add_op(stream, node, 0, sz);
     else if ( op == '<<'  ) pop_lshift(stream, 0);
