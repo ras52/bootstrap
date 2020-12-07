@@ -398,8 +398,9 @@ vfscanf( stream, fmt, ap ) {
          * character, which remains unread.  There is no requirement that it
          * must read any whitespace. */
         if ( isspace(c) ) {
-            if ( fskipws(stream) == -1 )
-                return items;
+            /* Don't worry if this returns EOF, as there may be further 
+             * rules in format tht we can process, such as a %n. */
+            fskipws(stream);
             continue;
         }
 
