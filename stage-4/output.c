@@ -11,10 +11,10 @@
 static __buf1[32];
 static __buf2[32];
 
-/*                    0     1       2       3       4       5    6     7
- * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode flags} */
-static __file1[8] = { 1,    128,    __buf1, __buf1, __buf1, 2,   1,    0    };
-static __file2[8] = { 2,    128,    __buf2, __buf2, __buf2, 2,   3,    0    };
+/*                     0  1     2       3       4       5    6     7     8 9
+ * struct FILE       { fd bufsz bufp    buffer  bufend  mode bmode flags pos }*/
+static __file1[10] = { 1, 128,  __buf1, __buf1, __buf1, 2,   1,    0,    0,0 };
+static __file2[10] = { 2, 128,  __buf2, __buf2, __buf2, 2,   3,    0,    0,0 };
 /* BUFEND is the end of data read into the buffer from the file. 
  * MODE is as per the second argument to open(2).  
  * BMODE is an _IO?BF flag
@@ -22,7 +22,8 @@ static __file2[8] = { 2,    128,    __buf2, __buf2, __buf2, 2,   3,    0    };
  *   0x01 indicates that the buffer in stream[3] should be freed on close;
  *   0x02 indicates that the stream object should be freed on close;
  *   0x04 is the EOF flag on the stream;
- *   0x08 is the error indicator on the stream. */
+ *   0x08 is the error indicator on the stream. 
+ * POS is a 64 bit counter */
 
 /* The stdio objects themselves.  
  * We can't just use the arrays themselves because we need to force make 
@@ -134,7 +135,7 @@ freopen( filename, mode, stream ) {
 
 /* A function to get a FILE* interface to a simple string. */
 __fopenstr( str, len ) {
-    auto stream = malloc(32); /* sizeof(struct FILE) */
+    auto stream = malloc(40); /* sizeof(struct FILE) */
     stream[0] = -1;  /* an invalid file descriptor */
     stream[1] = len;
     stream[2] = stream[3] = str;
@@ -142,6 +143,7 @@ __fopenstr( str, len ) {
     stream[5] = 2;   /* O_RDWR */
     stream[6] = 1;   /* _IOFBF */
     stream[7] = 2;   /* free the stream but not the buffer on close */
+    stream[8] = stream[9] = 0;
     return stream;
 }
 
@@ -175,9 +177,9 @@ setbuf( stream, buf ) {
 
 /* The C library fopen() per C90 7.9.5.3 */
 fopen( filename, mode ) {
-    auto stream = malloc(32); /* sizeof(struct FILE) */
+    auto stream = malloc(40); /* sizeof(struct FILE) */
     if (!stream) return 0;
-    memset(stream, 0, 32);    /* sizeof(struct FILE) */
+    memset(stream, 0, 40);    /* sizeof(struct FILE) */
     stream[0] = -1;           /* an invalid file descriptor */
 
     setvbuf( stream, 0, 1, 128 );  /* 1 = _IOFBF */
@@ -221,16 +223,25 @@ ferror( stream ) {
     return stream[7] & 8;
 }
 
+/* The C library fgetpos() */
+fgetpos( stream, pos ) {
+  /* We define fpos_t as a struct { int hi, low; }; */
+  pos[0] = stream[8];
+  pos[1] = stream[9];
+}
+
 
 /* C90 section 7.9.8:  Direct input/output functions
  *
  * Status: all function implemented 
  * Implementation split between here and input.c */
 
-/* Implementation detail __fputsn() */
+/* __fputsn() is the only function to ever write data to the stream
+ * (excepting ungetc which writes to the pushback slot).  Everything 
+ * else is implemented on top of theis. */
 static
 __fputsn( ptr, len, stream ) {
-    auto written = 0;
+    auto written = 0, flag = 0;
 
     while ( len ) {
         auto space = stream[1] - (stream[2] - stream[3]);
@@ -239,20 +250,21 @@ __fputsn( ptr, len, stream ) {
          * it still won't have space for the string, then flush the buffer
          * immediately. */
         if ( stream[2] != stream[3] && len >= space + stream[1] ) {
-            if ( fflush( stream ) == -1 )
-                return written;
+            if ( fflush( stream ) == -1 ) {
+                flag = 8;  /* error flag */
+                break; 
+            }
         }
 
         /* If the buffer is empty and not big enough to hold the string,
          * then write the string out directly. */
         else if ( stream[2] == stream[3] && len >= stream[1] ) {
             auto n = write( stream[0], ptr, len );
-            if ( n == -1 ) {
-                stream[7] |= 8; /* Set error indicator */
-                return written;
+            if ( n != len ) {
+                if ( n != -1 ) written += n;
+                flag = 8;  /* error flag */
+                break;
             }
-            written += n;
-            if ( n != len ) return written;
             len = 0;
         }
 
@@ -266,10 +278,18 @@ __fputsn( ptr, len, stream ) {
             written += chunk;
 
             /* Flush the buffer now if it's full. */
-            if ( chunk == space && fflush( stream ) == -1 )
-                return written;
+            if ( chunk == space && fflush( stream ) == -1 ) {
+                flag = 8;  /* error flag */
+                break;
+            }
         }
     }
+
+    /* Set error indicator, if required */
+    stream[7] |= flag;
+
+    /* Set the file position indicator */
+    __add64( &stream[8], &stream[9], 0, written );
 
     return written;
 }

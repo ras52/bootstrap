@@ -9,14 +9,15 @@
  * long: hence the 128 bufsz parameter in the stream definitions. */
 static __buf0[32];
 
-/*                    0     1       2       3       4       5    6     7
- * struct FILE      { fd    bufsz   bufp    buffer  bufend  mode bmode free } */
-static __file0[8] = { 0,    128,    __buf0, __buf0, __buf0, 0,   1,    0    };
+/*                     0  1     2       3       4       5    6     7     8 9
+ * struct FILE       { fd bufsz bufp    buffer  bufend  mode bmode flags pos }*/
+static __file0[10] = { 0, 128,  __buf0, __buf0, __buf0, 0,   1,    0,    0,0 };
 /* BUFEND is the end of data read into the buffer from the file. 
  * MODE is as per the second argument to open(2).  
  * BMODE is an _IO?BF flag 
  * FREE is a bit field, with 1 indicating that the buffer should be freed, 
- * 2 indicating that the stream itself should be freed, and 3 both. */
+ * 2 indicating that the stream itself should be freed, and 3 both.
+ * POS is a 64 bit counter */
 
 /* The stdio objects themselves.  
  * We can't just use the arrays themselves because we need to force make 
@@ -33,7 +34,7 @@ stdin  = __file0;
  * and returns the number of bytes read. */
 static
 __fgetsn( ptr, len, stream ) {
-    auto nread = 0;
+    auto nread = 0, flag = 0;
 
     while ( len ) {
         auto avail = stream[4] - stream[2];
@@ -50,8 +51,10 @@ __fgetsn( ptr, len, stream ) {
 
         /* If stream[0] is -1, it means the stream is not backed by a file:
          * what's in the buffer is all there is. */
-        else if ( stream[0] == -1 )
-            return nread;
+        else if ( stream[0] == -1 ) {
+            flag = 4;  /* set EOF */
+            break;
+        }
 
         /* Otherwise, if we require more than our buffer holds, read it
 	 * directly into the supplied memory region. */
@@ -60,8 +63,8 @@ __fgetsn( ptr, len, stream ) {
             if ( n <= 0 ) {
                 /* Set error indicator (bit 8) if read returned -1, 
                  * or the EOF flag (bit 4) if read returned 0. */
-                stream[7] |= n ? 8 : 4;
-                return nread;
+                flag = n ? 8 : 4;
+                break;
             }
             nread += n;
             len -= n;
@@ -76,14 +79,20 @@ __fgetsn( ptr, len, stream ) {
             if ( n <= 0 ) {
                 /* Set error indicator (bit 8) if read returned -1, 
                  * or the EOF flag (bit 4) if read returned 0. */
-                stream[7] |= n ? 8 : 4;
-                return nread;
+                flag = n ? 8 : 4;
+                break;
             }
 
             stream[2] = stream[3] + 4;  /* The size of the pushback area. */
             stream[4] = stream[2] + n;
         }
     }
+
+    /* Set error indicator, if required */
+    stream[7] |= flag;
+
+    /* Set the file position indicator */
+    __add64( &stream[8], &stream[9], 0, nread );
 
     return nread;
 }
@@ -165,6 +174,10 @@ ungetc( c, stream ) {
 
     /* Clear the EOF flag */
     stream[7] &= ~4;
+
+    /* Decrement the file position indicator */
+    __add64( &stream[8], &stream[9], 0, -1 );
+
     return c;
 }
 
@@ -377,6 +390,9 @@ fskipws( stream ) {
  * See C90 7.9.6.2 for documentation on fscanf() */
 vfscanf( stream, fmt, ap ) {
     auto items = 0, c, s, i;
+    auto initpos[2];
+    fgetpos(stream, initpos);
+
     while ( c = rchar(fmt++, 0) ) {
         /* White-space characters mean to read up to the first non-white-space
          * character, which remains unread.  There is no requirement that it
@@ -452,7 +468,7 @@ vfscanf( stream, fmt, ap ) {
             /* This can be EOF because we don't call fskipws() for %c */
             if ( s == -1 ) return items;
             ap += 4;
-            **ap = s;
+            lchar( *ap, 0, s );
             ++items;
         }
         /* %s reads a string of non-white-space characters */
@@ -471,6 +487,16 @@ vfscanf( stream, fmt, ap ) {
             /* Null-terminate the string */
             lchar( *ap, i, 0 );
             if ( s == -1 ) return items;
+        }
+        /* %n writes the number of bytes read into an int argument */
+        else if ( c == 'n' ) {
+            /* Calculate how many bytes we've written */
+            auto pos[2]; 
+            fgetpos(stream, pos);
+            __sub64(pos, pos+4, initpos[0], initpos[1]);
+
+            ap += 4;
+            **ap = pos[1];  /* only the low order bits are needed */
         }
         /* Either %% or an unsupported format specifier.  Anything other than
          * exactly %%, including unknown format specifiers or %% specified

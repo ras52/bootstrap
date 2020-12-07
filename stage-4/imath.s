@@ -47,3 +47,46 @@ __mul_add:
 
 	POP	%ebp
 	RET
+
+
+####	#  Function:	void __add64( unsigned* hi1, unsigned* low1,
+	#                             unsigned  hi2, unsigned  low2 );
+	# 
+	#  Treat hi1:low1 and h12:low2 as 64-bit integers and add them. 
+.globl	__add64
+__add64:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	MOVL	12(%ebp), %ecx
+	MOVL	20(%ebp), %eax
+	ADDL	%eax, (%ecx)		# sets CF
+
+	MOVL	8(%ebp), %ecx
+	MOVL	16(%ebp), %eax
+	ADCL	%eax, (%ecx)		# adds in CF
+
+	POP	%ebp
+	RET
+
+####	#  Function:	void __sub64( unsigned* hi1, unsigned* low1,
+	#                             unsigned  hi2, unsigned  low2 );
+	# 
+	#  Treat hi1:low1 and h12:low2 as 64-bit integers and subtract the 
+	#  second from the first.. 
+.globl	__sub64
+__sub64:
+	PUSH	%ebp
+	MOVL	%esp, %ebp
+
+	MOVL	12(%ebp), %ecx
+	MOVL	20(%ebp), %eax
+	SUBL	(%ecx), %eax		# sets CF
+
+	MOVL	8(%ebp), %ecx
+	MOVL	16(%ebp), %eax
+	SBBL	(%ecx), %eax		# subtracts CF too
+
+	POP	%ebp
+	RET
+
