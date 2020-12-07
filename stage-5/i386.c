@@ -67,8 +67,9 @@ load_symbol(stream, name, need_addr) {
     fprintf(stream, "\tMOVL\t%s%s, %%eax\n", need_addr ? "$" : "", name);
 }
 
-save_local(stream, offset) {
-    fprintf(stream, "\tMOVL\t%%eax, %d(%%ebp)\n", offset);
+save_local(stream, offset, sz) {
+    fprintf(stream, "\tMOV%c\t%s, %d(%%ebp)\n", 
+            sz_suffix(sz), sz_accum(sz), offset);
 }
 
 asm_push(stream) {

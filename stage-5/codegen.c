@@ -450,27 +450,38 @@ switch_stmt(stream, node, brk, cont, ret) {
 
 static
 auto_decl(stream, decl) {
-    auto sz = decl_var(decl);
-    auto offset = frame_off();
+    auto offset, init;
+
+    decl_var(decl);
+    offset = frame_off();
+    init = decl[5];
 
     /* Is there an initaliser */
-    if ( decl[5] ) {
-        auto init = decl[5];
+    if ( init ) {
         if ( init[0] == '{}' ) {
-            auto j = 0;
+            auto j = 0, elt_sz, n_elts;
+            if ( decl[2][0] == '[]' ) {
+                elt_sz = type_size( decl[2][3] );
+                n_elts = decl[2][4][3];
+            } 
+            else {
+                elt_sz = type_size( decl[2] );
+                n_elts = 1;
+            }
+
             while ( j < init[1] ) {
                 expr_code( stream, init[3 + j], 0 );
-                save_local( stream, offset + j*4 );
+                save_local( stream, offset + j*elt_sz, elt_sz );
                 ++j;
             }
 
             /* Check for an initialisation list that's not long enough.
              * If it's not, the standard requires zero initialisation of
              * the extra members. C99:6.7.8/21 */
-            if ( j < sz/4 ) {
+            if ( j < n_elts ) {
                 load_zero( stream );
-                while ( j < sz/4 ) {
-                    save_local( stream, offset + j*4 );
+                while ( j < n_elts ) {
+                    save_local( stream, offset + j*elt_sz, elt_sz );
                     ++j;
                 }
             }
@@ -478,7 +489,7 @@ auto_decl(stream, decl) {
         /* Scalar initialisation */
         else {
             expr_code( stream, init, 0 );
-            save_local( stream, offset );
+            save_local( stream, offset, type_size(decl[2]) );
         }
     }
 }
