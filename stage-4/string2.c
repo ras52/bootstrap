@@ -1,6 +1,6 @@
 /* string2.c  --  additional, higher-level string handling functions
  *
- * Copyright (C) 2013 Richard Smith <richard@ex-parrot.com> 
+ * Copyright (C) 2013, 2021 Richard Smith <richard@ex-parrot.com> 
  * All rights reserved.
  */
 
