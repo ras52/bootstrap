@@ -20,6 +20,15 @@ strcat(dest, src) {
     return dest;
 }
 
+/* The C library strncat() */
+strncat(dest, src, n) {
+    auto l1 = strlen(dest), l2 = strlen(src);
+    if (l2 > n) l2 = n;
+    strcpy( dest + l1, src, l2 );
+    lchar(dest, l1 + l2, '\0');
+    return dest;
+}
+
 /* The C library memmove() */
 memmove(dest, src, n) {
     /* If we're copying to earlier memory, or if the blocks do not overlap,
