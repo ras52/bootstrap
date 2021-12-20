@@ -329,7 +329,7 @@ zero_direct(stream, n) {
 }
 
 promote(stream, is_unsgn, oldsz, newsz) {
-    if ( oldsz != newsz )
+    if ( oldsz < newsz )
         fprintf( stream, "\tMOV%c%c%c\t%s, %s\n", is_unsgn ? 'Z' : 'S',
                  sz_suffix(oldsz), sz_suffix(newsz), 
                  sz_accum(oldsz), sz_accum(newsz) );

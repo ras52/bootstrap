@@ -76,7 +76,6 @@ unary_post(stream, node, need_lval) {
 
 static
 member_bin(stream, node, need_lval) {
-extern stderr;
     expr_code( stream, node[3], node[0] == '.' );
 
     /* This is a bit of a fudge.  In 'struct foo { int x[2] };', x is an
@@ -209,11 +208,17 @@ is_unsigned(type) {
 
 static
 binary_op(stream, node, need_lval) {
-    auto op = node[0], sz = type_size( node[2] );
+    auto op = node[0], sz = type_size( node[2] ), assop = is_assop(op);
 
-    expr_code( stream, node[3], is_assop(op) );
+    expr_code( stream, node[3], assop );
+    if (!assop) {
+        chk_arg(node[3]);
+        promote( stream, node[3][2][5], type_size(node[3][2]), sz );
+    }
     asm_push( stream );
     expr_code( stream, node[4], 0 );
+    chk_arg(node[4]);
+    promote( stream, node[4][2][5], type_size(node[4][2]), sz );
 
     if      ( op == '[]'  ) subscript(stream, node, need_lval);
     else if ( op == '*'   ) pop_mult(stream, 0, is_unsigned(node[2]));
@@ -244,7 +249,7 @@ binary_op(stream, node, need_lval) {
     /* The assignment operators are implemented to return lvalues, but
      * the C standard says they're not lvalues.  (The C++ standard has
      * them as lvalues.)  */
-    if ( is_assop(op) )
+    if ( assop )
         dereference(stream, type_size(node[2]), 0);
 }
 
