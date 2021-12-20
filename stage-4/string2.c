@@ -53,3 +53,26 @@ strdup( str ) {
     lchar( str2, l, 0 );
     return str2;
 }
+
+/* The C library strspn() */
+strspn( str, chars ) {
+    auto i = 0, c;
+    while ( c = rchar(str, i) ) {
+        if ( !strchr(chars, c) )
+            break;
+        ++i;
+    }
+    return i;
+}
+
+
+/* The C library strcspn() */
+strcspn( str, chars ) {
+    auto i = 0, c;
+    while ( c = rchar(str, i) ) {
+        if ( strchr(chars, c) )
+            break;
+        ++i;
+    }
+    return i;
+}

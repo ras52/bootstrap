@@ -28,10 +28,10 @@ int    strncmp( char const* s1, char const* s2, size_t n );
 /* C90 7.11.5:  Search functions */
 /* void*  memchr( void const* s, int c, size_t n ); */
 char*  strchr( char const* s, int c );
-/* size_t strcspn( char const* str, char const* chrs ); */
+size_t strcspn( char const* str, char const* chrs );
 /* char*  strpbrk( char const* str, char const* chrs ); */
 /* char*  strrchr( char const* str, int c ); */
-/* size_t strspn( char const* str, char const* chrs ); */
+size_t strspn( char const* str, char const* chrs );
 /* size_t strstr( char const* str, char const* substr ); */
 /* size_t strtok( char const* str, char const* chrs ); */
 
