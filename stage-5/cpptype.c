@@ -42,6 +42,10 @@ chk_deref( node ) {
     error("Dereferencing not permitted in constant expression");
 }
 
+chk_arg( node ) {
+    error("Function calls not permitted in constant expression");
+}
+
 /* Operations that are already disallowed by virtue of being in a ICE */
 chk_incdec( node ) {}
 chk_call( node ) {}

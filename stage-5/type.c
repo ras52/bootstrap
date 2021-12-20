@@ -79,7 +79,7 @@ type_size(type) {
     if (t == '[]')
         return type_size(type[3]) * type[4][3];
 
-    else if (t == '*')
+    else if (t == '*' || t == '()')
         return 4;
 
     else if (t == 'dclt') {
@@ -388,6 +388,13 @@ prom_array(type) {
         return ptr;
     } 
     else return add_ref(type);
+}
+
+chk_arg(p) {
+    /* Promote arrays to pointers in a call */
+    auto type = prom_array(p[2]);
+    free_node(p[2]);
+    p[2] = type;   
 }
 
 /* Determine the type of an + or - expression. */

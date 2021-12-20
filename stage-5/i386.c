@@ -8,12 +8,7 @@ static
 sz_suffix(sz) {
     extern compat_flag;
     if (sz == 4) return 'L';
-
-    /* Stage 4 treated everything as an int. */
-    if (compat_flag) 
-        error("Operand size has changed since stage-4", sz);
-
-    if (sz == 2) return 'W';
+    else if (sz == 2) return 'W';
     else if (sz == 1) return 'B';
     int_error("Unexpected size operand to instruction: %d", sz);
 }

@@ -294,7 +294,10 @@ do_call(stream, node, need_lval) {
     auto args = node[1] - 1, i = args;
     while ( i ) {
         expr_code( stream, node[3+i], 0 );
-        /* TODO:  Is it necessary to do type promotion? */
+        /* If no prototype is present (as is the case here as we don't support
+         * them), we must do integer promotions on the arguments. */
+        auto sz = type_size( node[3+i][2] );
+        if (sz < 4) promote(stream, node[3+i][2][5], sz, 4);
         asm_push( stream );
         --i;
     }

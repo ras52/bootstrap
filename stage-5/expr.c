@@ -65,8 +65,11 @@ arg_list(req_const, fn) {
         return p;
 
     while (1) {
+        auto arg, argtype;
         req_token();
-        p = vnode_app( p, assign_expr( req_const ) );
+        arg = assign_expr( req_const );
+        chk_arg(arg);
+        p = vnode_app( p, arg );
 
         /* It would be easier to code for an optional ',' at the end, but
          * the standard doesn't allow for that. */
