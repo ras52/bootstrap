@@ -84,8 +84,10 @@ bit_not(stream) {
     fputs("\tNOTL\t%eax\n", stream);
 }
 
-logic_not(stream) {
-    fputs("\tTESTL\t%eax, %eax\n\tSETZ\t%al\n\tMOVZBL\t%al, %eax\n", stream);
+logic_not(stream, sz) {
+    auto accum = sz_accum(sz);
+    fprintf(stream, "\tTEST%c\t%s, %s\n", sz_suffix(sz), accum, accum);
+    fputs("\tSETZ\t%al\n\tMOVZBL\t%al, %eax\n", stream);
 }
 
 dereference(stream, sz, need_lval) {

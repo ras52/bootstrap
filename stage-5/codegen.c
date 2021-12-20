@@ -103,7 +103,7 @@ unary_pre(stream, node, need_lval) {
     }
     else if ( op == '-'  ) arith_neg(stream);
     else if ( op == '~'  ) bit_not(stream);
-    else if ( op == '!'  ) logic_not(stream);
+    else if ( op == '!'  ) logic_not(stream, type_size(node[3][2]));
     else if ( op == '&'  ) ;
     else if ( op == '*'  ) dereference(stream, sz, need_lval);
     else if ( op == '++' ) increment(stream, sz,  ptr_inc_sz(node[2]) );
@@ -293,8 +293,10 @@ static
 do_call(stream, node, need_lval) {
     auto args = node[1] - 1, i = args;
     while ( i ) {
-        expr_code( stream, node[ 3 + i-- ], 0 );
+        expr_code( stream, node[3+i], 0 );
+        /* TODO:  Is it necessary to do type promotion? */
         asm_push( stream );
+        --i;
     }
 
     /* If we're calling an identifier that's not local and isn't an lval,
