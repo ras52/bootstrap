@@ -1,2 +1,2 @@
-*.x linguist-language=text
-
+*.x     linguist-language=text
+*.xl    linguist-language=asm

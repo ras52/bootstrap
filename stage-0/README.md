@@ -34,8 +34,8 @@ to the inital copy as a way of testing that the program is working.
 The program is deliberately minimal.  Of necessity, it starts with an
 ELF header (52 bytes), followed by one program header for the whole file
 (32 bytes).  The executable code is at end (109 bytes).  There are no
-section headers and no shstrtab section, which together mean that the
-binutils diagnostic tools (objdump, etc.) are of limited use on it.
+section headers and no `.shstrtab` section, which together mean that the
+binutils diagnostic tools (`objdump`, etc.) are of limited use on it.
 
 Conceptually the program should have been written using some lower-level
 technique, such as with a hex-editor.  But instead, the Makefile
