@@ -4,7 +4,7 @@ In writing the stage 0 `unhex` tool, the two most tedious and error-prone
 tasks were generating valid ELF headers, which entailed keeping track
 of the size of the `.text` section and the location of the entry point,
 and calculating the file offsets used as arguments to various `JMP` and 
-`J*cc*` statements.  These two tasks were particularly prone to introduce
+`Jcc` statements.  These two tasks were particularly prone to introduce
 errors as the code was modified, perhaps to correct some error found
 during testing.  Keeping all of the offsets and sizes updated proved
 rather more onerous than manually converting the assembly language 
