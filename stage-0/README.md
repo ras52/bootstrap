@@ -1,10 +1,10 @@
 # Bootstrap: Stage 0
 
-The starting point for this bootstrap experiment is the `unhex` program.  
+The starting point for this bootstrap experiment is the `unhex` program. 
 It is a very simple program for converting a stream of hexadecimal 
-octets on standard input into a binary file written to standard output.  
+octets on standard input into a binary file written to standard output.
 
-  Usage:  `unhex < test.x > test`
+> Usage:  `unhex < test.x > test`
 
 where `.x` is used as the canonical extension for its input files. The 
 source file format is very restrictive:
@@ -40,4 +40,4 @@ binutils diagnostic tools (objdump, etc.) are of limited use on it.
 Conceptually the program should have been written using some lower-level
 technique, such as with a hex-editor.  But instead, the Makefile
 contains a simple one-line shell script to perform the same action as
-`unhex`, which is used to create the first `unhex` binary.  
+`unhex`, which is used to create the first `unhex` binary.
