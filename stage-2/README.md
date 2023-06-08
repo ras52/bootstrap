@@ -22,7 +22,7 @@ the general version (e.g.  the far jump) without the corresponding
 special cases (e.g. near or short jumps).  Mandatory instruction size
 suffixes (`L` for 32-bit, `B` for 8-bit) are used to limit each mnemonic to
 a single opcode family; no 16-bit instructions are supported.  There is
-no support for adressing that involves a SIB byte -- so `(%ebp)` is not
+no support for adressing that involves a SIB byte – so `(%ebp)` is not
 supported, though `0(%ebp)` is.
 
 Labels are restricted to 11 characters, and a maximum of 256 labels are
@@ -72,7 +72,7 @@ instructions, not one with a prefix.  The full grammar is:
   regmem       ::= register | integer? '(' '%' regname32 ')'
   argument     ::= HWS* ( immediate | identifier | regmem )
   arguments    ::= argument HWS* ',' arguments | argument
-  instruction  := mnemonic arguments endline?
+  instruction  ::= mnemonic arguments endline?
   octet        ::= HWS* XDIGIT XDIGIT
   hexbytes     ::= '.hex' octet* endline
   directive    ::= hexbytes
@@ -116,6 +116,6 @@ name of the source code file as its only command line argument; a
 
 > Usage: `as test.s > test.ts`
 
-The output is not a valid executable -- it just the `.text` section.  It
+The output is not a valid executable – it just the `.text` section.  It
 therefore needs using in conjunction with the stage 1 `elfify` tool to
 produce an executable.
