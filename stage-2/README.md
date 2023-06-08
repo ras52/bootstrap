@@ -50,7 +50,7 @@ be treated as instructions with no arguments (like `NOP`).  Thus
 `REP SCASB` is valid, though the assembler believes it to be two 
 instructions, not one with a prefix.  The full grammar is:
 
-```ebf
+```ebnf
   HWS          ::= [ \t]
   DIGIT        ::= [0-9]
   NZDIGIT      ::= [1-9]
@@ -91,7 +91,7 @@ The list of supported mnemonics is:
 
 In that list, `x` represents a size suffix `L` or `B`, and `cc` is a
 condition (`A`, `AE`, `B`, `BE`, `C`, `E`, `G`, `GE`, `L`, `LE`, `O`, `P`, 
-`PE`, `PO`, `S`, `Z`, together with the negative `Ncc` versions 
+`PE`, `PO`, `S`, `Z`, together with the negative `Ncc` versions, 
 [except for `PE` and `PO`]).  Some instructions have implicit arguments,
 and they *must not* be specified in the source.  The shift opcodes
 (`SAL`, `SAR`, `SHL`, `SHR`) always shift by `%cl` bits, and the
