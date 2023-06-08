@@ -1,2 +1,2 @@
 *.x     linguist-language=text
-*.xl    linguist-language=asm
+*.xl    linguist-language=gnu asm
